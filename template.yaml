@@ -1,0 +1,741 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  tour-data-api
+  
+  Backend API for cycling tour management providing centralized data access
+  for Check-In App and future applications.
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: python3.11
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        RIDER_PROFILE_TABLE: !Ref RiderProfileTable
+        TOUR_TABLE: !Ref TourTable
+        TOUR_RIDER_TABLE: !Ref TourRiderTable
+        RIDE_TABLE: !Ref RideTable
+        CHECKIN_TABLE: !Ref CheckInTable
+        USER_TABLE: !Ref UserTable
+        PHOTOS_BUCKET: !Ref PhotosBucket
+        LOG_LEVEL: INFO
+    Tags:
+      Project: tour-data-api
+      ManagedBy: SAM
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+      - prod
+    Description: Environment name (dev, test, or prod)
+  
+  CognitoUserPoolArn:
+    Type: String
+    Description: ARN of the Cognito User Pool for authentication
+    Default: ''
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+  HasCognitoUserPool: !Not [!Equals [!Ref CognitoUserPoolArn, '']]
+
+Resources:
+  # ============================================================================
+  # API GATEWAY HTTP API
+  # ============================================================================
+  
+  TourDataApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'  # TODO: Restrict to specific domains in production
+        AllowHeaders:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        MaxAge: 600
+      Tags:
+        Name: !Sub '${AWS::StackName}-api'
+        Environment: !Ref Environment
+
+  # ============================================================================
+  # LAMBDA LAYERS
+  # ============================================================================
+  
+  CommonLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub '${AWS::StackName}-common-layer'
+      Description: Common utilities, models, and dependencies
+      ContentUri: src/layers/common/
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: python3.11
+
+  # ============================================================================
+  # LAMBDA FUNCTIONS - TOURS
+  # ============================================================================
+  
+  GetActiveT ourFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/tours/
+      Handler: get_active.lambda_handler
+      Description: Get the currently active tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/active
+            Method: GET
+
+  GetTourFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/tours/
+      Handler: get_tour.lambda_handler
+      Description: Get tour by ID
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}
+            Method: GET
+
+  ListToursFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/tours/
+      Handler: list_tours.lambda_handler
+      Description: List all tours with optional filters
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours
+            Method: GET
+
+  # ============================================================================
+  # LAMBDA FUNCTIONS - RIDERS
+  # ============================================================================
+  
+  GetTourRidersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: get_tour_riders.lambda_handler
+      Description: Get all riders for a tour with profile data
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourRiderTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders
+            Method: GET
+
+  GetTourRiderByIdFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: get_tour_rider.lambda_handler
+      Description: Get specific tour rider by Rider ID
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !GetAtt TourRiderTable.Arn
+                - !Sub '${TourRiderTable.Arn}/index/*'
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}
+            Method: GET
+
+  # ============================================================================
+  # LAMBDA FUNCTIONS - RIDES
+  # ============================================================================
+  
+  GetTodaysRideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: get_todays_ride.lambda_handler
+      Description: Get today's ride for a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !GetAtt RideTable.Arn
+                - !Sub '${RideTable.Arn}/index/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/rides/today
+            Method: GET
+
+  GetRideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: get_ride.lambda_handler
+      Description: Get ride by ID
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+              Resource:
+                - !GetAtt RideTable.Arn
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/rides/{rideId}
+            Method: GET
+
+  CreateRideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: create_ride.lambda_handler
+      Description: Create a new ride
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RideTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides
+            Method: POST
+
+  UpdateRideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: update_ride.lambda_handler
+      Description: Update an existing ride
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RideTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/rides/{rideId}
+            Method: PUT
+
+  CloseRideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: close_ride.lambda_handler
+      Description: Close a ride (lock from further check-ins)
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RideTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/rides/{rideId}/close
+            Method: POST
+
+  # ============================================================================
+  # LAMBDA FUNCTIONS - CHECK-INS
+  # ============================================================================
+  
+  CreateCheckInFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: create_checkin.lambda_handler
+      Description: Create a check-in record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CheckInTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RideTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !GetAtt TourRiderTable.Arn
+                - !Sub '${TourRiderTable.Arn}/index/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/checkins
+            Method: POST
+
+  GetRideCheckInsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: get_ride_checkins.lambda_handler
+      Description: Get all check-ins for a ride
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !GetAtt CheckInTable.Arn
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/rides/{rideId}/checkins
+            Method: GET
+
+  GetDashboardDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: get_dashboard_data.lambda_handler
+      Description: Get complete dashboard data for a ride
+      Timeout: 60
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+              Resource:
+                - !GetAtt RideTable.Arn
+                - !GetAtt TourRiderTable.Arn
+                - !GetAtt CheckInTable.Arn
+                - !GetAtt RiderProfileTable.Arn
+                - !Sub '${RideTable.Arn}/index/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/rides/{rideId}/dashboard
+            Method: GET
+
+  # ============================================================================
+  # DYNAMODB TABLES
+  # ============================================================================
+  
+  RiderProfileTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-RiderProfile'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+        - AttributeName: profileId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: EmailIndex
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+            - AttributeName: profileId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-RiderProfile'
+        - Key: Environment
+          Value: !Ref Environment
+
+  TourTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-Tour'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Tour'
+        - Key: Environment
+          Value: !Ref Environment
+
+  TourRiderTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-TourRider'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: riderId
+          AttributeType: S
+        - AttributeName: tourId
+          AttributeType: S
+        - AttributeName: profileId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: RiderIdIndex
+          KeySchema:
+            - AttributeName: riderId
+              KeyType: HASH
+            - AttributeName: tourId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ProfileIdIndex
+          KeySchema:
+            - AttributeName: profileId
+              KeyType: HASH
+            - AttributeName: tourId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-TourRider'
+        - Key: Environment
+          Value: !Ref Environment
+
+  RideTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-Ride'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: date
+          AttributeType: S
+        - AttributeName: tourId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: DateIndex
+          KeySchema:
+            - AttributeName: date
+              KeyType: HASH
+            - AttributeName: tourId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: date
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Ride'
+        - Key: Environment
+          Value: !Ref Environment
+
+  CheckInTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-CheckIn'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: riderId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+        - AttributeName: tourIdRiderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: RiderIdIndex
+          KeySchema:
+            - AttributeName: riderId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: TourRiderIndex
+          KeySchema:
+            - AttributeName: tourIdRiderId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-CheckIn'
+        - Key: Environment
+          Value: !Ref Environment
+
+  UserTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-User'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+        - AttributeName: tourId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: EmailIndex
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+            - AttributeName: tourId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-User'
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================================
+  # S3 BUCKET FOR RIDER PHOTOS
+  # ============================================================================
+  
+  PhotosBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-photos-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: !If [IsProd, Enabled, Suspended]
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 90
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-photos'
+        - Key: Environment
+          Value: !Ref Environment
+
+  PhotosBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PhotosBucket
+      PolicyDocument:
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt PhotosBucket.Arn
+              - !Sub '${PhotosBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+# ============================================================================
+# OUTPUTS
+# ============================================================================
+
+Outputs:
+  ApiEndpoint:
+    Description: HTTP API endpoint URL
+    Value: !Sub 'https://${TourDataApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiEndpoint'
+
+  ApiId:
+    Description: API Gateway HTTP API ID
+    Value: !Ref TourDataApi
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiId'
+
+  RiderProfileTableName:
+    Description: Rider Profile DynamoDB table name
+    Value: !Ref RiderProfileTable
+    Export:
+      Name: !Sub '${AWS::StackName}-RiderProfileTable'
+
+  TourTableName:
+    Description: Tour DynamoDB table name
+    Value: !Ref TourTable
+    Export:
+      Name: !Sub '${AWS::StackName}-TourTable'
+
+  TourRiderTableName:
+    Description: Tour Rider DynamoDB table name
+    Value: !Ref TourRiderTable
+    Export:
+      Name: !Sub '${AWS::StackName}-TourRiderTable'
+
+  RideTableName:
+    Description: Ride DynamoDB table name
+    Value: !Ref RideTable
+    Export:
+      Name: !Sub '${AWS::StackName}-RideTable'
+
+  CheckInTableName:
+    Description: CheckIn DynamoDB table name
+    Value: !Ref CheckInTable
+    Export:
+      Name: !Sub '${AWS::StackName}-CheckInTable'
+
+  UserTableName:
+    Description: User DynamoDB table name
+    Value: !Ref UserTable
+    Export:
+      Name: !Sub '${AWS::StackName}-UserTable'
+
+  PhotosBucketName:
+    Description: S3 bucket for rider photos
+    Value: !Ref PhotosBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-PhotosBucket'

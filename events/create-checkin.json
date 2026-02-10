@@ -1,0 +1,31 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /v1/checkins",
+  "rawPath": "/v1/checkins",
+  "rawQueryString": "",
+  "headers": {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "host": "api.example.com",
+    "user-agent": "Mozilla/5.0"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "api-id",
+    "domainName": "api.example.com",
+    "http": {
+      "method": "POST",
+      "path": "/v1/checkins",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "1.2.3.4"
+    },
+    "requestId": "request-id",
+    "routeKey": "POST /v1/checkins",
+    "stage": "dev",
+    "authorizer": {
+      "principalId": "user123"
+    }
+  },
+  "body": "{\"riderId\": \"R57\", \"rideId\": \"RIDE001\", \"stageNumber\": 1, \"method\": \"QR_SCAN\", \"isNotRiding\": false, \"isQuitRiding\": false}",
+  "isBase64Encoded": false
+}

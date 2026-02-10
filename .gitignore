@@ -205,3 +205,25 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+tour-tracking-app-docs
+
+# AWS SAM
+.aws-sam/
+samconfig.toml.bak
+packaged.yaml
+packaged.yml
+
+# AWS credentials and config
+.aws/
+aws-exports.js
+
+# Local development
+.local/
+
+# Logs
+logs/
+*.log.*
+
+# OS
+.DS_Store
+Thumbs.db
