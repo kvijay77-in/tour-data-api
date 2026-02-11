@@ -6,6 +6,13 @@ Description: >
   Backend API for cycling tour management providing centralized data access
   for Check-In App and future applications.
 
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - E3003  # Conditional tags with AWS::NoValue are valid but linter flags them
+        - W8001  # HasCognitoUserPool is conditional, may not be used in all deployments
+
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
@@ -26,7 +33,11 @@ Globals:
         LOG_LEVEL: INFO
     Tags:
       Project: tour-data-api
+      Environment: !Ref Environment
+      Application: TourManagement
       ManagedBy: SAM
+      Owner: !If [HasOwner, !Ref Owner, !Ref AWS::NoValue]
+      CostCenter: !If [HasCostCenter, !Ref CostCenter, !Ref AWS::NoValue]
 
 Parameters:
   Environment:
@@ -42,10 +53,22 @@ Parameters:
     Type: String
     Description: ARN of the Cognito User Pool for authentication
     Default: ''
+  
+  Owner:
+    Type: String
+    Description: Team or individual responsible for the resources
+    Default: ''
+  
+  CostCenter:
+    Type: String
+    Description: Cost center code for billing and chargeback
+    Default: ''
 
 Conditions:
   IsProd: !Equals [!Ref Environment, prod]
   HasCognitoUserPool: !Not [!Equals [!Ref CognitoUserPoolArn, '']]
+  HasOwner: !Not [!Equals [!Ref Owner, '']]
+  HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
 
 Resources:
   # ============================================================================
@@ -70,7 +93,12 @@ Resources:
         MaxAge: 600
       Tags:
         Name: !Sub '${AWS::StackName}-api'
+        Project: tour-data-api
         Environment: !Ref Environment
+        Application: TourManagement
+        ManagedBy: SAM
+        Owner: !If [HasOwner, !Ref Owner, !Ref AWS::NoValue]
+        CostCenter: !If [HasCostCenter, !Ref CostCenter, !Ref AWS::NoValue]
 
   # ============================================================================
   # LAMBDA LAYERS
@@ -92,7 +120,7 @@ Resources:
   # LAMBDA FUNCTIONS - TOURS
   # ============================================================================
   
-  GetActiveT ourFunction:
+  GetActiveTourFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/functions/tours/
@@ -428,8 +456,24 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-RiderProfile'
+        - Key: Project
+          Value: tour-data-api
         - Key: Environment
           Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
 
   TourTable:
     Type: AWS::DynamoDB::Table
@@ -449,8 +493,24 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-Tour'
+        - Key: Project
+          Value: tour-data-api
         - Key: Environment
           Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
 
   TourRiderTable:
     Type: AWS::DynamoDB::Table
@@ -497,8 +557,24 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-TourRider'
+        - Key: Project
+          Value: tour-data-api
         - Key: Environment
           Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
 
   RideTable:
     Type: AWS::DynamoDB::Table
@@ -545,8 +621,24 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-Ride'
+        - Key: Project
+          Value: tour-data-api
         - Key: Environment
           Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
 
   CheckInTable:
     Type: AWS::DynamoDB::Table
@@ -593,8 +685,24 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-CheckIn'
+        - Key: Project
+          Value: tour-data-api
         - Key: Environment
           Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
 
   UserTable:
     Type: AWS::DynamoDB::Table
@@ -631,8 +739,24 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-User'
+        - Key: Project
+          Value: tour-data-api
         - Key: Environment
           Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
 
   # ============================================================================
   # S3 BUCKET FOR RIDER PHOTOS
@@ -661,8 +785,24 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-photos'
+        - Key: Project
+          Value: tour-data-api
         - Key: Environment
           Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
 
   PhotosBucketPolicy:
     Type: AWS::S3::BucketPolicy

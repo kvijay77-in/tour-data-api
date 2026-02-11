@@ -205,9 +205,10 @@ The check-in system enforces important business logic:
    - Uploads artifacts to S3
    - Creates/updates CloudFormation stack
    - Provisions all AWS resources (Lambda, API Gateway, DynamoDB, etc.)
+   - **Applies resource tags automatically** for cost tracking and management
    - Outputs the API endpoint URL upon completion
    
-   > **Note**: First deployment may take 3-5 minutes. Save the API endpoint URL from the output.
+   > **Note**: First deployment may take 3-5 minutes. Save the API endpoint URL from the output. All created resources will be tagged with `Project=tour-data-api` and `Environment=<env>` for cost analysis.
 
 ### Local Development
 
@@ -216,21 +217,98 @@ The check-in system enforces important business logic:
 > source venv/bin/activate
 > ```
 
-**Start local API**
+#### Understanding Local Development Data
+
+**Important**: By default, `sam local start-api` connects to your **real AWS DynamoDB tables** - not local data.
+
+When you run the local API:
+- Lambda functions execute on your local machine (using Docker)
+- **Data operations go to actual AWS resources** (DynamoDB tables, S3 buckets)
+- Uses your AWS credentials from `aws configure`
+- **Any data changes affect your AWS environment** (typically dev environment)
+
+**Pros**: Test with realistic data, proper AWS service integration  
+**Cons**: Requires AWS credentials, changes affect real environment, incurs minimal AWS costs
+
+#### Local Development Options
+
+**Option 1: Use AWS Resources (Default - Recommended)**
+
 ```bash
+# Local API connects to your AWS DynamoDB tables
 sam local start-api
-# or
-make local-api
+
+# API available at http://localhost:3000
+# All data operations go to your AWS account
 ```
 
-The API will be available at `http://localhost:3000`
+**Prerequisites**:
+- AWS credentials configured (`aws configure`)
+- DynamoDB tables already deployed to AWS (`sam deploy`)
+- Proper IAM permissions for DynamoDB access
 
-**Test individual Lambda functions**
+**Best for**: Integration testing, testing with realistic data, full API endpoint testing
+
+**Example requests**:
 ```bash
+# Test active tour endpoint
+curl http://localhost:3000/v1/tours/active
+
+# Create check-in (requires valid tour/rider data in DynamoDB)
+curl -X POST http://localhost:3000/v1/checkins \
+  -H "Content-Type: application/json" \
+  -d '{"tourId": "TOUR#123", "riderId": "RIDER#456", "rideId": "RIDE#789", "checkInType": "NORMAL"}'
+```
+
+**Testing Individual Lambda Functions:**
+
+You can also test individual Lambda functions locally with sample events:
+
+```bash
+# Test single function (connects to AWS DynamoDB)
 sam local invoke GetActiveTourFunction -e events/get-active-tour.json
-# or
+
+# Test check-in function
+sam local invoke CreateCheckInFunction -e events/create-checkin.json
+
+# Use Make command
 make invoke FUNCTION=GetActiveTourFunction EVENT=events/get-active-tour.json
 ```
+
+> **Note**: These commands run Lambda functions locally but still connect to real AWS resources. For testing without AWS, see Option 2 below.
+
+**Option 2: Unit Testing with Mocked AWS Services**
+
+Run unit tests with pytest and moto (AWS service mocking):
+
+```bash
+# Run all unit tests with mocked AWS services
+pytest
+
+# Run with coverage
+pytest --cov=src --cov-report=html
+
+# Run specific test file
+pytest tests/test_lambda_functions.py -v
+
+# Run specific test function
+pytest tests/test_lambda_functions.py::test_get_active_tour_success -v
+```
+
+**How It Works:**
+- Uses **moto** library to mock AWS DynamoDB (no real AWS resources)
+- Tests run with in-memory mock databases
+- Production code (`dynamodb_utils.py`) remains clean - no test logic
+- Standard Python testing approach using pytest fixtures
+
+**Best for**: Unit testing, CI/CD pipelines, testing business logic without AWS, offline development
+
+**Pros**: No AWS credentials needed, fast execution, no AWS costs, proper separation of concerns  
+**Cons**: Mocks may not catch all AWS-specific edge cases
+
+See [tests/test_lambda_functions.py](tests/test_lambda_functions.py) for examples.
+
+> **Note**: For local API testing with real AWS resources, use Option 1 above. For unit testing without AWS, use pytest with moto.
 
 ## 📁 Project Structure
 
@@ -368,13 +446,58 @@ The project supports three environments:
 
 Configure environments in [samconfig.toml](samconfig.toml).
 
+**Environment-Specific Configurations:**
+- Each environment has its own CloudFormation stack
+- Resources are tagged with `Environment` tag (dev/test/prod)
+- Separate AWS accounts recommended for production
+- Environment parameter passed during deployment:
+  ```bash
+  sam deploy --parameter-overrides Environment=prod
+  ```
+
+**Cost Tracking by Environment:**
+All resources are automatically tagged with their environment, enabling:
+- Separate cost analysis per environment in AWS Cost Explorer
+- Budget alerts specific to production resources
+- Easy identification of development vs production costs
+
+See [Resource Tagging Strategy](#resource-tagging-strategy) for details on using tags for cost tracking.
+
 ## 🔐 Security
 
+### Authentication & Authorization
+
+**For Consumer Applications (Check-In App, Rider App, etc.):**
+- Consumer apps authenticate users via **AWS Cognito** (username/password, MFA, etc.)
+- Upon successful authentication, Cognito issues a **JWT token**
+- Consumer apps include this JWT token in the `Authorization` header of API requests
+- API Gateway validates the JWT token before allowing access to Lambda functions
+- **No need to manage Lambda IAM roles** - this is handled automatically by AWS
+
+**Internal AWS Security (Transparent to Consumer Apps):**
+- Each Lambda function has its own **execution role** (IAM role)
+- These roles define what AWS resources the function can access (DynamoDB tables, S3 buckets, etc.)
+- Follows **least-privilege principle** - each function only has permissions it needs
+- Example: `CreateCheckinFunction` can write to CheckIn table but not modify Ride table
+
+**Additional Security Measures:**
 - All endpoints (except public ones) require JWT authentication
 - IAM roles follow least-privilege principle
 - DynamoDB tables use on-demand pricing (no over-provisioning)
 - Sensitive data excluded from logs
 - CORS configured for specific origins only
+
+### How It Works (End-to-End Security Flow)
+
+1. **User Login**: Consumer app sends credentials to Cognito
+2. **Token Issued**: Cognito validates and returns JWT token
+3. **API Request**: Consumer app calls API with JWT in `Authorization: Bearer <token>` header
+4. **Token Validation**: API Gateway validates JWT with Cognito
+5. **Lambda Invocation**: If valid, API Gateway invokes Lambda function
+6. **Resource Access**: Lambda uses its execution role to access DynamoDB/S3/etc.
+7. **Response**: Result returned to consumer app
+
+> **Key Point**: Consumer apps only need to handle JWT authentication. The Lambda execution roles and AWS resource access are entirely managed by the infrastructure and are not a concern for consumer application developers.
 
 ### Setting up Cognito
 
@@ -411,32 +534,37 @@ The API uses AWS Cognito for authentication. To configure:
      --auth-parameters USERNAME=admin@example.com,PASSWORD=<password>
    ```
 
-## � CI/CD Pipeline
+## 🚀 CI/CD Pipeline
 
 The project includes a GitHub Actions workflow for continuous integration and deployment.
 
+> **Note**: The pipeline is configured for **manual triggering only**. It will not run automatically on code commits.
+
+### How to Trigger the Pipeline
+
+1. Go to your GitHub repository → **Actions** tab
+2. Select the **CI/CD Pipeline** workflow from the left sidebar
+3. Click **Run workflow** button
+4. Select the target environment (dev, test, or prod)
+5. Click **Run workflow** to start the pipeline
+
 ### Pipeline Stages
 
-1. **Test** (on all pushes and PRs):
+When manually triggered, the pipeline executes these stages:
+
+1. **Test**:
    - Runs linters (pylint, black)
    - Executes unit tests with coverage
    - Uploads coverage reports to Codecov
 
-2. **Build** (after tests pass):
+2. **Build**:
    - Validates SAM template
    - Builds application
 
-3. **Deploy to Dev** (on push to `develop` branch):
-   - Deploys to development environment
-   - Runs smoke tests
-
-4. **Deploy to Test** (on push to `main` branch):
-   - Deploys to test environment
-   - Runs integration tests
-
-5. **Deploy to Prod** (manual approval after test):
-   - Deploys to production environment
-   - Runs smoke tests
+3. **Deploy** (to selected environment):
+   - Deploys to the chosen environment (dev, test, or prod)
+   - Provisions/updates all AWS resources
+   - Outputs API endpoint URL
 
 ### Setting up GitHub Actions
 
@@ -501,9 +629,13 @@ When the CI/CD pipeline (or `sam deploy`) executes, the following AWS resources 
 - **1 S3 Bucket**: Rider photo storage with lifecycle policies
 
 #### Security & Permissions
-- **15 IAM Roles**: One execution role per Lambda function
-- **IAM Policies**: Least-privilege policies for DynamoDB, S3, and CloudWatch access
-- **API Gateway Authorizer**: JWT authorizer connected to Cognito (if configured)
+- **15 IAM Roles**: One execution role per Lambda function (least-privilege security)
+  - These roles define what AWS resources each Lambda can access (DynamoDB, S3, CloudWatch)
+  - **Consumer apps don't interact with these roles** - they're internal to AWS infrastructure
+- **IAM Policies**: Least-privilege policies attached to each execution role
+- **API Gateway Authorizer**: JWT authorizer connected to Cognito (validates consumer app requests)
+
+> **How Consumer Apps Access the API**: Consumer applications (Check-In App, Rider App, etc.) authenticate users via AWS Cognito and receive JWT tokens. They send these tokens in API requests. API Gateway validates the token and invokes the appropriate Lambda function. The Lambda function then uses its execution role to access AWS resources. This architecture is **transparent to consumer apps** - they only need to handle JWT authentication, not Lambda execution roles.
 
 #### Monitoring & Logging
 - **15 CloudWatch Log Groups**: One per Lambda function with retention policies
@@ -520,6 +652,153 @@ When the CI/CD pipeline (or `sam deploy`) executes, the following AWS resources 
 **Total Resources**: ~70+ AWS resources created and managed as infrastructure-as-code
 
 > **Note**: The exact resources depend on your `template.yaml` configuration. All resources are tagged with project identifiers for cost tracking and management.
+
+### Resource Tagging Strategy
+
+All AWS resources created by this project are automatically tagged for cost tracking, management, and compliance.
+
+**Standard Tags Applied to All Resources:**
+
+| Tag Key | Tag Value | Purpose |
+|---------|-----------|---------|
+| `Project` | `tour-data-api` | Identify all resources belonging to this project |
+| `Environment` | `dev` / `test` / `prod` | Distinguish between deployment environments |
+| `ManagedBy` | `SAM` or `CloudFormation` | Indicate infrastructure-as-code tool |
+| `Application` | `TourManagement` | Logical application grouping |
+| `Owner` | (Configurable) | Team or individual responsible for the resources |
+| `CostCenter` | (Configurable) | Your organization's cost center code |
+
+**How to Configure Tags:**
+
+Tags are defined in `template.yaml`. Standard tags are applied globally, and you can add custom tags via parameters.
+
+**Standard Tags (Applied Automatically):**
+```yaml
+Globals:
+  Function:
+    Tags:
+      Project: tour-data-api
+      Environment: !Ref Environment
+      Application: TourManagement
+      ManagedBy: SAM
+      Owner: !Ref Owner
+      CostCenter: !Ref CostCenter
+```
+
+**Adding Custom Tags During Deployment:**
+
+You can provide custom tag values when deploying:
+
+```bash
+# Using sam deploy with custom tags
+sam deploy --parameter-overrides \
+  Environment=prod \
+  Owner="DevOps Team" \
+  CostCenter="CC-1234"
+
+# Or configure in samconfig.toml for persistent values
+```
+
+**Configure in samconfig.toml:**
+
+Edit `samconfig.toml` to set persistent tag values for each environment:
+
+```toml
+# Development environment
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+parameter_overrides = "Environment=dev Owner=\"DevTeam\" CostCenter=\"CC-1234\""
+
+# Test environment
+[test.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+parameter_overrides = "Environment=test Owner=\"QA Team\" CostCenter=\"CC-1234\""
+
+# Production environment
+[prod.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+parameter_overrides = "Environment=prod Owner=\"Operations Team\" CostCenter=\"CC-5678\""
+```
+
+> **Note**: When updating `samconfig.toml`, uncomment and modify the `parameter_overrides` line with your custom tag values.
+
+**To Add Additional Custom Tags:**
+
+1. Add new parameters in `template.yaml`:
+   ```yaml
+   Parameters:
+     CustomTag1:
+       Type: String
+       Default: ''
+       Description: Custom tag for your specific needs
+   ```
+
+2. Add to Globals section:
+   ```yaml
+   Globals:
+     Function:
+       Tags:
+         CustomTag1: !Ref CustomTag1
+   ```
+
+3. Deploy with values:
+   ```bash
+   sam deploy --parameter-overrides CustomTag1="YourValue"
+   ```
+
+**Using Tags for Cost Analysis:**
+
+1. **AWS Cost Explorer**:
+   ```bash
+   # View costs by environment
+   # Go to AWS Console → Cost Explorer → Filters → Tag: Environment
+   ```
+
+2. **AWS CLI - Get costs by tag**:
+   ```bash
+   # Get monthly costs for dev environment
+   aws ce get-cost-and-usage \
+     --time-period Start=2026-01-01,End=2026-01-31 \
+     --granularity MONTHLY \
+     --metrics UnblendedCost \
+     --filter file://cost-filter.json
+   
+   # cost-filter.json:
+   # {
+   #   "Tags": {
+   #     "Key": "Environment",
+   #     "Values": ["dev"]
+   #   }
+   # }
+   ```
+
+3. **Cost Allocation Tags**:
+   - Enable cost allocation tags in AWS Billing Console
+   - Go to Billing → Cost Allocation Tags
+   - Activate `Project`, `Environment`, `Application` tags
+   - Wait 24 hours for tags to appear in Cost Explorer
+
+4. **Generate Cost Reports**:
+   ```bash
+   # List resources by tag
+   aws resourcegroupstaggingapi get-resources \
+     --tag-filters Key=Project,Values=tour-data-api \
+     --resource-type-filters lambda dynamodb apigateway
+   ```
+
+**Benefits of Tagging:**
+- **Cost Tracking**: Analyze spending per environment (dev vs prod)
+- **Resource Management**: Identify and clean up unused resources
+- **Compliance**: Track resources for audit and governance
+- **Automation**: Bulk operations on tagged resources (e.g., backup, deletion)
+- **Budgeting**: Set budget alerts based on tags
+
+> **Best Practice**: Update tags in `template.yaml` before deployment. Tags are applied during stack creation/update and automatically propagate to all resources.
 ## �📊 Monitoring
 
 ### CloudWatch Logs
@@ -549,7 +828,13 @@ Expected monthly costs (100 riders, 7-8 rides, 5-year retention):
 
 **Total**: ~$5-11/month
 
-See [docs/SolutionDesign.md](docs/SolutionDesign.md) for detailed cost breakdown.
+**Cost Management:**
+- All resources are tagged by environment (dev/test/prod) for granular cost tracking
+- Use AWS Cost Explorer with tag filters to analyze spending per environment
+- Set up budget alerts using tags: `Project=tour-data-api`
+- Enable Cost Allocation Tags in AWS Billing Console for detailed reports
+
+See [docs/SolutionDesign.md](docs/SolutionDesign.md) for detailed cost breakdown and the [Resource Tagging Strategy](#resource-tagging-strategy) section for cost tracking using tags.
 
 ## 📖 Additional Documentation
 
@@ -610,8 +895,11 @@ make logs FUNCTION=YourFunctionName
 # Tail logs
 make logs-tail FUNCTION=YourFunctionName
 
-# Test locally
+# Test locally with AWS resources
 sam local invoke YourFunctionName -e events/your-event.json
+
+# Or run unit tests with mocked AWS services
+pytest tests/test_lambda_functions.py -v
 ```
 
 ### DynamoDB Issues

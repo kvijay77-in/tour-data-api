@@ -15,6 +15,8 @@ lint = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
+# Add custom tags: Owner and CostCenter (optional)
+# parameter_overrides = "Environment=dev Owner=\"DevTeam\" CostCenter=\"CC-1234\""
 parameter_overrides = "Environment=dev"
 
 [default.package.parameters]
@@ -38,6 +40,8 @@ stack_name = "tour-data-api-test"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
+# Add custom tags: Owner and CostCenter (optional)
+# parameter_overrides = "Environment=test Owner=\"QA Team\" CostCenter=\"CC-1234\""
 parameter_overrides = "Environment=test"
 
 # Production environment configuration
@@ -49,4 +53,6 @@ stack_name = "tour-data-api-prod"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
+# Add custom tags: Owner and CostCenter (optional)
+# parameter_overrides = "Environment=prod Owner=\"Operations Team\" CostCenter=\"CC-5678\""
 parameter_overrides = "Environment=prod"

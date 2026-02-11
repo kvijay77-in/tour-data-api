@@ -87,7 +87,11 @@ These instructions are general for our interaction and MUST BE STRICTLY FOLLOWED
 Some specific or explicit instructions that must be followed. Same will be updated here if not covered above.  
 
 ## Do's
+- Implement testing frameworks and write unit tests for critical components.
+- Ensure proper documentation of code and infrastructure as code templates.
+- Regularly review and update dependencies to ensure security and compatibility.
 
 ## Don'ts
+- Never add testing or debugging code in the production codebase.
 
 

@@ -26,7 +26,8 @@ def lambda_handler(event, context):
         items = scan_items(
             table_name_env='TOUR_TABLE',
             filter_expression='#status = :status',
-            expression_values={':status': TourStatus.ACTIVE.value}
+            expression_values={':status': TourStatus.ACTIVE.value},
+            expression_names={'#status': 'status'}
         )
         
         if not items:

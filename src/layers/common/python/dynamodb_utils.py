@@ -170,6 +170,7 @@ def scan_items(
     table_name_env: str,
     filter_expression: Optional[str] = None,
     expression_values: Optional[Dict[str, Any]] = None,
+    expression_names: Optional[Dict[str, str]] = None,
     limit: Optional[int] = None
 ) -> List[Dict[str, Any]]:
     """
@@ -181,6 +182,7 @@ def scan_items(
         table_name_env: Environment variable name containing table name
         filter_expression: Filter expression (optional)
         expression_values: Expression attribute values (optional)
+        expression_names: Expression attribute names (optional)
         limit: Maximum number of items to return (optional)
     
     Returns:
@@ -196,6 +198,9 @@ def scan_items(
         
         if expression_values:
             kwargs['ExpressionAttributeValues'] = expression_values
+        
+        if expression_names:
+            kwargs['ExpressionAttributeNames'] = expression_names
         
         if limit:
             kwargs['Limit'] = limit
