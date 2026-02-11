@@ -234,60 +234,16 @@ make invoke FUNCTION=GetActiveTourFunction EVENT=events/get-active-tour.json
 
 ## 📁 Project Structure
 
-```
-tour-data-api/
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yml              # GitHub Actions CI/CD pipeline
-├── docs/
-│   ├── Requirements.md            # Detailed requirements
-│   ├── SolutionDesign.md          # Architecture and design
-│   └── project-structure.md       # Project structure documentation
-├── src/
-│   ├── functions/                 # Lambda function handlers
-│   │   ├── checkins/
-│   │   │   ├── create_checkin.py
-│   │   │   ├── get_dashboard_data.py
-│   │   │   └── get_ride_checkins.py
-│   │   ├── riders/
-│   │   │   ├── get_rider_profile.py
-│   │   │   ├── update_rider_profile.py
-│   │   │   └── get_tour_rider.py
-│   │   ├── rides/
-│   │   │   ├── get_todays_ride.py
-│   │   │   ├── get_ride.py
-│   │   │   ├── list_rides.py
-│   │   │   ├── create_ride.py
-│   │   │   ├── update_ride.py
-│   │   │   └── close_ride.py
-│   │   ├── tours/
-│   │   │   ├── get_active.py
-│   │   │   └── get_tour.py
-│   │   └── users/
-│   │       ├── get_current_user.py
-│   │       └── list_tour_users.py
-│   └── layers/
-│       └── common/                # Shared utilities layer
-│           ├── python/
-│           │   ├── models.py      # Data models
-│           │   ├── response.py    # Response utilities
-│           │   ├── validation.py  # Input validation
-│           │   ├── dynamodb_utils.py  # DynamoDB operations
-│           │   └── logger.py      # Logging utilities
-│           └── requirements.txt
-├── tests/                         # Unit and integration tests
-│   ├── test_validation.py
-│   └── __init__.py
-├── events/                        # Sample event payloads for testing
-│   ├── get-active-tour.json
-│   └── create-checkin.json
-├── template.yaml                  # SAM CloudFormation template
-├── samconfig.toml                 # SAM CLI configuration
-├── Makefile                       # Build and deployment automation
-├── requirements-dev.txt           # Development dependencies
-├── pytest.ini                     # Test configuration
-└── README.md                      # This file
-```
+For detailed project organization and folder structure, see [docs/project-structure.md](docs/project-structure.md).
+
+**Quick Overview:**
+- `src/functions/` - Lambda function handlers (checkins, riders, rides, tours, users)
+- `src/layers/common/` - Shared utilities and dependencies
+- `docs/` - Requirements, architecture, and design documentation
+- `tests/` - Unit and integration tests
+- `events/` - Sample event payloads for local testing
+- `template.yaml` - SAM CloudFormation template
+- `.github/workflows/` - CI/CD pipeline configuration
 
 ## 🔧 Development
 
