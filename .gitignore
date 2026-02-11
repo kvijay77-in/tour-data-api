@@ -227,3 +227,6 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Project specific ignores
+temp/

@@ -9,7 +9,7 @@ This API supports managing cycling tours with approximately 100 riders, 7-8 ride
 - **Rider Management**: Profile management, tour participation tracking
 - **Tour Management**: Tour lifecycle, rider enrollment
 - **Ride Management**: Daily ride scheduling, route planning
-- **Check-in System**: Recording rider arrivals at checkpoints (Normal/Quick Resume/Does Not Resume)
+- **Check-in System**: Recording rider arrivals at checkpoints (Normal/Not Riding/Quit Riding)
 - **Dashboard**: Real-time ride status and statistics
 - **User Management**: Admin and staff access control
 
@@ -36,27 +36,30 @@ This API supports managing cycling tours with approximately 100 riders, 7-8 ride
 
 The check-in system enforces important business logic:
 
-- **Normal Resume (NR)**: Rider completes the ride normally
-  - Only one NR check-in allowed per rider per ride
-  - Cannot check-in after a Quick Resume (QR)
+- **Normal Check-in**: Rider completes the ride normally by arriving at checkpoints
+  - Standard check-in captured via QR code scanning at each stage
+  - Multiple normal check-ins allowed per rider per ride (one at each stage)
   
-- **Quick Resume (QR)**: Rider transported to destination (e.g., via support vehicle)
-  - Once a rider has QR for a ride, no further check-ins allowed for that ride
-  - Prevents recording completion after being transported
+- **Not Riding**: Rider transported to destination (e.g., via support vehicle)
+  - Only one "Not Riding" check-in allowed per rider per ride
+  - Once a rider has "Not Riding" for a ride, no further check-ins allowed for that ride
+  - Prevents recording normal check-ins after being transported
   
-- **Does Not Resume (DNR)**: Rider does not continue the tour
-  - No further restrictions after DNR
+- **Quit Riding**: Rider does not continue the tour
+  - Can be recorded at any stage or remotely when rider quits in-between stages.
+  - Manual entry supported for remote quitting scenarios
+  - Once 'Quit Riding' no further check-ins are allowed.
   
 - **Additional Validations**:
   - Rider must be enrolled in the tour
   - Ride must not be closed (ACTIVE or SCHEDULED status)
-  - No duplicate check-ins for the same rider/ride/type combination
+  - No duplicate check-ins for the same rider/ride/stage combination
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - AWS CLI configured with appropriate credentials
 - AWS SAM CLI ([installation guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html))
 - Make (optional, for using Makefile commands)
@@ -69,30 +72,149 @@ The check-in system enforces important business logic:
    cd tour-data-api
    ```
 
-2. **Install dependencies**
+2. **Set up virtual environment**
+   ```bash
+   # Create virtual environment
+   python3 -m venv venv
+   
+   # Activate virtual environment
+   source venv/bin/activate
+   ```
+   
+   > **Note**: Always activate the virtual environment before working on the project. On Windows, use `venv\Scripts\activate` instead.
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements-dev.txt
    ```
 
-3. **Build the application**
+4. **Verify AWS Configuration**
+   
+   Check if AWS CLI is configured and accessible:
+   ```bash
+   aws sts get-caller-identity
+   ```
+   
+   If successful, you should see your AWS account details (Account ID, User ARN, etc.).
+   
+   **If AWS CLI is not configured**, choose one of these setup options:
+   
+   ### Option A: Temporary Credentials (Recommended - More Secure)
+   
+   Temporary credentials are more secure as they expire automatically and don't require long-term access keys.
+   
+   **Using AWS IAM Identity Center (SSO)**:
+   ```bash
+   # Configure AWS SSO
+   aws configure sso
+   ```
+   
+   You'll be prompted to enter:
+   - **SSO start URL**: Your organization's SSO URL
+   - **SSO Region**: Region where your SSO is configured
+   - **SSO account**: Select your AWS account
+   - **SSO role**: Select the role to use
+   - **Default region**: e.g., `ap-south-1`, `us-east-1`, etc.
+   - **Output format**: `json` (recommended)
+   
+   After configuration, login to get temporary credentials:
+   ```bash
+   # Login to SSO (credentials valid for hours, not permanent)
+   aws sso login --profile your-profile-name
+   
+   # Verify access
+   aws sts get-caller-identity --profile your-profile-name
+   ```
+   
+   **Using AWS STS Assume Role** (if you have a role to assume):
+   ```bash
+   # Get temporary credentials (valid for 1-12 hours)
+   aws sts assume-role \
+     --role-arn arn:aws:iam::ACCOUNT_ID:role/YourRoleName \
+     --role-session-name dev-session
+   
+   # Set temporary credentials as environment variables
+   export AWS_ACCESS_KEY_ID=<TemporaryAccessKeyId>
+   export AWS_SECRET_ACCESS_KEY=<TemporarySecretAccessKey>
+   export AWS_SESSION_TOKEN=<SessionToken>
+   ```
+   
+   ### Option B: Long-term Access Keys (Less Secure)
+   
+   ```bash
+   # Configure AWS CLI with your credentials
+   aws configure
+   ```
+   
+   You'll be prompted to enter:
+   - **AWS Access Key ID**: Your AWS access key
+   - **AWS Secret Access Key**: Your AWS secret key
+   - **Default region name**: e.g., `ap-south-1`, `us-east-1`, etc.
+   - **Default output format**: `json` (recommended)
+   
+   > **Note**: If you don't have AWS credentials, create them in the AWS Console:
+   > 1. Go to IAM → Users → Your User → Security Credentials
+   > 2. Create Access Key → Command Line Interface (CLI)
+   > 3. Download and save the credentials securely
+   > 
+   > **Security Best Practice**: Rotate access keys regularly and use temporary credentials when possible.
+   
+   **Verify AWS region** (optional but recommended):
+   ```bash
+   # Check current region
+   aws configure get region
+   
+   # Set region if needed
+   aws configure set region ap-south-1
+   ```
+   
+   **SAM CLI configuration**: SAM uses the same AWS credentials as AWS CLI. No separate configuration needed.
+
+5. **Build the application**
+   
+   This command packages your Lambda functions and dependencies, preparing them for deployment. It creates a `.aws-sam` directory with the built artifacts.
+   
    ```bash
    sam build
    # or
    make build
    ```
+   
+   The build process:
+   - Resolves dependencies from `requirements.txt`
+   - Packages Lambda functions and layers
+   - Validates the SAM template
+   - Creates deployment artifacts
 
-4. **Deploy to AWS**
+6. **Deploy to AWS**
+   
+   This command deploys your application to AWS by creating/updating a CloudFormation stack with all resources (Lambda functions, API Gateway, DynamoDB tables, IAM roles, etc.).
+   
    ```bash
    # First-time deployment (guided)
+   # You'll be prompted to configure stack name, region, and deployment preferences
    sam deploy --guided
    
-   # Subsequent deployments
+   # Subsequent deployments (uses saved configuration from samconfig.toml)
    sam deploy
    # or
    make deploy
    ```
+   
+   The deployment process:
+   - Uploads artifacts to S3
+   - Creates/updates CloudFormation stack
+   - Provisions all AWS resources (Lambda, API Gateway, DynamoDB, etc.)
+   - Outputs the API endpoint URL upon completion
+   
+   > **Note**: First deployment may take 3-5 minutes. Save the API endpoint URL from the output.
 
 ### Local Development
+
+> **Remember**: Activate your virtual environment before running any commands:
+> ```bash
+> source venv/bin/activate
+> ```
 
 **Start local API**
 ```bash
@@ -168,6 +290,13 @@ tour-data-api/
 ```
 
 ## 🔧 Development
+
+> **Important**: Always ensure your virtual environment is activated before development work:
+> ```bash
+> source venv/bin/activate  # On Linux/Mac
+> # or
+> venv\Scripts\activate     # On Windows
+> ```
 
 ### Running Tests
 
@@ -390,7 +519,51 @@ aws iam create-access-key --user-name github-actions-deployer
 ### Workflow File
 
 See [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml) for the complete pipeline configuration.
+### AWS Resources Created by Deployment
 
+When the CI/CD pipeline (or `sam deploy`) executes, the following AWS resources are automatically created/updated:
+
+#### Compute & API
+- **15 Lambda Functions**:
+  - Tours: `GetActiveTourFunction`, `GetTourFunction`
+  - Riders: `GetRiderProfileFunction`, `UpdateRiderProfileFunction`, `GetTourRiderFunction`
+  - Rides: `GetTodaysRideFunction`, `GetRideFunction`, `ListRidesFunction`, `CreateRideFunction`, `UpdateRideFunction`, `CloseRideFunction`
+  - Check-ins: `CreateCheckinFunction`, `GetRideCheckinsFunction`, `GetDashboardDataFunction`
+  - Users: `GetCurrentUserFunction`, `ListTourUsersFunction`
+- **1 Lambda Layer**: CommonLayer (shared utilities and dependencies)
+- **1 API Gateway HTTP API**: RESTful API with 15+ endpoints
+- **15 Lambda Permissions**: API Gateway invoke permissions for each function
+
+#### Data Storage
+- **6 DynamoDB Tables** (On-demand billing mode):
+  - `RiderProfile` - Rider master data with GSI for email lookups
+  - `Tour` - Tour information with GSI for status queries
+  - `TourRider` - Tour enrollment mapping
+  - `Ride` - Daily ride details with GSI for date-based queries
+  - `CheckIn` - Check-in records with multiple GSIs
+  - `User` - Admin/staff user accounts
+- **1 S3 Bucket**: Rider photo storage with lifecycle policies
+
+#### Security & Permissions
+- **15 IAM Roles**: One execution role per Lambda function
+- **IAM Policies**: Least-privilege policies for DynamoDB, S3, and CloudWatch access
+- **API Gateway Authorizer**: JWT authorizer connected to Cognito (if configured)
+
+#### Monitoring & Logging
+- **15 CloudWatch Log Groups**: One per Lambda function with retention policies
+- **CloudWatch Alarms** (optional): Can be added for monitoring errors and throttles
+
+#### Networking (if VPC configured)
+- **VPC Integration**: Lambda functions can be configured for VPC access
+- **Security Groups** and **Subnets**: If VPC deployment is enabled
+
+#### CloudFormation
+- **1 CloudFormation Stack**: Named `tour-data-api` (or custom name from samconfig.toml)
+- **S3 Bucket**: SAM deployment bucket for storing deployment artifacts
+
+**Total Resources**: ~70+ AWS resources created and managed as infrastructure-as-code
+
+> **Note**: The exact resources depend on your `template.yaml` configuration. All resources are tagged with project identifiers for cost tracking and management.
 ## �📊 Monitoring
 
 ### CloudWatch Logs
