@@ -1,8 +1,11 @@
 # TODO: Documentation vs. Development Gap Analysis
 
 Identified on: 2026-02-14
+Last reviewed: 2026-02-14
 
 This document lists all gaps found between project documentation and actual development artifacts. Each item should be reviewed and resolved before deployment.
+
+> **Note:** SolutionDesign.md was updated on 2026-02-14 with the hybrid table strategy (shared + tour-specific tables), free-form tourId, SubscriptionId as tag-only, and tour provisioning/archiving workflows. Several items below have been updated to reflect the new design. New items (#26–#30) were added for design-driven implementation work.
 
 ---
 
@@ -52,7 +55,9 @@ README, SolutionDesign, and template.yaml disagree on endpoint paths for many ro
 | Dashboard | `GET /dashboard/{rideId}` | `GET /rides/{rideId}/dashboard` | `GET /v1/rides/{rideId}/dashboard` |
 | Get current user | `GET /users/me` | `GET /users/me` | **Not defined** |
 | List tour users | `GET /tours/{tourId}/users` | `GET /tours/{tourId}/users` | **Not defined** |
-| List tours | Not in README | `GET /tours?year={year}&status={status}` | `GET /v1/tours` (handler missing) |
+| List tours | Not in README | `GET /tours?status={status}` | `GET /v1/tours` (handler missing) |
+| Create tour | Not in README | `POST /tours` | **Not defined** |
+| Archive tour | Not in README | `POST /tours/{tourId}/archive` | **Not defined** |
 | Get tour riders | Not a distinct endpoint in README | `GET /tours/{tourId}/riders` | `GET /v1/tours/{tourId}/riders` (handler missing) |
 
 **Action:** Decide on authoritative API paths (SolutionDesign should be source of truth), then align README, template.yaml, and Lambda code.
@@ -111,6 +116,8 @@ Approximately 9 Lambda functions import or call `bad_request_response()`, but th
 
 **Action:** Fix all affected functions to use `table_name_env=` with the environment variable name.
 
+> **Design Note:** With the updated hybrid table strategy, tour-specific tables (TourRider, Ride, CheckIn, User) are created at runtime and their names are derived dynamically as `{STACK_NAME}-{TableType}-{tourId}`. The `dynamodb_utils.py` module will need a new mechanism for dynamic table name resolution in addition to the existing `table_name_env` pattern. See TODO #28.
+
 ---
 
 ## 10. Route/Path Parameter Mismatch in Lambda Functions
@@ -141,6 +148,8 @@ Several ride-related functions expect `tourId` from path parameters, but the API
 `get_dashboard_data.py` queries a `RideIdIndex` GSI on the Ride table, but this index does not exist in template.yaml. The Ride table only has `DateIndex` and `StatusIndex`.
 
 **Action:** Either add `RideIdIndex` GSI to the Ride table in template.yaml, or change the query approach in the dashboard function.
+
+> **Design Note:** With the updated design, the Ride table is now tour-specific (`Ride-{tourId}`) and provisioned at runtime. Its GSIs (DateIndex on `date`, StatusIndex on `status`) are defined during provisioning, not in template.yaml. The dashboard function's use of `RideIdIndex` still needs to be resolved — the tour-specific Ride table uses `RIDE#<rideId>` as PK, so a direct `get_item` may suffice instead of a GSI query.
 
 ---
 
@@ -189,6 +198,8 @@ Several ride-related functions expect `tourId` from path parameters, but the API
 | Files on disk | **16** unique handlers (Tours: 2, Riders: 3, Rides: 6, Check-ins: 3, Users: 2) |
 
 The distribution in infrastructure-guide is also wrong — template.yaml has 3 Tour functions (not 2), 0 User functions (not 2), and 2 Rider functions (not 3).
+
+> **Design Note:** The updated SolutionDesign adds 2 new endpoints: `POST /tours` (create/provision) and `POST /tours/{tourId}/archive`. These will require new Lambda functions, further increasing the count. Final count should be reconciled after all implementation work is done.
 
 **Action:** Update README and infrastructure-guide to reflect actual function counts and distribution once all gaps above are resolved.
 
@@ -248,24 +259,26 @@ The workflow file `.github/workflows/ci-cd.yml` has issues:
 
 Test fixtures in `tests/fixtures/mock_data.py` use data formats that don't match SolutionDesign or models.py:
 
-| Field | SolutionDesign / models.py | Mock Data |
+| Field | SolutionDesign (updated) | Mock Data |
 |---|---|---|
-| Tour `PK` | `TOUR#<year>` (e.g., `TOUR#2026`) | `TOUR#001` |
-| Tour `tourId` | `TOUR2026` (no `#`) | `TOUR#001` (includes `#`) |
+| Tour `PK` | `TOUR#<tourId>` (e.g., `TOUR#India-Coast-2026`) | `TOUR#001` |
+| Tour `tourId` | Free-form (e.g., `India-Coast-2026`) | `TOUR#001` (includes `#`, wrong format) |
 | Rider Profile `PK` | `PROFILE#<uuid>` | `RIDER#R001` (wrong prefix) |
 | Rider `riderId` | `R1`, `R57` (no zero-padding per Requirements) | `R001`, `R002` (zero-padded) |
 | User `role` | `ADMINISTRATOR`, `SUPER_USER`, etc. (per `UserRole` enum) | `ADMIN` (not a valid enum value) |
 | CheckIn `SK` | `CHECKIN#<riderId>#<stageNumber>#<timestamp>` | `2026-02-11T10:30:00#R001` (wrong format) |
+| Tour `status` | Includes `PROVISIONING` (new) | Not present in mock data |
+| Tour fields | `provisionedAt`, `archivedAt` (new) | Not present in mock data |
 
-**Action:** Fix mock data to match the data model specification.
+**Action:** Fix mock data to match the updated data model specification. Tour-specific table data (TourRider, Ride, CheckIn, User) should use the simplified key design (no tour prefix in PK).
 
 ---
 
-## 22. SolutionDesign References Non-Existent `src/authorizer/` Directory
+## 22. ~~SolutionDesign References Non-Existent `src/authorizer/` Directory~~ — RESOLVED
 
-The Infrastructure as Code section in SolutionDesign.md lists `src/authorizer/` for a JWT authorizer. This directory does not exist and no custom authorizer Lambda is implemented.
+~~The Infrastructure as Code section in SolutionDesign.md lists `src/authorizer/` for a JWT authorizer. This directory does not exist and no custom authorizer Lambda is implemented.~~
 
-**Action:** Remove the reference from SolutionDesign, or create the authorizer if needed.
+**Resolved:** The `src/authorizer/` reference was removed from SolutionDesign.md on 2026-02-14 during the design update.
 
 ---
 
@@ -281,7 +294,9 @@ The Infrastructure as Code section in SolutionDesign.md lists `src/authorizer/` 
 
 `docs/deployment-guide.md` states the Tour table has `GSI: StatusIndex (for status-based queries)`. The actual Tour table in template.yaml has **no GSIs** — only a simple hash key (`PK`).
 
-**Action:** Either add the StatusIndex GSI to template.yaml, or correct the deployment guide.
+SolutionDesign.md (updated) now specifies `GSI1` on `status` for the shared Tour table, aligning with the deployment guide.
+
+**Action:** Add the StatusIndex GSI (partition key: `status`) to the Tour table in template.yaml to match both SolutionDesign.md and deployment-guide.md.
 
 ---
 
@@ -290,3 +305,106 @@ The Infrastructure as Code section in SolutionDesign.md lists `src/authorizer/` 
 `src/functions/users/get_current_user.py` reads `USER_TABLE` from environment but never queries DynamoDB — it only returns JWT claims. Minor but unnecessary dependency.
 
 **Action:** Remove the unused `USER_TABLE` reference, or document that it's reserved for future use.
+
+---
+
+# New Items from SolutionDesign.md Update (2026-02-14)
+
+The following items were identified after the SolutionDesign.md was updated with the hybrid table strategy (shared + tour-specific tables), free-form tourId, and tour provisioning/archiving workflows.
+
+---
+
+## 26. template.yaml Needs Restructuring for Hybrid Table Strategy
+
+The current template.yaml defines 6 DynamoDB tables (Tour, RiderProfile, TourRider, Ride, CheckIn, User) all as SAM-managed resources. Per the updated SolutionDesign:
+
+- **Keep as SAM-managed:** Tour, RiderProfile (shared tables)
+- **Remove from template.yaml:** TourRider, Ride, CheckIn, User (now tour-specific, provisioned at runtime)
+
+Additional changes needed:
+- Add `STACK_NAME` environment variable to all Lambda functions (for dynamic table name resolution)
+- Add `SUBSCRIPTION_ID` environment variable (from `SubscriptionId` parameter) for tagging runtime-created tables
+- Add `SubscriptionId` as a SAM template parameter
+- Add `StatusIndex` GSI to the Tour table (partition key: `status`)
+- Update IAM policies: Lambda execution role needs `dynamodb:CreateTable`, `dynamodb:DeleteTable`, `dynamodb:DescribeTable`, `dynamodb:TagResource` for provisioning functions
+- Update all Lambda environment variables that reference removed tables
+
+**Action:** Restructure template.yaml to match the hybrid table strategy described in SolutionDesign.md.
+
+---
+
+## 27. New Lambda Functions Needed for Tour Provisioning and Archiving
+
+SolutionDesign.md defines two new API endpoints with no corresponding Lambda functions:
+
+| Endpoint | Handler | File (to create) |
+|---|---|---|
+| `POST /tours` | `create_tour.lambda_handler` | `src/functions/tours/create_tour.py` |
+| `POST /tours/{tourId}/archive` | `archive_tour.lambda_handler` | `src/functions/tours/archive_tour.py` |
+
+**`create_tour.py`** must:
+1. Validate free-form tourId (3-50 chars, `[a-zA-Z0-9_.-]`, starts with letter/number)
+2. Check tourId uniqueness in the shared Tour table
+3. Create Tour record (status: PROVISIONING)
+4. Create 4 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`
+5. Wait for tables to become ACTIVE
+6. Update Tour status to PLANNING
+7. Restricted to ADMINISTRATOR role
+
+**`archive_tour.py`** must:
+1. Optionally export tour-specific table data to S3
+2. Delete 4 tour-specific DynamoDB tables
+3. Update Tour status to ARCHIVED in shared Tour table
+4. Restricted to ADMINISTRATOR role
+
+**Action:** Create both Lambda functions and wire them in template.yaml.
+
+---
+
+## 28. `dynamodb_utils.py` Needs Dynamic Table Name Support
+
+The current `dynamodb_utils.py` resolves table names from environment variables (`table_name_env` pattern). With the hybrid table strategy, tour-specific tables are named dynamically: `{STACK_NAME}-{TableType}-{tourId}`.
+
+Lambda functions accessing tour-specific tables need to construct the table name at runtime using:
+- `STACK_NAME` environment variable
+- Table type (e.g., `TourRider`, `Ride`, `CheckIn`, `User`)
+- `tourId` from the request
+
+**Action:** Add a utility function (e.g., `get_tour_table_name(table_type, tour_id)`) to `dynamodb_utils.py` that builds the full table name. Update functions that access tour-specific tables to use this instead of `table_name_env`.
+
+---
+
+## 29. Tour Model in `models.py` Needs Updates
+
+The `models.py` Tour-related definitions need to reflect the updated SolutionDesign:
+
+| Change | Detail |
+|---|---|
+| `TourStatus` enum | Add `PROVISIONING` between `PLANNING` and `ACTIVE` |
+| Tour model fields | Add `provisionedAt` (ISO 8601 timestamp) |
+| Tour model fields | Add `archivedAt` (ISO 8601 timestamp) |
+| Tour ID format | Change from year-based (`TOUR2026`) to free-form (e.g., `India-Coast-2026`) |
+| Tour PK format | Change from `TOUR#<year>` to `TOUR#<tourId>` |
+| Validation | Add `validate_tour_id()` for free-form tourId validation |
+
+**Action:** Update `models.py` and `validation.py` to reflect the new Tour model.
+
+---
+
+## 30. Lambda Functions Need Refactoring for Tour-Specific Table Access
+
+With tour-specific tables, all Lambda functions that access TourRider, Ride, CheckIn, or User data must:
+
+1. Accept `tourId` as a path or query parameter
+2. Derive the correct table name using `{STACK_NAME}-{TableType}-{tourId}`
+3. Use simplified key design (no tour prefix in PK — e.g., `RIDER#<riderId>` not `TOUR#<tourId>#RIDER#<riderId>`)
+
+**Affected functions (at minimum):**
+- `get_tour_rider.py`, `get_tour_riders.py` → TourRider-{tourId} table
+- `get_todays_ride.py`, `get_ride.py`, `create_ride.py`, `update_ride.py`, `close_ride.py`, `list_rides.py` → Ride-{tourId} table
+- `create_checkin.py`, `get_ride_checkins.py`, `get_dashboard_data.py` → CheckIn-{tourId} table (and Ride-{tourId})
+- `get_current_user.py`, `list_tour_users.py` → User-{tourId} table
+
+This also impacts TODO #10 (route/path parameter mismatch) — `tourId` must now be available in routes for all tour-specific operations.
+
+**Action:** Refactor all affected Lambda functions once template.yaml and dynamodb_utils.py changes are in place.

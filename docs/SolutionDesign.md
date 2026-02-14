@@ -62,9 +62,58 @@ Based on Check-In App requirements, the following access patterns are critical:
 
 # DynamoDB Table Design
 
-Given the small data volume (~100 riders, ~40 rides over 5 years, ~3,200 check-ins per ride max), we'll use **multiple tables** for clarity, maintainability, and optimal access patterns.
+## Table Strategy: Shared + Tour-Specific Tables
 
-## Table 1: RiderProfile
+The system uses a **hybrid table strategy** where platform-level data resides in shared tables managed via SAM, and tour-specific operational data resides in tables dynamically created per tour at runtime.
+
+### Shared Tables (Managed by SAM/CloudFormation)
+
+These tables exist for the lifetime of the deployment and are defined in `template.yaml`:
+
+| Table | Purpose |
+|---|---|
+| **RiderProfile** | Master rider data, tour-agnostic |
+| **Tour** | Tour registry — every tour ever created is listed here |
+
+### Tour-Specific Tables (Provisioned at Runtime)
+
+These tables are created dynamically when a tour admin provisions a new tour, and can be archived/deleted when a tour is completed:
+
+| Table | Purpose |
+|---|---|
+| **TourRider-{tourId}** | Rider enrollment for the specific tour |
+| **Ride-{tourId}** | Daily ride configurations for the specific tour |
+| **CheckIn-{tourId}** | Check-in records for the specific tour |
+| **User-{tourId}** | Admin/staff user assignments for the specific tour |
+
+### Table Naming Convention
+
+All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables and `{AWS::StackName}-{TableType}-{tourId}` for tour-specific tables.
+
+Examples (stack name: `tour-data-api`):
+- Shared: `tour-data-api-RiderProfile`, `tour-data-api-Tour`
+- Tour-specific: `tour-data-api-TourRider-India-Coast-2026`, `tour-data-api-Ride-India-Coast-2026`
+
+Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
+
+### Tour Lifecycle and Table Management
+
+1. **Provisioning:** Tour admin creates a tour → Lambda creates the Tour record in shared Tour table + creates 4 tour-specific DynamoDB tables via boto3
+2. **Active use:** Lambda functions resolve tour-specific table names using `{STACK_NAME}-{TableType}-{tourId}`
+3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
+4. **De-provisioning:** For one-off usage, the operator can delete tour tables or the entire stack
+
+### Key Design Benefits
+
+- **Clean isolation:** Each tour's operational data is fully contained in its own tables
+- **Simple archival:** Delete or export entire tour tables — no item-level filtering needed
+- **No cross-tour interference:** Queries never touch other tours' data
+- **Product-ready:** Supports multiple concurrent tours, sequential tours, or one-off tours
+- **Simplified key design:** Tour-specific tables don't need tour prefixes in partition keys since the table itself is tour-scoped
+
+---
+
+## Shared Table 1: RiderProfile
 
 **Purpose:** Master rider data, tour-agnostic
 
@@ -90,40 +139,43 @@ Given the small data volume (~100 riders, ~40 rides over 5 years, ~3,200 check-i
 - Simple key-value lookups by profile ID
 - Photo stored in S3, only reference stored here
 
-## Table 2: Tour
+## Shared Table 2: Tour
 
-**Purpose:** Tour definitions (yearly tours)
+**Purpose:** Tour registry — master record for every tour ever created
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| PK | String | `TOUR#<year>` |
-| tourId | String | Unique tour identifier (e.g., TOUR2026) |
-| year | Number | Tour year |
+| PK | String | `TOUR#<tourId>` |
+| tourId | String | Free-form unique identifier (e.g., `India-Coast-2026`, `TDF2026`, `charity-ride-01`) |
 | name | String | Tour name |
 | startDate | String | ISO 8601 date |
 | endDate | String | ISO 8601 date |
-| status | String | PLANNING, ACTIVE, COMPLETED, ARCHIVED |
+| status | String | PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED |
 | description | String | Tour description |
+| provisionedAt | String | ISO 8601 timestamp (when tour tables were created) |
+| archivedAt | String | ISO 8601 timestamp (when tour was archived) |
 | createdAt | String | ISO 8601 timestamp |
 | updatedAt | String | ISO 8601 timestamp |
 
 **Indexes:**
 - Primary Key: `PK` (partition key only)
+- GSI1: `status` (PK) - For querying tours by status (e.g., find active tour)
 
 **Notes:**
-- Very small table (~6 tours over 5 years)
-- Lookup by year or tourId
-- Status helps identify active tour
+- Small table — grows by number of tours created over the deployment's lifetime
+- `tourId` is free-form, set by tour admin at creation time
+- `tourId` must be unique and valid as a DynamoDB table name suffix (allowed chars: `a-zA-Z0-9_.-`, 3-50 chars, must start with letter or number)
+- `PROVISIONING` status indicates tour tables are being created
+- `ARCHIVED` status indicates tour data has been exported and/or tour-specific tables deleted
+- Status flow: PLANNING → PROVISIONING → ACTIVE → COMPLETED → ARCHIVED
 
-## Table 3: TourRider
+## Tour-Specific Table 1: TourRider-{tourId}
 
-**Purpose:** Rider registration for specific tours
+**Purpose:** Rider registration for a specific tour. One table per tour, created at provisioning time.
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| PK | String | `TOUR#<tourId>` |
-| SK | String | `RIDER#<riderId>` |
-| tourId | String | Tour identifier |
+| PK | String | `RIDER#<riderId>` |
 | riderId | String | Tour-specific rider ID (R1, R2, etc.) |
 | profileId | String | Reference to RiderProfile |
 | registeredAt | String | ISO 8601 timestamp |
@@ -133,25 +185,23 @@ Given the small data volume (~100 riders, ~40 rides over 5 years, ~3,200 check-i
 | updatedAt | String | ISO 8601 timestamp |
 
 **Indexes:**
-- Primary Key: `PK` (partition), `SK` (sort)
-- GSI1: `riderId` (PK), `tourId` (SK) - For riderId lookup across tours
-- GSI2: `profileId` (PK), `tourId` (SK) - For profile lookup
+- Primary Key: `PK` (partition key only)
+- GSI1: `profileId` (PK) - For profile-based lookup
 
 **Notes:**
-- Partition by tour for efficient tour-scoped queries
-- GSI1 allows quick rider lookup when scanning QR code
-- Max ~100 items per partition (one tour)
+- Table is tour-scoped — no need for tourId in keys
+- Max ~100 items per table (one tour's riders)
+- GSI1 for looking up rider enrollment by profile ID
+- `riderId` lookup is a direct get_item on PK
 
-## Table 4: Ride
+## Tour-Specific Table 2: Ride-{tourId}
 
-**Purpose:** Daily ride configurations
+**Purpose:** Daily ride configurations for a specific tour. One table per tour, created at provisioning time.
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| PK | String | `TOUR#<tourId>` |
-| SK | String | `RIDE#<rideId>` |
+| PK | String | `RIDE#<rideId>` |
 | rideId | String | Unique ride identifier (e.g., RIDE001) |
-| tourId | String | Tour identifier |
 | date | String | ISO 8601 date (YYYY-MM-DD) |
 | rideNo | Number | Sequence number for the day |
 | name | String | Short name (e.g., Day1, Day2) |
@@ -182,19 +232,19 @@ Given the small data volume (~100 riders, ~40 rides over 5 years, ~3,200 check-i
 ```
 
 **Indexes:**
-- Primary Key: `PK` (partition), `SK` (sort)
-- GSI1: `date` (PK), `tourId` (SK) - For date-based lookup (today's ride)
+- Primary Key: `PK` (partition key only)
+- GSI1: `date` (PK) - For date-based lookup (today's ride)
 - GSI2: `status` (PK), `date` (SK) - For querying active/completed rides
 
 **Notes:**
-- Partition by tour for efficient tour-scoped queries
+- Table is tour-scoped — no need for tourId in keys
 - Stages embedded as array (max ~5-6 stages per ride)
 - GSI1 critical for "get today's ride" query
-- Max ~8 rides per tour partition
+- Max ~8 rides per tour table
 
-## Table 5: CheckIn
+## Tour-Specific Table 3: CheckIn-{tourId}
 
-**Purpose:** Check-in records for all riders across stages
+**Purpose:** Check-in records for all riders across stages for a specific tour. One table per tour, created at provisioning time.
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
@@ -203,7 +253,6 @@ Given the small data volume (~100 riders, ~40 rides over 5 years, ~3,200 check-i
 | checkInId | String | Unique check-in ID (UUID) |
 | riderId | String | Rider ID |
 | rideId | String | Ride ID |
-| tourId | String | Tour ID (for cross-reference) |
 | stageNumber | Number | Stage number (1-based) |
 | stageId | String | Stage ID reference |
 | timestamp | String | ISO 8601 timestamp of check-in |
@@ -218,43 +267,41 @@ Given the small data volume (~100 riders, ~40 rides over 5 years, ~3,200 check-i
 
 **Indexes:**
 - Primary Key: `PK` (partition), `SK` (sort)
-- GSI1: `riderId` (PK), `timestamp` (SK) - For rider history
-- GSI2: `tourId#riderId` (PK), `timestamp` (SK) - For rider + tour queries
+- GSI1: `riderId` (PK), `timestamp` (SK) - For rider history within the tour
 
 **Notes:**
+- Table is tour-scoped — no need for tourId in keys or GSIs
 - Partition by ride for efficient dashboard queries
 - All check-ins for a ride retrieved in single query
 - SK design allows sorting by rider, then stage, then time
 - Max ~600 items per partition (100 riders × 6 stages)
-- GSI1 for rider-specific check-in history
+- GSI1 for rider-specific check-in history within this tour
 
-## Table 6: User (Optional)
+## Tour-Specific Table 4: User-{tourId}
 
-**Purpose:** User profile data if Cognito insufficient
+**Purpose:** User profile and role assignments for a specific tour. One table per tour, created at provisioning time. Only created if Cognito data is insufficient.
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | PK | String | `USER#<userId>` |
-| SK | String | `TOUR#<tourId>` |
 | userId | String | Cognito user sub |
 | username | String | Username |
 | email | String | Email |
 | name | String | Full name |
 | role | String | ADMINISTRATOR, SUPER_USER, PIT_STOP_CREW, HOTEL_STAFF, GUEST |
 | assignedStage | Number | For pit stop crew (optional) |
-| tourId | String | Tour ID |
 | status | String | ACTIVE, INACTIVE, SUSPENDED |
 | createdAt | String | ISO 8601 timestamp |
 | updatedAt | String | ISO 8601 timestamp |
 
 **Indexes:**
-- Primary Key: `PK` (partition), `SK` (sort)
-- GSI1: `email` (PK), `tourId` (SK) - For email lookup
+- Primary Key: `PK` (partition key only)
+- GSI1: `email` (PK) - For email lookup
 
 **Notes:**
-- Only created if Cognito data insufficient
-- Partition by user, sort by tour (tour-specific assignments)
+- Table is tour-scoped — no need for tourId in keys
 - Small table (~15 users per tour)
+- Each tour has its own user assignments (team composition can change between tours)
 
 # Data Model Details
 
@@ -263,11 +310,25 @@ Given the small data volume (~100 riders, ~40 rides over 5 years, ~3,200 check-i
 | Entity | Format | Example |
 |--------|--------|---------|
 | Profile ID | UUID | `550e8400-e29b-41d4-a716-446655440000` |
-| Tour ID | TOUR + Year | `TOUR2026` |
+| Tour ID | Free-form (configurable by tour admin) | `India-Coast-2026`, `TDF2026`, `charity-ride-01` |
 | Rider ID | R + Number (no padding) | `R1`, `R57`, `R102` |
 | Ride ID | RIDE + 3-digit padded | `RIDE001`, `RIDE008` |
 | Stage ID | S + 3-digit padded | `S001`, `S002` |
 | Check-In ID | UUID | `660e8400-e29b-41d4-a716-446655440000` |
+
+### Tour ID Rules
+
+The `tourId` is a free-form identifier set by the tour administrator at tour creation time. It must satisfy the following rules since it becomes part of DynamoDB table names:
+
+| Rule | Detail |
+|------|--------|
+| Allowed characters | `a-z`, `A-Z`, `0-9`, `_`, `-`, `.` |
+| Length | 3–50 characters |
+| Must start with | A letter or number |
+| Uniqueness | Must be unique across all tours in the deployment |
+| Case-sensitive | `Tour2026` and `tour2026` are different |
+
+Examples of valid Tour IDs: `India-Coast-2026`, `TDF2026`, `summer-ride-2026.01`, `2026-charity-ride`, `test-tour-01`
 
 ## Check-In Status Derivation
 
@@ -320,9 +381,9 @@ Given the small data volume, costs will be minimal. However, following best prac
    - Batch operations where possible
 
 3. **Data Retention:**
-   - Keep 5 years of data as specified
-   - Archive older data to S3 if needed (future)
-   - No TTL needed for this use case
+   - Archival is per-tour: export tour-specific tables to S3 and delete
+   - Shared tables (RiderProfile, Tour) persist for deployment lifetime
+   - No TTL needed — tour table deletion handles cleanup
 
 ## API Gateway Optimization
 
@@ -418,7 +479,7 @@ Given the small data volume, costs will be minimal. However, following best prac
   "success": false,
   "error": {
     "code": "RIDER_NOT_FOUND",
-    "message": "Rider R57 not found in tour TOUR2026"
+    "message": "Rider R57 not found in tour India-Coast-2026"
   },
   "timestamp": "2026-02-10T10:30:00Z"
 }
@@ -442,9 +503,32 @@ Response: Tour object
 
 #### List Tours
 ```
-GET /tours?year={year}&status={status}
+GET /tours?status={status}
 Response: Array of Tour objects
 ```
+
+#### Create Tour (Provision)
+```
+POST /tours
+Body: {
+  "tourId": "India-Coast-2026",
+  "name": "India Coastal Ride 2026",
+  "startDate": "2026-02-10",
+  "endDate": "2026-02-17",
+  "description": "Annual coastal cycling tour"
+}
+Response: Created Tour object (status: PROVISIONING)
+Permissions: ADMINISTRATOR
+```
+This endpoint creates the Tour record and provisions 4 tour-specific DynamoDB tables.
+
+#### Archive Tour
+```
+POST /tours/{tourId}/archive
+Response: Updated Tour object (status: ARCHIVED)
+Permissions: ADMINISTRATOR
+```
+This endpoint exports tour data to S3 (optional) and deletes tour-specific tables.
 
 ### Riders
 
@@ -600,6 +684,8 @@ Permissions: ADMINISTRATOR, SUPER_USER
 | GET rides | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET dashboard | ✅ | ✅ | ✅ | ❌ | ✅ |
 | POST check-in | ✅ | ✅ | ✅ | ✅ | ❌ |
+| POST tours (create/provision) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| POST archive tour | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST/PUT rides | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST close ride | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Manual check-in | ✅ | ✅ | ❌ | ❌ | ❌ |
@@ -614,7 +700,7 @@ All requests will be validated for:
 
 Example validations:
 - Rider ID format: `R[1-999]`
-- Tour ID format: `TOUR[YYYY]`
+- Tour ID format: Free-form, 3-50 chars, `[a-zA-Z0-9_.-]`, starts with letter or number
 - Date format: ISO 8601 (YYYY-MM-DD)
 - Check-in not allowed if ride is CLOSED
 - No duplicate Not Riding check-ins
@@ -657,25 +743,45 @@ tour-data-api/
 ├── src/
 │   ├── layers/
 │   │   └── common/            # Shared utilities
-│   ├── functions/
-│   │   ├── tours/
-│   │   ├── riders/
-│   │   ├── rides/
-│   │   ├── checkins/
-│   │   └── users/
-│   └── authorizer/            # JWT authorizer
+│   └── functions/
+│       ├── tours/
+│       ├── riders/
+│       ├── rides/
+│       ├── checkins/
+│       └── users/
 └── events/                    # Test events
 ```
 
 ## Key Resources
 
-1. **DynamoDB Tables:** All 6 tables with GSIs
-2. **Lambda Functions:** One per endpoint group
-3. **API Gateway:** HTTP API with JWT authorizer
-4. **Cognito User Pool:** User authentication
-5. **S3 Bucket:** Rider photos
-6. **IAM Roles:** Lambda execution roles with least privilege
-7. **CloudWatch Logs:** For monitoring and debugging
+### Managed by SAM (template.yaml)
+1. **Shared DynamoDB Tables:** RiderProfile, Tour (with GSIs)
+2. **Lambda Functions:** One per API endpoint
+3. **Lambda Layer:** Common utilities shared across all functions
+4. **API Gateway:** HTTP API with JWT authorizer
+5. **Cognito User Pool:** User authentication
+6. **S3 Bucket:** Rider photos
+7. **IAM Roles:** Lambda execution roles with least privilege
+8. **CloudWatch Logs:** For monitoring and debugging
+
+### Managed at Runtime (Tour Provisioning)
+1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId} (with GSIs)
+2. Created by the tour provisioning Lambda function via boto3
+3. Follow the same naming convention, tagging, and billing mode as SAM-managed tables
+
+### Tour Provisioning
+
+When a tour admin creates a new tour:
+1. **POST /tours** → Creates a Tour record in the shared Tour table (status: PROVISIONING)
+2. Lambda creates 4 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`
+3. Tables are created with on-demand billing, encryption, and standard tags
+4. Once all tables are active, Tour status is updated to PLANNING
+5. The provisioning Lambda requires `dynamodb:CreateTable`, `dynamodb:DescribeTable`, and `dynamodb:TagResource` permissions
+
+When a tour admin archives a tour:
+1. **POST /tours/{tourId}/archive** → Optionally exports data to S3, then deletes tour-specific tables
+2. Tour status updated to ARCHIVED in the shared Tour table
+3. The de-provisioning Lambda requires `dynamodb:DeleteTable` and optionally `dynamodb:ExportTableToPointInTime` permissions
 
 ## Deployment Tags
 
@@ -684,9 +790,22 @@ All resources must be tagged:
 Tags:
   Project: tour-data-api
   Environment: dev|test|prod
-  ManagedBy: SAM
+  ManagedBy: SAM          # For SAM-managed resources
+  ManagedBy: Lambda        # For runtime-provisioned tour tables
+  SubscriptionId: <value>  # Unique identifier for this deployment/subscription
   CostCenter: tour-management
 ```
+
+### SubscriptionId
+
+A `SubscriptionId` parameter is included in the SAM template as a deployment-level tag. It uniquely identifies this deployment instance and is used exclusively for tracking and cost attribution — not for resource naming or data isolation (each deployment is in its own AWS account).
+
+Configured in `samconfig.toml`:
+```toml
+parameter_overrides = "Environment=dev SubscriptionId=client-abc-123"
+```
+
+Runtime-provisioned tour tables must also be tagged with the same `SubscriptionId` value, available to Lambda via the `SUBSCRIPTION_ID` environment variable.
 
 # Security Considerations
 
@@ -834,17 +953,18 @@ pytest tests/
 
 ## Scalability Considerations
 
-If volume increases significantly (1000+ riders):
-1. Consider single-table design for DynamoDB
-2. Implement caching layer (ElastiCache)
-3. Use DynamoDB Streams for real-time processing
-4. Add read replicas for historical data
+If volume increases significantly (1000+ riders or many concurrent tours):
+1. Consider caching layer (ElastiCache) for frequently accessed data
+2. Use DynamoDB Streams for real-time processing
+3. Add read replicas for historical data
+4. The tour-specific table strategy already scales naturally — each tour's tables are independent
 
 # Glossary
 
 | Term | Definition |
 |------|------------|
-| Tour | Yearly cycling tour event |
+| Tour | A cycling tour event (can occur at any frequency, not limited to yearly) |
+| Tour ID | Free-form unique identifier for a tour, set by tour admin |
 | Ride | Single day's cycling route |
 | Stage | Checkpoint in a ride (Start, Pit Stop, Finish) |
 | Rider ID | Tour-specific identifier (R1, R2, etc.) |
