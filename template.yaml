@@ -16,7 +16,7 @@ Metadata:
     config:
       ignore_checks:
         - E3003  # Conditional tags with AWS::NoValue are valid but linter flags them
-        - W8001  # HasCognitoUserPool is conditional, may not be used in all deployments
+        - W8001  # CreateCognito condition references conditional resources
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
@@ -59,11 +59,13 @@ Parameters:
   
   CognitoUserPoolArn:
     Type: String
-    Description: ARN of the Cognito User Pool for JWT authentication (required)
+    Description: ARN of an existing Cognito User Pool. Leave empty to auto-create one.
+    Default: ''
   
   CognitoAppClientId:
     Type: String
-    Description: Cognito User Pool App Client ID for JWT audience validation (required)
+    Description: Existing Cognito App Client ID. Leave empty to auto-create one.
+    Default: ''
   
   SubscriptionId:
     Type: String
@@ -82,10 +84,52 @@ Parameters:
 
 Conditions:
   IsProd: !Equals [!Ref Environment, prod]
+  CreateCognito: !Equals [!Ref CognitoUserPoolArn, '']
   HasOwner: !Not [!Equals [!Ref Owner, '']]
   HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
 
 Resources:
+  # ============================================================================
+  # COGNITO USER POOL (auto-created when CognitoUserPoolArn is not provided)
+  # ============================================================================
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Condition: CreateCognito
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-users'
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+      UserPoolTags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        ManagedBy: SAM
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: CreateCognito
+    Properties:
+      ClientName: !Sub '${AWS::StackName}-app-client'
+      UserPoolId: !Ref CognitoUserPool
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      GenerateSecret: false
+
   # ============================================================================
   # API GATEWAY HTTP API
   # ============================================================================
@@ -95,7 +139,8 @@ Resources:
     Properties:
       StageName: !Ref Environment
       # JWT authentication via Cognito.
-      # CognitoUserPoolArn and CognitoAppClientId must be provided at deploy time.
+      # When CognitoUserPoolArn is empty (default), a User Pool is auto-created.
+      # When provided, the existing User Pool is used instead.
       # For local development, sam local start-api bypasses HTTP API authorizers.
       Auth:
         DefaultAuthorizer: CognitoAuthorizer
@@ -105,11 +150,14 @@ Resources:
               - openid
             IdentitySource: $request.header.Authorization
             JwtConfiguration:
-              issuer: !Sub
-                - 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}'
-                - UserPoolId: !Select [1, !Split ['/', !Select [5, !Split [':', !Ref CognitoUserPoolArn]]]]
+              issuer: !If
+                - CreateCognito
+                - !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}'
+                - !Sub
+                  - 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}'
+                  - UserPoolId: !Select [1, !Split ['/', !Select [5, !Split [':', !Ref CognitoUserPoolArn]]]]
               audience:
-                - !Ref CognitoAppClientId
+                - !If [CreateCognito, !Ref CognitoUserPoolClient, !Ref CognitoAppClientId]
       CorsConfiguration:
         AllowOrigins:
           - '*'  # TODO: Restrict to specific domains in production
@@ -864,3 +912,18 @@ Outputs:
     Value: !Ref AWS::StackName
     Export:
       Name: !Sub '${AWS::StackName}-StackName'
+
+  CognitoUserPoolIdOutput:
+    Condition: CreateCognito
+    Description: Auto-created Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+
+  CognitoUserPoolArnOutput:
+    Condition: CreateCognito
+    Description: Auto-created Cognito User Pool ARN
+    Value: !GetAtt CognitoUserPool.Arn
+
+  CognitoAppClientIdOutput:
+    Condition: CreateCognito
+    Description: Auto-created Cognito App Client ID
+    Value: !Ref CognitoUserPoolClient

@@ -9,10 +9,10 @@ This guide walks you through setting up and deploying the Tour Data API — the 
 - [What Is This System?](#what-is-this-system)
 - [What You Need Before Starting](#what-you-need-before-starting)
 - [One-Time Setup (Do This Once)](#one-time-setup-do-this-once)
-  - [Step 1: Set Up AWS Credentials](#step-1-set-up-aws-credentials)
-  - [Step 2: Set Up User Authentication (Cognito)](#step-2-set-up-user-authentication-cognito)
-  - [Step 3: Configure Deployment Settings](#step-3-configure-deployment-settings)
-  - [Step 4: Add Secrets to GitHub](#step-4-add-secrets-to-github)
+  - [Step 1: Run Preflight Check](#step-1-run-preflight-check)
+  - [Step 2: Set Up AWS Credentials](#step-2-set-up-aws-credentials)
+  - [Step 3: First Deploy from Your Computer](#step-3-first-deploy-from-your-computer)
+  - [Step 4: Set Up GitHub Actions (OIDC)](#step-4-set-up-github-actions-oidc)
 - [How to Deploy](#how-to-deploy)
   - [Option A: Deploy from GitHub (Recommended)](#option-a-deploy-from-github-recommended)
   - [Option B: Deploy from Your Computer](#option-b-deploy-from-your-computer)
@@ -58,7 +58,17 @@ Before your first deployment, make sure you have:
 
 These steps only need to be done once. After this initial setup, deploying updates is just a few clicks.
 
-### Step 1: Set Up AWS Credentials
+### Step 1: Run Preflight Check
+
+Before doing anything else, verify that your computer has all the necessary tools. Run this in your terminal:
+
+```bash
+make check-config
+```
+
+This checks for AWS CLI, SAM CLI, Python, and valid configuration — and tells you exactly what's missing. Fix any failures before continuing.
+
+### Step 2: Set Up AWS Credentials
 
 Your computer needs permission to create resources in your AWS account. See the [AWS Setup Guide](aws-setup-guide.md) for detailed instructions.
 
@@ -70,145 +80,67 @@ aws sts get-caller-identity
 
 If you see your account ID, you're good. If you get an error, follow the [AWS Setup Guide](aws-setup-guide.md).
 
-### Step 2: Set Up User Authentication (Cognito)
+### Step 3: First Deploy from Your Computer
 
-AWS Cognito manages user logins for the check-in app. You need to create a "User Pool" (think of it as a user directory) and an "App Client" (the connection between the app and the user directory).
-
-#### 2a. Create a User Pool
-
-Run this command in your terminal:
+The first deployment must be done from your computer. It creates all AWS resources including the database, API, and a **Cognito User Pool** (the user login system — this is created automatically, no manual setup needed).
 
 ```bash
-aws cognito-idp create-user-pool \
-  --pool-name tour-data-api-users \
-  --auto-verified-attributes email \
-  --username-attributes email
+# Build the application
+sam build
+
+# Deploy to dev environment
+sam deploy
 ```
 
-**Save the `Id` value** from the output — it looks like `us-east-1_AbCdEfGhI`. This is your **User Pool ID**.
+The tool will show you a summary of what it's about to create and ask for confirmation. Type `y` to proceed.
 
-#### 2b. Create an App Client
+After deployment completes, note the outputs — they include your **API URL** and the auto-created **Cognito User Pool ID** and **App Client ID**.
 
-Replace `<pool-id>` with the User Pool ID from step 2a:
+> **What about Cognito?** The system automatically creates and configures a Cognito User Pool and App Client during deployment. You don't need to create them manually. The IDs appear in the deployment output. If you already have a Cognito User Pool and want to use it instead, see [Advanced: Using an Existing Cognito User Pool](#advanced-using-an-existing-cognito-user-pool).
+
+### Step 4: Set Up GitHub Actions (OIDC)
+
+For ongoing deployments, GitHub Actions can deploy directly to AWS without storing any passwords or access keys. This uses OIDC (OpenID Connect) — a secure, industry-standard way for GitHub to prove its identity to AWS.
+
+#### 4a. Create the OIDC Connection
+
+Run this one command (it asks for your GitHub username):
 
 ```bash
-aws cognito-idp create-user-pool-client \
-  --user-pool-id <pool-id> \
-  --client-name tour-check-in-app \
-  --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH \
-  --no-generate-secret
+make setup-github-oidc
 ```
 
-**Save the `ClientId` value** from the output — it looks like `1a2b3c4d5e6f7g8h9i0j`. This is your **App Client ID**.
+This creates an identity link between your GitHub repository and your AWS account. At the end, it prints a **Role ARN** — copy it.
 
-#### 2c. Build Your Cognito ARN
-
-You'll need the full ARN (Amazon Resource Name) for deployment. Build it using this pattern:
-
-```
-arn:aws:cognito-idp:<region>:<account-id>:userpool/<pool-id>
-```
-
-**Example**: If your region is `us-east-1`, your account ID is `123456789012`, and your pool ID is `us-east-1_AbCdEfGhI`, your ARN is:
-
-```
-arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI
-```
-
-> **Where to find your Account ID**: Run `aws sts get-caller-identity` — it shows your 12-digit Account number.
-
-#### Summary: Save These Two Values
-
-You will need them for deployment:
-
-| Value | Example | Where It Goes |
-|---|---|---|
-| **Cognito User Pool ARN** | `arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI` | `CognitoUserPoolArn` parameter |
-| **App Client ID** | `1a2b3c4d5e6f7g8h9i0j` | `CognitoAppClientId` parameter |
-
-### Step 3: Configure Deployment Settings
-
-Deployment settings live in the `samconfig.toml` file at the root of the project. This file tells the deployment tool which AWS region to use, what to name your resources, and which parameters to pass.
-
-Open `samconfig.toml` and update the `parameter_overrides` line for **each environment** you plan to use. Add your Cognito values:
-
-**For development (the `[default.deploy.parameters]` section):**
-
-```toml
-[default.deploy.parameters]
-capabilities = "CAPABILITY_IAM"
-confirm_changeset = true
-resolve_s3 = true
-parameter_overrides = "Environment=dev CognitoUserPoolArn=arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI CognitoAppClientId=1a2b3c4d5e6f7g8h9i0j"
-```
-
-**For test (the `[test.deploy.parameters]` section):**
-
-```toml
-[test.deploy.parameters]
-capabilities = "CAPABILITY_IAM"
-confirm_changeset = true
-resolve_s3 = true
-parameter_overrides = "Environment=test CognitoUserPoolArn=arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI CognitoAppClientId=1a2b3c4d5e6f7g8h9i0j"
-```
-
-**For production (the `[prod.deploy.parameters]` section):**
-
-```toml
-[prod.deploy.parameters]
-capabilities = "CAPABILITY_IAM"
-confirm_changeset = true
-resolve_s3 = true
-parameter_overrides = "Environment=prod CognitoUserPoolArn=arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_PrOdPoOl CognitoAppClientId=prodclientid123"
-```
-
-> **Best Practice**: Use a **separate Cognito User Pool** for production so test users and real users don't mix.
-
-#### Optional Parameters
-
-You can also add these optional values to `parameter_overrides` for cost tracking:
-
-| Parameter | Purpose | Example |
-|---|---|---|
-| `Owner` | Who is responsible for these resources | `Owner=\"Tour Operations Team\"` |
-| `CostCenter` | For billing/cost allocation | `CostCenter=\"CC-1234\"` |
-| `SubscriptionId` | Your tracking identifier | `SubscriptionId=\"sub-001\"` |
-
-**Example with all parameters:**
-
-```toml
-parameter_overrides = "Environment=prod CognitoUserPoolArn=arn:aws:cognito-idp:... CognitoAppClientId=abc123 Owner=\"Tour Ops\" CostCenter=\"CC-5678\" SubscriptionId=\"sub-001\""
-```
-
-### Step 4: Add Secrets to GitHub
-
-For the automated deployment pipeline to work, GitHub needs your AWS credentials stored as secrets (encrypted values that only the pipeline can read).
-
-#### How to Add Secrets
+#### 4b. Add the Role ARN to GitHub
 
 1. Go to your GitHub repository in your web browser
 2. Click **Settings** (top menu bar, far right)
 3. In the left sidebar, click **Secrets and variables** → **Actions**
 4. Click **New repository secret**
-5. Add each secret listed below (one at a time)
+5. Name: `AWS_DEPLOY_ROLE_ARN`
+6. Value: Paste the Role ARN from step 4a
+7. Click **Add secret**
 
-#### Required Secrets
+That's it. GitHub Actions can now deploy to your AWS account securely, with no access keys to manage or rotate.
+
+#### For Production (separate AWS account)
+
+If you use a separate AWS account for production:
+
+1. Run `make setup-github-oidc` while authenticated to the **production** AWS account
+2. Add the resulting Role ARN as `AWS_DEPLOY_ROLE_ARN_PROD` in GitHub Secrets
+
+#### Alternative: Static Access Keys
+
+If you prefer static access keys instead of OIDC (less secure, not recommended):
 
 | Secret Name | Value | Used For |
 |---|---|---|
 | `AWS_ACCESS_KEY_ID` | Your AWS access key | Dev and test deployments |
 | `AWS_SECRET_ACCESS_KEY` | Your AWS secret key | Dev and test deployments |
 
-#### Additional Secrets for Production
-
-If you use a separate AWS account for production (recommended):
-
-| Secret Name | Value | Used For |
-|---|---|---|
-| `AWS_ACCESS_KEY_ID_PROD` | Production AWS access key | Production deployments only |
-| `AWS_SECRET_ACCESS_KEY_PROD` | Production AWS secret key | Production deployments only |
-
-> **Where to get AWS access keys**: See the [Creating an AWS Deployment User](#creating-an-aws-deployment-user) section below.
+See [Creating an AWS Deployment User](#creating-an-aws-deployment-user) for how to create these.
 
 ---
 
@@ -266,21 +198,12 @@ After successful deployment, the API endpoint URL appears in the deploy job outp
 
 If you prefer to deploy directly from your terminal (or need to deploy without GitHub Actions), you can use the SAM CLI.
 
-#### First-Time Deploy
-
-```bash
-# 1. Build the application
-sam build
-
-# 2. Deploy to dev environment
-sam deploy
-```
-
-The tool will show you a summary of what it's about to create and ask for confirmation. Type `y` to proceed.
-
 #### Deploy to a Specific Environment
 
 ```bash
+# Build first
+sam build
+
 # Deploy to dev (default)
 sam deploy
 
@@ -349,6 +272,7 @@ Creates or updates all the required resources in your AWS account:
 **What gets created (first deployment):**
 
 - **1 API Gateway** — The "front door" that receives requests from your apps. This gives you your API URL.
+- **1 Cognito User Pool** — The user login system, including an App Client for your check-in app (auto-created unless you provide your own).
 - **20 Lambda Functions** — The business logic that processes each request (managing tours, riders, rides, check-ins, and users).
 - **1 Shared Code Layer** — Common utilities shared across all functions.
 - **2 Database Tables** — `RiderProfile` (rider personal data) and `Tour` (tour details) — these persist across tours.
@@ -470,9 +394,9 @@ A: No. Tour creation happens through the API itself — once the system is deplo
 **What to do**:
 1. Check the error message in the deploy output
 2. Common causes:
-   - **Invalid Cognito ARN**: Double-check your `CognitoUserPoolArn` value in samconfig.toml
-   - **Missing permissions**: The AWS user needs sufficient permissions (see [Creating an AWS Deployment User](#creating-an-aws-deployment-user))
+   - **Missing permissions**: The AWS user or OIDC role needs sufficient permissions
    - **Resource limit**: You may have hit an AWS service limit — contact AWS support
+   - **Region mismatch**: Ensure the region in samconfig.toml matches your AWS configuration
 
 ### "Unauthorized" Error When Calling the API
 
@@ -558,6 +482,7 @@ This is a detailed inventory of everything the deployment creates in your AWS ac
 | Resource Type | Count | What It Does |
 |---|---|---|
 | API Gateway (HTTP API) | 1 | Receives requests from your apps |
+| Cognito User Pool | 1 | Manages user authentication (auto-created) |
 | Lambda Functions | 20 | Processes each type of request |
 | Lambda Layer | 1 | Shared code used by all functions |
 | DynamoDB Tables (shared) | 2 | Stores rider profiles and tour info |
@@ -618,6 +543,38 @@ This is a detailed inventory of everything the deployment creates in your AWS ac
 - [Infrastructure Guide](infrastructure-guide.md) — Resource tagging, monitoring, and cost estimation
 - [Development Guide](development-guide.md) — For developers: local testing, code structure, troubleshooting
 - [Requirements](Requirements.md) — Detailed feature requirements and business rules
+
+---
+
+## Advanced: Using an Existing Cognito User Pool
+
+By default, the deployment automatically creates a Cognito User Pool and App Client. If you already have a Cognito User Pool (e.g., shared with other applications), you can provide its ARN and App Client ID instead.
+
+Add these to `parameter_overrides` in `samconfig.toml`:
+
+```toml
+parameter_overrides = "Environment=dev CognitoUserPoolArn=arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI CognitoAppClientId=1a2b3c4d5e6f7g8h9i0j"
+```
+
+When `CognitoUserPoolArn` is provided, the system skips auto-creation and uses the specified User Pool.
+
+---
+
+## Optional Parameters
+
+You can add these values to `parameter_overrides` in `samconfig.toml` for cost tracking and resource tagging:
+
+| Parameter | Purpose | Example |
+|---|---|---|
+| `Owner` | Who is responsible for these resources | `Owner=\"Tour Operations Team\"` |
+| `CostCenter` | For billing/cost allocation | `CostCenter=\"CC-1234\"` |
+| `SubscriptionId` | Your tracking identifier | `SubscriptionId=\"sub-001\"` |
+
+**Example:**
+
+```toml
+parameter_overrides = "Environment=prod Owner=\"Tour Ops\" CostCenter=\"CC-5678\" SubscriptionId=\"sub-001\""
+```
 
 ---
 

@@ -1,0 +1,97 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  GitHub OIDC Provider and IAM Role for Tour Data API CI/CD.
+  
+  This stack enables GitHub Actions to deploy to AWS without static access keys.
+  Deploy this stack ONCE per AWS account before using GitHub Actions.
+  
+  Usage:
+    aws cloudformation deploy \
+      --template-file cloudformation/github-oidc.yaml \
+      --stack-name tour-data-api-github-oidc \
+      --capabilities CAPABILITY_NAMED_IAM \
+      --parameter-overrides GitHubOrg=<your-github-username> GitHubRepo=tour-data-api
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Description: GitHub organization or username (e.g., kvijay77-in)
+
+  GitHubRepo:
+    Type: String
+    Description: GitHub repository name
+    Default: tour-data-api
+
+Resources:
+  # ============================================================================
+  # OIDC IDENTITY PROVIDER
+  # ============================================================================
+  # This tells AWS to trust tokens issued by GitHub Actions.
+  # Only needs to exist once per AWS account (shared across repos).
+
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+      Tags:
+        - Key: Project
+          Value: tour-data-api
+        - Key: Purpose
+          Value: GitHub Actions OIDC Authentication
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ============================================================================
+  # IAM DEPLOY ROLE
+  # ============================================================================
+  # This role is assumed by GitHub Actions during deployment.
+  # It is scoped to only allow requests from the specific GitHub repo.
+
+  GitHubActionsDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'tour-data-api-github-deploy-${AWS::Region}'
+      Description: !Sub 'Allows GitHub Actions from ${GitHubOrg}/${GitHubRepo} to deploy Tour Data API'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOrg}/${GitHubRepo}:*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+        - arn:aws:iam::aws:policy/IAMFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoPowerUser
+      Tags:
+        - Key: Project
+          Value: tour-data-api
+        - Key: Purpose
+          Value: GitHub Actions Deployment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  DeployRoleArn:
+    Description: >
+      IAM Role ARN for GitHub Actions.
+      Add this as AWS_DEPLOY_ROLE_ARN secret in your GitHub repository.
+    Value: !GetAtt GitHubActionsDeployRole.Arn
+
+  OIDCProviderArn:
+    Description: GitHub OIDC Provider ARN
+    Value: !Ref GitHubOIDCProvider

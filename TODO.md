@@ -9,6 +9,32 @@ This document lists all gaps found between project documentation and actual deve
 
 > **Status (2026-02-17):** All 30 items are now **RESOLVED**. All 20 Lambda functions implemented, template.yaml restructured with JWT authorizer, common layer utilities updated, tests aligned, CI/CD workflow fixed, Makefile updated, and all documentation updated to reflect the hybrid table design.
 
+> **Update (2026-02-17):** Items #31–#33 added for deployment experience improvements. #31 and #33 RESOLVED. #32 is a future TODO.
+
+---
+
+## 31. ✅ RESOLVED: Auto-Create Cognito User Pool During Deployment
+
+Previously, users had to manually create a Cognito User Pool and App Client via CLI commands, construct an ARN, and add it to `samconfig.toml`. This was the hardest manual step for non-technical users.
+
+**Resolution:** Cognito User Pool and User Pool Client are now auto-created as CloudFormation resources in `template.yaml`. The `CognitoUserPoolArn` and `CognitoAppClientId` parameters default to empty, which triggers auto-creation. Users can still provide their own values to use an existing User Pool.
+
+---
+
+## 32. 🔲 TODO: Web-Based Admin Panel
+
+A browser-based admin UI for tour organizers to manage tours, riders, rides, and view dashboards without using API tools (curl, Postman, etc.). Would be served as static files from the existing S3 bucket at zero extra cost.
+
+**Scope:** This is a significant front-end feature outside the current "backend only" project scope. Deferred for future consideration.
+
+---
+
+## 33. ✅ RESOLVED: OIDC Authentication for GitHub Actions + Preflight Check
+
+**OIDC:** GitHub Actions now supports OIDC-based authentication to AWS (no static access keys). A bootstrap CloudFormation template (`cloudformation/github-oidc.yaml`) creates the OIDC provider and IAM deploy role. `make setup-github-oidc` automates the setup. CI/CD workflow updated to support both OIDC and legacy access keys.
+
+**Preflight Check:** `make check-config` runs `scripts/preflight-check.sh` to validate AWS CLI, SAM CLI, Python, credentials, and template before deployment.
+
 ---
 
 ## 1. ✅ RESOLVED: Missing Lambda Function Files

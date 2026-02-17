@@ -79,7 +79,11 @@ tour-data-api/
 ├── pytest.ini                         # Test configuration
 ├── requirements-dev.txt               # Development dependencies
 ├── samconfig.toml                     # SAM CLI configuration
-└── template.yaml                      # SAM CloudFormation template
+├── template.yaml                      # SAM CloudFormation template
+├── cloudformation/                    # Supplementary CloudFormation templates
+│   └── github-oidc.yaml              # GitHub OIDC provider + IAM deploy role
+└── scripts/                           # Utility scripts
+    └── preflight-check.sh            # Pre-deployment environment validation
 ```
 
 **Key Structure Notes:**
@@ -110,13 +114,16 @@ tour-data-api/
 - Sample JSON payloads for testing Lambda functions locally with `sam local invoke`
 
 ### Infrastructure as Code
-- **`template.yaml`**: AWS SAM template defining all AWS resources (Lambda functions, API Gateway HTTP API, shared DynamoDB tables, S3 bucket, IAM roles). Tour-specific tables are provisioned at runtime by `create_tour.py`.
+- **`template.yaml`**: AWS SAM template defining all AWS resources (Lambda functions, API Gateway HTTP API, Cognito User Pool, shared DynamoDB tables, S3 bucket, IAM roles). Cognito is auto-created by default. Tour-specific tables are provisioned at runtime by `create_tour.py`.
 - **`samconfig.toml`**: SAM CLI configuration for different environments (dev, test, prod)
-- **`Makefile`**: Automation scripts for common tasks (build, deploy, test, logs)
+- **`Makefile`**: Automation scripts for common tasks (build, deploy, test, logs, preflight check, OIDC setup)
+- **`cloudformation/github-oidc.yaml`**: Bootstrap template for GitHub OIDC authentication (deployed once per AWS account)
+- **`scripts/preflight-check.sh`**: Pre-deployment checks for AWS CLI, SAM CLI, Python, credentials, and template validity
 
 ### CI/CD (`.github/workflows/`)
 - **`ci-cd.yml`**: GitHub Actions workflow for manual-trigger testing and deployment
 - Supports environment selection (dev/test/prod) via `workflow_dispatch` input
+- Supports both OIDC (recommended) and static access key authentication
 
 ### Local Development Files (Not in Git)
 - **`venv/` or `.venv/`**: Python virtual environment for local development

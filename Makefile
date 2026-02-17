@@ -1,4 +1,4 @@
-.PHONY: build deploy clean test validate sync logs install help
+.PHONY: build deploy clean test validate sync logs install help check-config setup-github-oidc
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -81,3 +81,28 @@ format: ## Format Python code
 	find src -name "*.py" -not -path "*/\.*" | xargs black
 
 all: validate build test deploy ## Run full pipeline: validate, build, test, deploy
+
+check-config: ## Run preflight checks before deployment
+	@bash scripts/preflight-check.sh
+
+setup-github-oidc: ## Set up GitHub OIDC for keyless deployments (one-time)
+	@echo "Setting up GitHub OIDC for passwordless deployments..."
+	@echo ""
+	@read -p "GitHub username or org: " ORG; \
+	read -p "GitHub repo name [tour-data-api]: " REPO; \
+	REPO=$${REPO:-tour-data-api}; \
+	aws cloudformation deploy \
+		--template-file cloudformation/github-oidc.yaml \
+		--stack-name tour-data-api-github-oidc \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--parameter-overrides GitHubOrg=$$ORG GitHubRepo=$$REPO \
+		--tags Project=tour-data-api ManagedBy=CloudFormation; \
+	echo ""; \
+	echo "=== Setup Complete ==="; \
+	echo ""; \
+	echo "Add this as AWS_DEPLOY_ROLE_ARN in your GitHub repository secrets:"; \
+	aws cloudformation describe-stacks \
+		--stack-name tour-data-api-github-oidc \
+		--query "Stacks[0].Outputs[?OutputKey=='DeployRoleArn'].OutputValue" \
+		--output text; \
+	echo ""

@@ -103,48 +103,26 @@ SAM uses the same AWS credentials as AWS CLI. No separate configuration needed.
 
 ## Setting up Cognito
 
-The API uses AWS Cognito for authentication. To configure:
+The API uses AWS Cognito for authentication. **By default, a Cognito User Pool is automatically created during deployment** — no manual setup needed.
 
-### 1. Create Cognito User Pool
+The auto-created User Pool details (ID and App Client ID) appear in the deployment output. You'll need the User Pool ID to create test users (see below).
 
-Create a new user pool (or update template.yaml to automate):
+> **Note**: If you prefer to use an existing Cognito User Pool, see the [Deployment Guide → Advanced: Using an Existing Cognito User Pool](deployment-guide.md#advanced-using-an-existing-cognito-user-pool).
 
-```bash
-aws cognito-idp create-user-pool --pool-name tour-data-api-users
-```
+### 1. Get Your User Pool ID
 
-Save the `UserPoolId` from the output.
-
-### 2. Create App Client
+After deployment, retrieve the auto-created User Pool ID:
 
 ```bash
-aws cognito-idp create-user-pool-client \
-  --user-pool-id <pool-id> \
-  --client-name tour-data-api-client \
-  --generate-secret
+aws cloudformation describe-stacks \
+  --stack-name tour-data-api \
+  --query "Stacks[0].Outputs[?OutputKey=='CognitoUserPoolIdOutput'].OutputValue" \
+  --output text
 ```
 
-Save the `ClientId` from the output.
+Save this value — you'll need it for creating users and getting tokens.
 
-### 3. Update SAM Template
-
-Update your SAM deployment with the User Pool ARN and App Client ID:
-
-```bash
-sam deploy --parameter-overrides \
-  CognitoUserPoolArn=arn:aws:cognito-idp:<region>:<account-id>:userpool/<pool-id> \
-  CognitoAppClientId=<client-id>
-```
-
-Or configure in `samconfig.toml`:
-```toml
-[default.deploy.parameters]
-parameter_overrides = "CognitoUserPoolArn=arn:aws:cognito-idp:... CognitoAppClientId=..."
-```
-
-> **Note**: Both `CognitoUserPoolArn` and `CognitoAppClientId` are required parameters. The API uses JWT authentication for all deployed environments. For local development with `sam local start-api`, the HTTP API authorizer is not enforced, so you can test without Cognito tokens.
-
-### 4. Create Test Users
+### 2. Create Test Users
 
 Create users for testing:
 
@@ -165,7 +143,7 @@ aws cognito-idp admin-set-user-password \
   --permanent
 ```
 
-### 5. Get JWT Token for Testing
+### 3. Get JWT Token for Testing
 
 Retrieve a JWT token for API testing:
 
