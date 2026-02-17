@@ -9,16 +9,21 @@ This document lists all gaps found between project documentation and actual deve
 
 ---
 
-## 1. CRITICAL: Missing Lambda Function Files
+## 1. ✅ RESOLVED: Missing Lambda Function Files
 
-template.yaml references handler files that do not exist on disk. **SAM build will fail.**
+~~template.yaml references handler files that do not exist on disk. **SAM build will fail.**~~
 
-| template.yaml Resource | Expected Handler | Expected File |
-|---|---|---|
-| `ListToursFunction` | `list_tours.lambda_handler` | `src/functions/tours/list_tours.py` |
-| `GetTourRidersFunction` | `get_tour_riders.lambda_handler` | `src/functions/riders/get_tour_riders.py` |
+| template.yaml Resource | Expected Handler | Expected File | Status |
+|---|---|---|---|
+| `ListToursFunction` | `list_tours.lambda_handler` | `src/functions/tours/list_tours.py` | ✅ Created |
+| `GetTourRidersFunction` | `get_tour_riders.lambda_handler` | `src/functions/riders/get_tour_riders.py` | ✅ Created |
 
-**Action:** Either create the missing files or remove the resources from template.yaml.
+**Resolution:** Both Lambda function files have been created (2026-02-17).
+
+**Notes:**
+- `list_tours.py`: Lists all tours with optional status filter via query parameter
+- `get_tour_riders.py`: Retrieves all riders for a specific tour with enriched profile data
+- Both functions will require refactoring when TODO #26-30 (hybrid table strategy) is implemented
 
 ---
 

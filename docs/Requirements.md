@@ -2,6 +2,10 @@
 
 A non-competitive cycling tour is conducted every year. This involves pre-registration and registration of riders for the year's tour. During the tour ride and rider management. Apps will be developed for these use cases. Apart from these there can be data analysis and reports generation. For all these purposes data are needed. Since data is being shared across apps it needs to be maintained centrally. This document provides the data requirements.
 
+Main purpose of this project is to provide a deployable solution which can create AWS resources like DynamoDB Tables, Lambda functions, API, etc. that are meant to be used by other apps within the tour eco-system. This is essentially creating the backend required for the tour management.
+
+> [!IMPORTANT] All resources created will be specific to an AWS Account and nothing can be shared between any account i.e. completed isolated and no sharing of data can be possible. This must be adhered to at all times.
+
 # Use Cases
 ## Pre-Tour
 Pre-registration and registration are the key activities before the tour can commence apart from other preparation and arrangements. Pre-registration is asking riders who are interested to participate in the tour. After cut-off a review is carried out by the tour organizers to select riders for the up coming tour. Pre-registered riders who are selected to participate in the tour will be notified. These qualified riders will take next actions (payment for one) and register for the tour.
