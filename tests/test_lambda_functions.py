@@ -1,8 +1,9 @@
 """
 Unit tests for Lambda functions using moto for AWS mocking
 
-This module demonstrates proper testing of Lambda functions without
-modifying production code. Uses moto to mock AWS DynamoDB services.
+Tests the Lambda functions with the hybrid table strategy:
+- Shared tables (Tour, RiderProfile) resolved via env var
+- Tour-specific tables resolved via STACK_NAME + tourId
 """
 
 import os
@@ -10,15 +11,14 @@ import json
 import pytest
 import boto3
 from moto import mock_aws
-from decimal import Decimal
 
 # Set up path for imports
 import sys
 sys.path.insert(0, 'src/layers/common/python')
 sys.path.insert(0, 'src/functions/tours')
 
-from tests.fixtures.mock_data import MOCK_TOURS, MOCK_RIDERS
-from models import TourStatus, RideStatus
+from tests.fixtures.mock_data import MOCK_TOURS, MOCK_TOUR_ID
+from models import TourStatus
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ def dynamodb_mock(aws_credentials):
         # Create DynamoDB resource
         dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
         
-        # Create Tour table
+        # Create shared Tour table with StatusIndex GSI
         tour_table = dynamodb.create_table(
             TableName='test-tour-table',
             KeySchema=[
@@ -68,13 +68,12 @@ def dynamodb_mock(aws_credentials):
         for tour in MOCK_TOURS:
             tour_table.put_item(Item=tour)
         
-        # Set environment variables for Lambda
+        # Set environment variables for Lambda (hybrid table strategy)
         os.environ['TOUR_TABLE'] = 'test-tour-table'
         os.environ['RIDER_PROFILE_TABLE'] = 'test-rider-table'
-        os.environ['TOUR_RIDER_TABLE'] = 'test-tour-rider-table'
-        os.environ['RIDE_TABLE'] = 'test-ride-table'
-        os.environ['CHECKIN_TABLE'] = 'test-checkin-table'
-        os.environ['USER_TABLE'] = 'test-user-table'
+        os.environ['STACK_NAME'] = 'test-stack'
+        os.environ['ENVIRONMENT'] = 'test'
+        os.environ['SUBSCRIPTION_ID'] = 'test-sub-001'
         os.environ['PHOTOS_BUCKET'] = 'test-photos-bucket'
         os.environ['LOG_LEVEL'] = 'INFO'
         
@@ -104,7 +103,7 @@ def test_get_active_tour_success(dynamodb_mock):
     assert response['statusCode'] == 200
     body = json.loads(response['body'])
     assert body['success'] is True
-    assert body['data']['tourId'] == 'TOUR#001'
+    assert body['data']['tourId'] == MOCK_TOUR_ID
     assert body['data']['status'] == TourStatus.ACTIVE.value
 
 
@@ -112,9 +111,9 @@ def test_get_active_tour_not_found(dynamodb_mock):
     """Test getting active tour - no active tour"""
     from get_active import lambda_handler
     
-    # Clear the mock tour (make it inactive)
+    # Clear the mock tour
     table = dynamodb_mock.Table('test-tour-table')
-    table.delete_item(Key={'PK': 'TOUR#001'})
+    table.delete_item(Key={'PK': f'TOUR#{MOCK_TOUR_ID}'})
     
     # Create test event
     event = {
@@ -133,34 +132,33 @@ def test_get_active_tour_not_found(dynamodb_mock):
     assert body['error']['code'] == 'NO_ACTIVE_TOUR'
 
 
-def test_dynamodb_utils_with_mocking(dynamodb_mock):
-    """Test DynamoDB utilities with moto mocking"""
-    # Import dynamodb_utils - it will use our mocked boto3 resource
+def test_dynamodb_utils_shared_tables(dynamodb_mock):
+    """Test DynamoDB utilities with shared table pattern"""
     import dynamodb_utils
     
     # Clear cache to use new mock
     dynamodb_utils.TABLES = {}
     dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
     
-    # Test get_item
-    item = dynamodb_utils.get_item('TOUR_TABLE', {'PK': 'TOUR#001'})
+    # Test get_item on shared table
+    item = dynamodb_utils.get_item('TOUR_TABLE', {'PK': f'TOUR#{MOCK_TOUR_ID}'})
     assert item is not None
-    assert item['tourId'] == 'TOUR#001'
+    assert item['tourId'] == MOCK_TOUR_ID
     
-    # Test put_item
+    # Test put_item on shared table
     new_tour = {
-        'PK': 'TOUR#002',
-        'tourId': 'TOUR#002',
-        'tourName': 'New Test Tour',
+        'PK': 'TOUR#NewTour-2026',
+        'tourId': 'NewTour-2026',
+        'name': 'New Test Tour',
         'status': TourStatus.PLANNING.value
     }
     dynamodb_utils.put_item('TOUR_TABLE', new_tour)
     
     # Verify it was added
-    retrieved = dynamodb_utils.get_item('TOUR_TABLE', {'PK': 'TOUR#002'})
-    assert retrieved['tourName'] == 'New Test Tour'
+    retrieved = dynamodb_utils.get_item('TOUR_TABLE', {'PK': 'TOUR#NewTour-2026'})
+    assert retrieved['name'] == 'New Test Tour'
     
-    # Test scan_items
+    # Test scan_items on shared table
     items = dynamodb_utils.scan_items(
         'TOUR_TABLE',
         filter_expression='#status = :status',
@@ -168,7 +166,7 @@ def test_dynamodb_utils_with_mocking(dynamodb_mock):
         expression_names={'#status': 'status'}
     )
     assert len(items) == 1
-    assert items[0]['tourId'] == 'TOUR#001'
+    assert items[0]['tourId'] == MOCK_TOUR_ID
 
 
 if __name__ == '__main__':

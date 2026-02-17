@@ -1,22 +1,20 @@
 """
 Lambda function to get tour rider details (rider's participation in a tour)
-"""
-import json
-import os
-import sys
 
-# Add common layer to path
+Uses tour-specific TourRider-{tourId} table (PK: RIDER#<riderId>)
+and shared RiderProfile table for profile enrichment.
+Route: GET /v1/tours/{tourId}/riders/{riderId}
+"""
+
+import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, not_found_response, error_response, bad_request_response
+from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_rider_id, validate_tour_id, ValidationError
-from dynamodb_utils import get_item
+from dynamodb_utils import get_tour_item, get_item
 
 logger = get_logger(__name__)
-
-TOUR_RIDER_TABLE = os.environ['TOUR_RIDER_TABLE']
-RIDER_PROFILE_TABLE = os.environ['RIDER_PROFILE_TABLE']
 
 
 def lambda_handler(event, context):
@@ -24,8 +22,8 @@ def lambda_handler(event, context):
     Get tour rider details (participation info)
     
     Path parameters:
-    - tourId (e.g., TOUR2026)
-    - riderId (e.g., R42)
+    - tourId: Tour identifier (e.g., India-Coast-2026)
+    - riderId: Rider ID (e.g., R42)
     
     Returns:
     - 200: Tour rider found (includes rider profile)
@@ -46,35 +44,34 @@ def lambda_handler(event, context):
             validate_tour_id(tour_id)
             validate_rider_id(rider_id)
         except ValidationError as e:
-            logger.warning(f"Invalid ID format - tour: {tour_id}, rider: {rider_id}", exc_info=True)
             return bad_request_response(str(e))
         
-        # Get tour rider record
-        logger.info(f"Fetching tour rider: {tour_id}#{rider_id}")
-        tour_rider = get_item(
-            table_name=TOUR_RIDER_TABLE,
-            key={'tourId': tour_id, 'riderId': rider_id}
+        # Get tour rider record from tour-specific table
+        logger.info(f"Fetching tour rider: {tour_id}/{rider_id}")
+        tour_rider = get_tour_item(
+            table_type='TourRider',
+            tour_id=tour_id,
+            key={'PK': f'RIDER#{rider_id}'}
         )
         
         if not tour_rider:
-            logger.info(f"Tour rider not found: {tour_id}#{rider_id}")
-            return not_found_response(f"Rider {rider_id} not found in tour {tour_id}")
+            logger.info(f"Tour rider not found: {tour_id}/{rider_id}")
+            return not_found_response("TourRider", rider_id)
         
         # Get rider profile for additional details
-        logger.info(f"Fetching rider profile: {rider_id}")
-        rider_profile = get_item(
-            table_name=RIDER_PROFILE_TABLE,
-            key={'riderId': rider_id}
-        )
+        profile_id = tour_rider.get('profileId')
+        if profile_id:
+            logger.info(f"Fetching rider profile: {profile_id}")
+            rider_profile = get_item(
+                table_name_env='RIDER_PROFILE_TABLE',
+                key={'PK': f'PROFILE#{profile_id}'}
+            )
+            if rider_profile:
+                tour_rider['profile'] = rider_profile
         
-        # Merge profile data with tour rider data
-        result = {**tour_rider}
-        if rider_profile:
-            result['profile'] = rider_profile
-        
-        logger.info(f"Successfully retrieved tour rider: {tour_id}#{rider_id}")
-        return success_response(result)
+        logger.info(f"Successfully retrieved tour rider: {tour_id}/{rider_id}")
+        return success_response(tour_rider)
         
     except Exception as e:
         logger.error(f"Error getting tour rider: {str(e)}", exc_info=True)
-        return error_response(f"Failed to get tour rider: {str(e)}")
+        return internal_error_response("Failed to get tour rider")

@@ -128,14 +128,21 @@ Save the `ClientId` from the output.
 
 ### 3. Update SAM Template
 
-Update your SAM template with the User Pool ARN:
+Update your SAM deployment with the User Pool ARN and App Client ID:
 
-```yaml
-Parameters:
-  CognitoUserPoolArn:
-    Type: String
-    Default: arn:aws:cognito-idp:<region>:<account-id>:userpool/<pool-id>
+```bash
+sam deploy --parameter-overrides \
+  CognitoUserPoolArn=arn:aws:cognito-idp:<region>:<account-id>:userpool/<pool-id> \
+  CognitoAppClientId=<client-id>
 ```
+
+Or configure in `samconfig.toml`:
+```toml
+[default.deploy.parameters]
+parameter_overrides = "CognitoUserPoolArn=arn:aws:cognito-idp:... CognitoAppClientId=..."
+```
+
+> **Note**: When `CognitoUserPoolArn` is not provided (empty default), the API runs without JWT authentication. This is suitable for local development and testing. For production, always provide both `CognitoUserPoolArn` and `CognitoAppClientId`.
 
 ### 4. Create Test Users
 
@@ -180,7 +187,7 @@ Include the token in your API requests:
 
 ```bash
 curl -H "Authorization: Bearer <IdToken>" \
-  https://<api-id>.execute-api.<region>.amazonaws.com/tours/active
+  https://<api-id>.execute-api.<region>.amazonaws.com/v1/tours/active
 ```
 
 ---

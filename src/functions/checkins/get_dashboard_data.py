@@ -1,21 +1,29 @@
 """
 Get dashboard data Lambda function
 
-This function retrieves all data needed for the Check-In App dashboard:
+Retrieves all data needed for the Check-In App dashboard:
 - Ride details with stages
 - All tour riders with profile data
 - All check-ins for the ride
 - Summary statistics
+
+Uses tour-specific tables: Ride-{tourId}, TourRider-{tourId}, CheckIn-{tourId}
+and shared RiderProfile table.
+Route: GET /v1/tours/{tourId}/rides/{rideId}/dashboard
 """
 
 import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger, log_event
-from response import success_response, not_found_response, internal_error_response, error_response
-from dynamodb_utils import get_item, query_items, batch_get_items
-from validation import validate_ride_id, ValidationError
-from models import CheckInStatus
+from response import (
+    success_response, not_found_response, bad_request_response,
+    internal_error_response
+)
+from dynamodb_utils import (
+    get_tour_item, query_tour_items, scan_tour_items, batch_get_items
+)
+from validation import validate_tour_id, validate_ride_id, ValidationError
 
 logger = get_logger(__name__)
 
@@ -25,66 +33,58 @@ def lambda_handler(event, context):
     Get complete dashboard data for a ride
     
     Path Parameters:
+        tourId: Tour identifier (e.g., India-Coast-2026)
         rideId: Ride identifier (e.g., RIDE001)
     """
     try:
         log_event(logger, event)
         
-        # Extract ride ID from path parameters
+        # Extract path parameters
+        tour_id = event.get('pathParameters', {}).get('tourId')
         ride_id = event.get('pathParameters', {}).get('rideId')
         
-        if not ride_id:
-            return error_response(
-                error_code="MISSING_PARAMETER",
-                message="Missing required parameter: rideId",
-                status_code=400
-            )
+        if not tour_id or not ride_id:
+            return bad_request_response("tourId and rideId are required in path")
         
-        # Validate ride ID format
+        # Validate IDs
         try:
+            validate_tour_id(tour_id)
             validate_ride_id(ride_id)
         except ValidationError as e:
-            return error_response(
-                error_code="VALIDATION_ERROR",
-                message=str(e),
-                status_code=400,
-                details=e.details
-            )
+            return bad_request_response(str(e))
         
-        logger.info(f"Getting dashboard data for ride: {ride_id}")
+        logger.info(f"Getting dashboard data for ride: {tour_id}/{ride_id}")
         
-        # Step 1: Get ride details
-        # Note: We need to query since we only have rideId, not the PK (tourId)
-        rides = query_items(
-            table_name_env='RIDE_TABLE',
-            key_condition_expression='SK = :sk',
-            expression_values={':sk': f"RIDE#{ride_id}"},
-            index_name='RideIdIndex'  # Note: This would require adding a GSI
+        # Step 1: Get ride details from tour-specific Ride table
+        ride = get_tour_item(
+            table_type='Ride',
+            tour_id=tour_id,
+            key={'PK': f'RIDE#{ride_id}'}
         )
         
-        if not rides:
+        if not ride:
             return not_found_response("Ride", ride_id)
         
-        ride = rides[0]
-        tour_id = ride.get('tourId')
+        logger.info(f"Found ride: {ride_id}")
         
-        logger.info(f"Found ride: {ride_id} for tour: {tour_id}")
-        
-        # Step 2: Get all riders for this tour
-        tour_riders = query_items(
-            table_name_env='TOUR_RIDER_TABLE',
-            key_condition_expression='PK = :pk',
-            expression_values={':pk': f"TOUR#{tour_id}"}
+        # Step 2: Get all riders from tour-specific TourRider table
+        tour_riders = scan_tour_items(
+            table_type='TourRider',
+            tour_id=tour_id
         )
         
         logger.info(f"Found {len(tour_riders)} riders for tour: {tour_id}")
         
-        # Step 3: Get rider profiles in batch
-        profile_keys = [{'PK': f"PROFILE#{tr['profileId']}"} for tr in tour_riders]
+        # Step 3: Get rider profiles in batch from shared RiderProfile table
+        profile_keys = [
+            {'PK': f"PROFILE#{tr['profileId']}"}
+            for tr in tour_riders
+            if tr.get('profileId')
+        ]
         profiles = batch_get_items('RIDER_PROFILE_TABLE', profile_keys) if profile_keys else []
         
         # Create profile lookup map
-        profile_map = {p['profileId']: p for p in profiles}
+        profile_map = {p.get('profileId'): p for p in profiles}
         
         # Merge rider data with profiles
         riders_with_profiles = []
@@ -94,7 +94,6 @@ def lambda_handler(event, context):
             
             riders_with_profiles.append({
                 'riderId': tr.get('riderId'),
-                'tourId': tr.get('tourId'),
                 'profileId': profile_id,
                 'status': tr.get('status'),
                 'name': profile.get('name'),
@@ -105,29 +104,30 @@ def lambda_handler(event, context):
                 'photoS3Key': profile.get('photoS3Key')
             })
         
-        # Step 4: Get all check-ins for this ride
-        check_ins = query_items(
-            table_name_env='CHECKIN_TABLE',
+        # Step 4: Get all check-ins for this ride from tour-specific CheckIn table
+        check_ins = query_tour_items(
+            table_type='CheckIn',
+            tour_id=tour_id,
             key_condition_expression='PK = :pk',
-            expression_values={':pk': f"RIDE#{ride_id}"}
+            expression_values={':pk': f'RIDE#{ride_id}'}
         )
         
         logger.info(f"Found {len(check_ins)} check-ins for ride: {ride_id}")
         
         # Step 5: Calculate summary stats
-        rider_ids = {tr['riderId'] for tr in tour_riders}
+        rider_ids = {tr.get('riderId') for tr in tour_riders}
         checked_in_riders = set()
         not_riding_riders = set()
         quit_riding_riders = set()
         
         for checkin in check_ins:
-            rider_id = checkin.get('riderId')
+            crid = checkin.get('riderId')
             if checkin.get('isNotRiding'):
-                not_riding_riders.add(rider_id)
+                not_riding_riders.add(crid)
             elif checkin.get('isQuitRiding'):
-                quit_riding_riders.add(rider_id)
+                quit_riding_riders.add(crid)
             else:
-                checked_in_riders.add(rider_id)
+                checked_in_riders.add(crid)
         
         summary = {
             'totalRiders': len(rider_ids),

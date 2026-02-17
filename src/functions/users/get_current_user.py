@@ -1,19 +1,17 @@
 """
 Lambda function to get current user details from JWT token
-"""
-import json
-import os
-import sys
 
-# Add common layer to path
+Route: GET /v1/users/me
+No DynamoDB access needed - returns JWT claims only.
+"""
+
+import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, error_response, unauthorized_response
+from response import success_response, unauthorized_response, internal_error_response
 
 logger = get_logger(__name__)
-
-USER_TABLE = os.environ['USER_TABLE']
 
 
 def lambda_handler(event, context):
@@ -39,7 +37,6 @@ def lambda_handler(event, context):
             return unauthorized_response("No valid authentication token")
         
         # Extract user information from JWT claims
-        # Cognito JWT claims include: sub (user ID), email, cognito:username, etc.
         user_id = jwt_claims.get('sub')
         email = jwt_claims.get('email')
         username = jwt_claims.get('cognito:username') or jwt_claims.get('username')
@@ -48,13 +45,12 @@ def lambda_handler(event, context):
             logger.warning("No user ID (sub) in JWT claims")
             return unauthorized_response("Invalid authentication token")
         
-        # Build user response
+        # Build user response from JWT claims only
         user = {
             'userId': user_id,
             'email': email,
             'username': username,
-            'emailVerified': jwt_claims.get('email_verified', False),
-            'claims': jwt_claims  # Include all claims for debugging
+            'emailVerified': jwt_claims.get('email_verified', False)
         }
         
         logger.info(f"Successfully retrieved current user: {user_id}")
@@ -62,4 +58,4 @@ def lambda_handler(event, context):
         
     except Exception as e:
         logger.error(f"Error getting current user: {str(e)}", exc_info=True)
-        return error_response(f"Failed to get current user: {str(e)}")
+        return internal_error_response("Failed to get current user")

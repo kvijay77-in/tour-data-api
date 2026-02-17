@@ -55,16 +55,16 @@ def lambda_environment():
     """
     Sets up Lambda environment variables for testing
     
-    These environment variables are used by Lambda functions to
-    locate AWS resources during testing.
+    Hybrid table strategy:
+    - Shared tables: resolved via env var (TOUR_TABLE, RIDER_PROFILE_TABLE)
+    - Tour-specific tables: resolved dynamically via STACK_NAME + tourId
     """
     env_vars = {
         'TOUR_TABLE': 'test-tour-table',
         'RIDER_PROFILE_TABLE': 'test-rider-table',
-        'TOUR_RIDER_TABLE': 'test-tour-rider-table',
-        'RIDE_TABLE': 'test-ride-table',
-        'CHECKIN_TABLE': 'test-checkin-table',
-        'USER_TABLE': 'test-user-table',
+        'STACK_NAME': 'test-stack',
+        'ENVIRONMENT': 'test',
+        'SUBSCRIPTION_ID': 'test-sub-001',
         'PHOTOS_BUCKET': 'test-photos-bucket',
         'LOG_LEVEL': 'INFO'
     }
@@ -75,6 +75,6 @@ def lambda_environment():
     
     yield env_vars
     
-    # Cleanup (optional - tests run in isolation)
+    # Cleanup
     for key in env_vars:
         os.environ.pop(key, None)

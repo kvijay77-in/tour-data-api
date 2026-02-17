@@ -6,7 +6,10 @@ import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger, log_event
-from response import success_response, not_found_response, internal_error_response
+from response import (
+    success_response, not_found_response, error_response,
+    bad_request_response, internal_error_response
+)
 from dynamodb_utils import get_item
 from validation import validate_tour_id, ValidationError
 
@@ -18,7 +21,7 @@ def lambda_handler(event, context):
     Get tour by ID
     
     Path Parameters:
-        tourId: Tour identifier (e.g., TOUR2026)
+        tourId: Tour identifier (e.g., India-Coast-2026)
     """
     try:
         log_event(logger, event)
@@ -27,32 +30,20 @@ def lambda_handler(event, context):
         tour_id = event.get('pathParameters', {}).get('tourId')
         
         if not tour_id:
-            return error_response(
-                error_code="MISSING_PARAMETER",
-                message="Missing required parameter: tourId",
-                status_code=400
-            )
+            return bad_request_response("tourId is required in path")
         
         # Validate tour ID format
         try:
             validate_tour_id(tour_id)
         except ValidationError as e:
-            return error_response(
-                error_code=e.message,
-                message=str(e),
-                status_code=400,
-                details=e.details
-            )
+            return bad_request_response(str(e))
         
         logger.info(f"Getting tour: {tour_id}")
         
-        # Extract year from tour ID (e.g., TOUR2026 -> 2026)
-        year = tour_id[4:]
-        
-        # Get tour from DynamoDB
+        # Get tour from DynamoDB (PK = TOUR#<tourId>)
         tour = get_item(
             table_name_env='TOUR_TABLE',
-            key={'PK': f"TOUR#{year}"}
+            key={'PK': f"TOUR#{tour_id}"}
         )
         
         if not tour:

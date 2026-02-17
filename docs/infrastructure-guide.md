@@ -204,11 +204,11 @@ Each Lambda function logs to CloudWatch with its own log group.
 # View logs for a specific function
 make logs FUNCTION=GetActiveTourFunction
 
-# Tail logs in real-time
-make logs-tail FUNCTION=CreateCheckinFunction
+# Tail logs in real-time (alias)
+make logs-tail FUNCTION=CreateCheckInFunction
 
-# View logs for check-in function
-make logs FUNCTION=GetRideCheckinsFunction
+# Alternative using logs-function target
+make logs-function FUNCTION=GetRideCheckInsFunction
 ```
 
 #### Using AWS CLI
@@ -313,10 +313,10 @@ Expected monthly costs for typical usage (100 riders, 7-8 rides per tour, 5-year
 
 | Service | Monthly Cost | Notes |
 |---------|-------------|-------|
-| **DynamoDB** | $2-5 | On-demand pricing, ~10k read/write per month |
+| **DynamoDB** | $2-5 | On-demand pricing, shared + tour-specific tables |
 | **Lambda** | $0.50-1 | Free tier covers most usage (1M requests/month free) |
 | **API Gateway HTTP API** | $0.50-1 | $1 per million requests |
-| **S3** | $1-2 | Photo storage, ~100 photos @ 500KB each |
+| **S3** | $1-2 | Photo storage + archive exports, ~100 photos @ 500KB each |
 | **CloudWatch** | $1-2 | Logs and metrics, 7-day retention |
 
 ### Total Estimated Cost
@@ -328,8 +328,9 @@ Expected monthly costs for typical usage (100 riders, 7-8 rides per tour, 5-year
 #### DynamoDB Costs
 - **On-demand pricing**: Pay only for actual reads/writes
 - **Storage**: $0.25/GB per month
-- **Typical usage**: 10k reads, 5k writes per month
-- **Cost optimization**: Use on-demand mode for variable workloads
+- **Typical usage**: 10k reads, 5k writes per month across all tables
+- **Hybrid table strategy**: Shared tables (RiderProfile, Tour) are always active; tour-specific tables only exist during active tours, reducing idle costs
+- **Cost optimization**: Use on-demand mode for variable workloads; archive completed tours to delete unused tables
 
 #### Lambda Costs
 - **Free tier**: 1 million requests + 400,000 GB-seconds per month
@@ -421,37 +422,40 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 
 ### Lambda Functions
 
-- **Total Functions**: 15
+- **Total Functions**: 20
 - **Categories**:
-  - Tours: 2 functions
-  - Riders: 3 functions
-  - Rides: 6 functions
-  - Check-ins: 3 functions
-  - Users: 2 functions
+  - Tours: 5 functions (get_active, get_tour, list_tours, create_tour, archive_tour)
+  - Riders: 4 functions (get_rider_profile, update_rider_profile, get_tour_riders, get_tour_rider)
+  - Rides: 6 functions (get_todays_ride, get_ride, list_rides, create_ride, update_ride, close_ride)
+  - Check-ins: 3 functions (create_checkin, get_ride_checkins, get_dashboard_data)
+  - Users: 2 functions (get_current_user, list_tour_users)
 
 ### Data Storage
 
-- **DynamoDB Tables**: 6
-  - RiderProfile (with EmailIndex GSI)
-  - Tour (with StatusIndex GSI)
-  - TourRider
-  - Ride (with DateIndex GSI)
-  - CheckIn (with multiple GSIs)
-  - User
+- **DynamoDB Tables (Hybrid Strategy)**:
+  - **Shared (SAM-managed, 2 tables)**:
+    - RiderProfile (with EmailIndex GSI)
+    - Tour (with StatusIndex GSI)
+  - **Tour-specific (runtime-provisioned per tour, 4 tables each)**:
+    - TourRider-{tourId}
+    - Ride-{tourId} (with DateIndex, StatusIndex GSIs)
+    - CheckIn-{tourId} (with RideIndex GSI)
+    - User-{tourId}
 
 ### API Endpoints
 
-- **Total Endpoints**: 15+
+- **Total Endpoints**: 20
 - **HTTP Methods**: GET, POST, PUT
-- **Authentication**: JWT via AWS Cognito (except public endpoints)
+- **Authentication**: JWT via AWS Cognito (conditional, enabled when CognitoUserPoolArn is provided)
+- **API Prefix**: `/v1/`
 
 ### Shared Components
 
 - **Common Utilities**: 5 modules
-  - models.py - Data models
+  - models.py - Data models and enums
   - validation.py - Input validation
-  - response_utils.py - API responses
-  - dynamodb_utils.py - DynamoDB helpers
+  - response.py - API response utilities
+  - dynamodb_utils.py - DynamoDB helpers (shared + tour-specific table support)
   - logger.py - Logging utilities
 
 ### Testing
@@ -472,7 +476,7 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 
 - **Linting**: pylint
 - **Formatting**: black
-- **Python Version**: 3.12+
+- **Python Version**: 3.11
 - **Package Management**: pip with requirements.txt
 
 ### Project Size

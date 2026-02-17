@@ -45,17 +45,29 @@ class TestRiderIdValidation:
 
 
 class TestTourIdValidation:
-    """Test Tour ID validation"""
+    """Test Tour ID validation (free-form format)"""
     
     def test_valid_tour_ids(self):
         """Test valid Tour ID formats"""
-        valid_ids = ['TOUR2024', 'TOUR2025', 'TOUR2026']
+        valid_ids = [
+            'TOUR2024', 'TOUR2025', 'India-Coast-2026',
+            'TDF2026', 'TestTour-2026', 'my.tour.2025',
+            'abc'
+        ]
         for tour_id in valid_ids:
             validate_tour_id(tour_id)  # Should not raise
     
     def test_invalid_tour_id_format(self):
         """Test invalid Tour ID formats"""
-        invalid_ids = ['tour2026', 'TOUR26', 'TOUR', '2026', 'T2026']
+        invalid_ids = [
+            'ab',         # too short (< 3 chars)
+            '-invalid',   # starts with hyphen
+            '.invalid',   # starts with dot
+            '_invalid',   # starts with underscore
+            'a' * 51,     # too long (> 50 chars)
+            'has space',  # contains space
+            'has@symbol', # contains @
+        ]
         for tour_id in invalid_ids:
             with pytest.raises(ValidationError):
                 validate_tour_id(tour_id)

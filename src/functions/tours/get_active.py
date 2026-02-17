@@ -1,5 +1,7 @@
 """
 Get active tour Lambda function
+
+Returns the currently active tour using the StatusIndex GSI.
 """
 
 import sys
@@ -7,7 +9,7 @@ sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, error_response, internal_error_response
-from dynamodb_utils import scan_items
+from dynamodb_utils import query_items
 from models import TourStatus
 
 logger = get_logger(__name__)
@@ -17,17 +19,23 @@ def lambda_handler(event, context):
     """
     Get the currently active tour
     
-    Returns the tour with status ACTIVE
+    Uses StatusIndex GSI to efficiently query by status.
+    
+    Returns:
+        200: Active tour data
+        404: No active tour found
+        500: Server error
     """
     try:
         logger.info("Getting active tour")
         
-        # Query for active tour
-        items = scan_items(
+        # Use StatusIndex GSI to query for ACTIVE tours
+        items = query_items(
             table_name_env='TOUR_TABLE',
-            filter_expression='#status = :status',
+            key_condition_expression='#status = :status',
             expression_values={':status': TourStatus.ACTIVE.value},
-            expression_names={'#status': 'status'}
+            expression_names={'#status': 'status'},
+            index_name='StatusIndex'
         )
         
         if not items:
@@ -37,7 +45,7 @@ def lambda_handler(event, context):
                 status_code=404
             )
         
-        # Return first active tour
+        # Return first active tour (should be only one)
         tour = items[0]
         
         logger.info(f"Found active tour: {tour.get('tourId')}")

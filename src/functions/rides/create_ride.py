@@ -1,49 +1,55 @@
 """
 Lambda function to create a new ride for a tour
+
+Uses tour-specific Ride-{tourId} table and shared Tour table.
+Route: POST /v1/tours/{tourId}/rides
 """
+
 import json
-import os
 import sys
 from datetime import datetime
 
-# Add common layer to path
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, error_response, bad_request_response, conflict_response
-from validation import validate_tour_id, validate_required_fields, validate_date, validate_stage_number, ValidationError
-from dynamodb_utils import get_item, put_item, query_items
-from models import RideStatus
+from response import (
+    success_response, bad_request_response, conflict_response,
+    not_found_response, internal_error_response
+)
+from validation import (
+    validate_tour_id, validate_required_fields, validate_iso_date,
+    ValidationError
+)
+from dynamodb_utils import get_item, get_tour_item, put_tour_item
+from models import RideStatus, TourStatus
 
 logger = get_logger(__name__)
-
-RIDE_TABLE = os.environ['RIDE_TABLE']
-TOUR_TABLE = os.environ['TOUR_TABLE']
 
 
 def lambda_handler(event, context):
     """
     Create a new ride for a tour
     
-    Path parameter: tourId (e.g., TOUR2026)
+    Path parameter: tourId (e.g., India-Coast-2026)
     Body: JSON with ride details
     {
-        "rideDate": "2026-06-15",
-        "stageNumber": 1,
-        "routeName": "Geneva to Lausanne",
-        "distanceKm": 65.5,
-        "elevationGainM": 450,
+        "rideId": "RIDE001",
+        "date": "2026-06-15",
+        "rideNo": 1,
+        "name": "Geneva to Lausanne",
         "startLocation": "Geneva Central",
-        "endLocation": "Lausanne",
-        "startTime": "08:00",
-        "estimatedEndTime": "12:00"
+        "finishLocation": "Lausanne",
+        "totalDistance": 65.5,
+        "flagOffTime": "08:00",
+        "stages": [...],
+        "description": "Optional description"
     }
     
     Returns:
-    - 200: Ride created successfully
+    - 201: Ride created successfully
     - 400: Invalid input
     - 404: Tour not found
-    - 409: Ride already exists for this date/stage
+    - 409: Ride already exists
     - 500: Server error
     """
     try:
@@ -57,7 +63,6 @@ def lambda_handler(event, context):
         try:
             validate_tour_id(tour_id)
         except ValidationError as e:
-            logger.warning(f"Invalid tour ID format: {tour_id}", exc_info=True)
             return bad_request_response(str(e))
         
         # Parse request body
@@ -67,76 +72,87 @@ def lambda_handler(event, context):
             return bad_request_response("Invalid JSON in request body")
         
         # Validate required fields
-        required_fields = ['rideDate', 'stageNumber', 'routeName', 'distanceKm', 'startLocation', 'endLocation']
+        required_fields = ['rideId', 'date', 'rideNo', 'name', 'startLocation', 'finishLocation', 'totalDistance', 'flagOffTime', 'stages']
         try:
             validate_required_fields(body, required_fields)
         except ValidationError as e:
             return bad_request_response(str(e))
         
-        # Validate individual fields
+        # Validate date
         try:
-            validate_date(body['rideDate'])
-            validate_stage_number(body['stageNumber'])
+            validate_iso_date(body['date'], 'date')
         except ValidationError as e:
             return bad_request_response(str(e))
         
         # Validate numeric fields
-        if not isinstance(body['distanceKm'], (int, float)) or body['distanceKm'] <= 0:
-            return bad_request_response("distanceKm must be a positive number")
+        if not isinstance(body['totalDistance'], (int, float)) or body['totalDistance'] <= 0:
+            return bad_request_response("totalDistance must be a positive number")
         
-        if 'elevationGainM' in body:
-            if not isinstance(body['elevationGainM'], (int, float)) or body['elevationGainM'] < 0:
-                return bad_request_response("elevationGainM must be a non-negative number")
+        if not isinstance(body['rideNo'], int) or body['rideNo'] < 1:
+            return bad_request_response("rideNo must be a positive integer")
         
-        # Check if tour exists
+        # Validate stages
+        if not isinstance(body['stages'], list) or len(body['stages']) == 0:
+            return bad_request_response("stages must be a non-empty array")
+        
+        # Check if tour exists and is in the right status
         logger.info(f"Checking if tour exists: {tour_id}")
         tour = get_item(
-            table_name=TOUR_TABLE,
-            key={'tourId': tour_id}
+            table_name_env='TOUR_TABLE',
+            key={'PK': f'TOUR#{tour_id}'}
         )
         
         if not tour:
-            return bad_request_response(f"Tour {tour_id} not found")
+            return not_found_response("Tour", tour_id)
         
-        # Generate ride ID: tourId#rideDate#stageNumber
-        ride_id = f"{tour_id}#{body['rideDate']}#{body['stageNumber']}"
+        tour_status = tour.get('status')
+        if tour_status not in [TourStatus.PLANNING.value, TourStatus.ACTIVE.value]:
+            return bad_request_response(
+                f"Cannot create rides for tour in {tour_status} status. "
+                "Tour must be in PLANNING or ACTIVE status."
+            )
+        
+        ride_id = body['rideId']
         
         # Check if ride already exists
-        existing_ride = get_item(
-            table_name=RIDE_TABLE,
-            key={'tourId': tour_id, 'rideId': ride_id}
+        existing_ride = get_tour_item(
+            table_type='Ride',
+            tour_id=tour_id,
+            key={'PK': f'RIDE#{ride_id}'}
         )
         
         if existing_ride:
-            logger.info(f"Ride already exists: {ride_id}")
-            return conflict_response(f"Ride already exists for {body['rideDate']} stage {body['stageNumber']}")
+            return conflict_response(f"Ride '{ride_id}' already exists in tour '{tour_id}'")
         
         # Create ride object
         now = datetime.utcnow().isoformat() + 'Z'
         ride = {
-            'tourId': tour_id,
+            'PK': f'RIDE#{ride_id}',
             'rideId': ride_id,
-            'rideDate': body['rideDate'],
-            'stageNumber': body['stageNumber'],
-            'routeName': body['routeName'],
-            'distanceKm': body['distanceKm'],
-            'elevationGainM': body.get('elevationGainM', 0),
+            'date': body['date'],
+            'rideNo': body['rideNo'],
+            'name': body['name'],
             'startLocation': body['startLocation'],
-            'endLocation': body['endLocation'],
-            'startTime': body.get('startTime'),
-            'estimatedEndTime': body.get('estimatedEndTime'),
-            'status': RideStatus.SCHEDULED.value,
+            'finishLocation': body['finishLocation'],
+            'totalDistance': body['totalDistance'],
+            'flagOffTime': body['flagOffTime'],
+            'stages': body['stages'],
+            'status': RideStatus.PLANNED.value,
+            'description': body.get('description'),
             'createdAt': now,
             'updatedAt': now
         }
         
-        # Save to DynamoDB
-        logger.info(f"Creating ride: {ride_id}")
-        put_item(table_name=RIDE_TABLE, item=ride)
+        # Remove None values
+        ride = {k: v for k, v in ride.items() if v is not None}
+        
+        # Save to tour-specific Ride table
+        logger.info(f"Creating ride: {ride_id} in tour {tour_id}")
+        put_tour_item(table_type='Ride', tour_id=tour_id, item=ride)
         
         logger.info(f"Successfully created ride: {ride_id}")
-        return success_response(ride)
+        return success_response(ride, status_code=201)
         
     except Exception as e:
         logger.error(f"Error creating ride: {str(e)}", exc_info=True)
-        return error_response(f"Failed to create ride: {str(e)}")
+        return internal_error_response("Failed to create ride")

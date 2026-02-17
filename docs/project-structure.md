@@ -5,65 +5,87 @@ Following structure will be used in the project and any addition/restructure sho
 ```
 tour-data-api/
 ├── .github/
+│   ├── copilot-instructions.md        # Copilot AI coding instructions
 │   └── workflows/
-│       └── ci-cd.yml              # GitHub Actions CI/CD pipeline
+│       └── ci-cd.yml                  # GitHub Actions CI/CD pipeline
 ├── docs/
-│   ├── Requirements.md            # Detailed requirements
-│   ├── SolutionDesign.md          # Architecture and design
-│   └── project-structure.md       # Project structure documentation
+│   ├── aws-setup-guide.md            # AWS CLI and Cognito setup
+│   ├── deployment-guide.md           # CI/CD, multi-environment deployment
+│   ├── development-guide.md          # Local development and testing
+│   ├── docs-index.md                 # Documentation index
+│   ├── infrastructure-guide.md       # Resource tagging, monitoring, costs
+│   ├── project-structure.md          # This file - project organization
+│   ├── Requirements.md               # Detailed requirements and use cases
+│   └── SolutionDesign.md             # Architecture and design
 ├── src/
-│   ├── functions/                 # Lambda function handlers
+│   ├── functions/                     # Lambda function handlers
 │   │   ├── checkins/
-│   │   │   ├── create_checkin.py
-│   │   │   ├── get_dashboard_data.py
-│   │   │   └── get_ride_checkins.py
+│   │   │   ├── __init__.py
+│   │   │   ├── create_checkin.py      # POST /v1/tours/{tourId}/checkins
+│   │   │   ├── get_dashboard_data.py  # GET /v1/tours/{tourId}/rides/{rideId}/dashboard
+│   │   │   └── get_ride_checkins.py   # GET /v1/tours/{tourId}/rides/{rideId}/checkins
 │   │   ├── riders/
-│   │   │   ├── get_rider_profile.py
-│   │   │   ├── update_rider_profile.py
-│   │   │   └── get_tour_rider.py
+│   │   │   ├── __init__.py
+│   │   │   ├── get_rider_profile.py   # GET /v1/riders/profile/{profileId}
+│   │   │   ├── get_tour_rider.py      # GET /v1/tours/{tourId}/riders/{riderId}
+│   │   │   ├── get_tour_riders.py     # GET /v1/tours/{tourId}/riders
+│   │   │   └── update_rider_profile.py # PUT /v1/riders/profile/{profileId}
 │   │   ├── rides/
-│   │   │   ├── get_todays_ride.py
-│   │   │   ├── get_ride.py
-│   │   │   ├── list_rides.py
-│   │   │   ├── create_ride.py
-│   │   │   ├── update_ride.py
-│   │   │   └── close_ride.py
+│   │   │   ├── __init__.py
+│   │   │   ├── close_ride.py          # POST /v1/tours/{tourId}/rides/{rideId}/close
+│   │   │   ├── create_ride.py         # POST /v1/tours/{tourId}/rides
+│   │   │   ├── get_ride.py            # GET /v1/tours/{tourId}/rides/{rideId}
+│   │   │   ├── get_todays_ride.py     # GET /v1/tours/{tourId}/rides/today
+│   │   │   ├── list_rides.py          # GET /v1/tours/{tourId}/rides
+│   │   │   └── update_ride.py         # PUT /v1/tours/{tourId}/rides/{rideId}
 │   │   ├── tours/
-│   │   │   ├── get_active.py
-│   │   │   └── get_tour.py
+│   │   │   ├── __init__.py
+│   │   │   ├── archive_tour.py        # POST /v1/tours/{tourId}/archive
+│   │   │   ├── create_tour.py         # POST /v1/tours
+│   │   │   ├── get_active.py          # GET /v1/tours/active
+│   │   │   ├── get_tour.py            # GET /v1/tours/{tourId}
+│   │   │   └── list_tours.py          # GET /v1/tours
 │   │   └── users/
-│   │       ├── get_current_user.py
-│   │       └── list_tour_users.py
+│   │       ├── __init__.py
+│   │       ├── get_current_user.py    # GET /v1/users/me
+│   │       └── list_tour_users.py     # GET /v1/tours/{tourId}/users
 │   └── layers/
-│       └── common/                # Shared utilities layer
-│           ├── python/
-│           │   ├── models.py      # Data models
-│           │   ├── response.py    # Response utilities
-│           │   ├── validation.py  # Input validation
-│           │   ├── dynamodb_utils.py  # DynamoDB operations
-│           │   └── logger.py      # Logging utilities
-│           └── requirements.txt
-├── tests/                         # Unit and integration tests
-│   ├── test_validation.py
-│   └── __init__.py
-├── events/                        # Sample event payloads for testing
+│       └── common/                    # Shared utilities layer
+│           ├── requirements.txt       # Layer dependencies
+│           └── python/
+│               ├── __init__.py
+│               ├── dynamodb_utils.py  # DynamoDB operations (shared + tour-specific)
+│               ├── logger.py          # Logging utilities
+│               ├── models.py          # Data models and enums
+│               ├── response.py        # API response utilities
+│               └── validation.py      # Input validation
+├── tests/                             # Unit and integration tests
+│   ├── __init__.py
+│   ├── conftest.py                    # Pytest fixtures and setup
+│   ├── README.md                      # Testing documentation
+│   ├── test_lambda_functions.py       # Lambda function tests
+│   ├── test_validation.py            # Validation utility tests
+│   └── fixtures/
+│       ├── __init__.py
+│       └── mock_data.py              # Test mock data
+├── events/                            # Sample event payloads for local testing
+│   ├── create-checkin.json
 │   ├── get-active-tour.json
-│   └── create-checkin.json
-├── venv/                          # Virtual environment (local only, not in git)
-├── .aws-sam/                      # SAM build artifacts (local only, not in git)
-├── template.yaml                  # SAM CloudFormation template
-├── samconfig.toml                 # SAM CLI configuration
-├── Makefile                       # Build and deployment automation
-├── requirements-dev.txt           # Development dependencies
-├── pytest.ini                     # Test configuration
-├── .gitignore                     # Git ignore file
-└── README.md                      # Project documentation
+│   └── get-tour-rider.json
+├── .gitignore                         # Git ignore file
+├── Makefile                           # Build and deployment automation
+├── README.md                          # Project documentation
+├── TODO.md                            # Gap analysis and task tracking
+├── pytest.ini                         # Test configuration
+├── requirements-dev.txt               # Development dependencies
+├── samconfig.toml                     # SAM CLI configuration
+└── template.yaml                      # SAM CloudFormation template
 ```
 
 **Key Structure Notes:**
 
 ### Source Code (`src/`)
-- **`functions/`**: Contains all Lambda function handlers organized by feature domain (checkins, riders, rides, tours, users)
+- **`functions/`**: Contains all Lambda function handlers organized by feature domain (checkins, riders, rides, tours, users). Each domain has an `__init__.py` for package initialization.
 - **`layers/common/`**: Shared utilities and dependencies used across all Lambda functions
   - `python/`: Python modules for models, validation, database operations, logging, and response formatting
   - `requirements.txt`: Dependencies for the common layer
@@ -72,30 +94,31 @@ tour-data-api/
 - **`Requirements.md`**: Detailed business requirements and use cases
 - **`SolutionDesign.md`**: System architecture, data model, API specifications
 - **`project-structure.md`**: This file - project organization documentation
+- **`aws-setup-guide.md`**: AWS CLI configuration and Cognito setup
+- **`deployment-guide.md`**: CI/CD pipeline, GitHub Actions, multi-environment deployment
+- **`development-guide.md`**: Local development, testing, troubleshooting
+- **`infrastructure-guide.md`**: Resource tagging, monitoring, cost estimation
+- **`docs-index.md`**: Complete documentation index
 
 ### Testing (`tests/`)
-- Unit and integration tests
+- Unit and integration tests using pytest with moto for AWS mocking
+- `conftest.py`: Shared fixtures (mock DynamoDB tables, environment variables)
+- `fixtures/mock_data.py`: Test data matching the hybrid table data model
 - Test configuration in `pytest.ini`
-- Should mirror the structure of `src/` for easy navigation
 
 ### Events (`events/`)
-- Sample JSON payloads for testing Lambda functions locally
-- Used with `sam local invoke` command
+- Sample JSON payloads for testing Lambda functions locally with `sam local invoke`
 
 ### Infrastructure as Code
-- **`template.yaml`**: AWS SAM template defining all AWS resources (Lambda, API Gateway, DynamoDB, IAM roles, etc.)
+- **`template.yaml`**: AWS SAM template defining all AWS resources (Lambda functions, API Gateway HTTP API, shared DynamoDB tables, S3 bucket, IAM roles). Tour-specific tables are provisioned at runtime by `create_tour.py`.
 - **`samconfig.toml`**: SAM CLI configuration for different environments (dev, test, prod)
 - **`Makefile`**: Automation scripts for common tasks (build, deploy, test, logs)
 
 ### CI/CD (`.github/workflows/`)
-- **`ci-cd.yml`**: GitHub Actions workflow for automated testing and deployment
-- Handles linting, testing, building, and multi-environment deployment
+- **`ci-cd.yml`**: GitHub Actions workflow for manual-trigger testing and deployment
+- Supports environment selection (dev/test/prod) via `workflow_dispatch` input
 
 ### Local Development Files (Not in Git)
-- **`venv/`**: Python virtual environment for local development
+- **`venv/` or `.venv/`**: Python virtual environment for local development
 - **`.aws-sam/`**: SAM build artifacts and deployment packages
-
-### Important Files
-- **`requirements-dev.txt`**: Development dependencies (pytest, moto, black, pylint, boto3)
-- **`.gitignore`**: Specifies files to exclude from version control (venv, .aws-sam, __pycache__, etc.)
 

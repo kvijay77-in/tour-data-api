@@ -1,23 +1,22 @@
 """
 Lambda function to close a ride (mark as completed)
+
+Uses tour-specific Ride-{tourId} table.
+Route: POST /v1/tours/{tourId}/rides/{rideId}/close
 """
-import json
-import os
+
 import sys
 from datetime import datetime
 
-# Add common layer to path
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, not_found_response, error_response, bad_request_response
-from validation import validate_tour_id, ValidationError
-from dynamodb_utils import get_item, put_item
+from response import success_response, not_found_response, bad_request_response, internal_error_response
+from validation import validate_tour_id, validate_ride_id, ValidationError
+from dynamodb_utils import get_tour_item, put_tour_item
 from models import RideStatus
 
 logger = get_logger(__name__)
-
-RIDE_TABLE = os.environ['RIDE_TABLE']
 
 
 def lambda_handler(event, context):
@@ -26,8 +25,8 @@ def lambda_handler(event, context):
     Once a ride is closed, no more check-ins can be created for it.
     
     Path parameters:
-    - tourId (e.g., TOUR2026)
-    - rideId (e.g., TOUR2026#2026-06-15#1)
+    - tourId: Tour identifier (e.g., India-Coast-2026)
+    - rideId: Ride identifier (e.g., RIDE001)
     
     Returns:
     - 200: Ride closed successfully
@@ -43,40 +42,40 @@ def lambda_handler(event, context):
         if not tour_id or not ride_id:
             return bad_request_response("tourId and rideId are required in path")
         
-        # Validate tour ID
+        # Validate IDs
         try:
             validate_tour_id(tour_id)
+            validate_ride_id(ride_id)
         except ValidationError as e:
-            logger.warning(f"Invalid tour ID format: {tour_id}", exc_info=True)
             return bad_request_response(str(e))
         
-        # Get existing ride
-        logger.info(f"Fetching ride to close: {ride_id}")
-        ride = get_item(
-            table_name=RIDE_TABLE,
-            key={'tourId': tour_id, 'rideId': ride_id}
+        # Get existing ride from tour-specific table
+        logger.info(f"Fetching ride to close: {tour_id}/{ride_id}")
+        ride = get_tour_item(
+            table_type='Ride',
+            tour_id=tour_id,
+            key={'PK': f'RIDE#{ride_id}'}
         )
         
         if not ride:
-            logger.info(f"Ride not found: {ride_id}")
-            return not_found_response(f"Ride {ride_id} not found")
+            return not_found_response("Ride", ride_id)
         
         # Check if ride is already closed
         if ride.get('status') == RideStatus.CLOSED.value:
-            logger.info(f"Ride already closed: {ride_id}")
             return bad_request_response("Ride is already closed")
         
         # Close the ride
+        now = datetime.utcnow().isoformat() + 'Z'
         ride['status'] = RideStatus.CLOSED.value
-        ride['closedAt'] = datetime.utcnow().isoformat() + 'Z'
-        ride['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
+        ride['closedAt'] = now
+        ride['updatedAt'] = now
         
         logger.info(f"Closing ride: {ride_id}")
-        put_item(table_name=RIDE_TABLE, item=ride)
+        put_tour_item(table_type='Ride', tour_id=tour_id, item=ride)
         
         logger.info(f"Successfully closed ride: {ride_id}")
         return success_response(ride)
         
     except Exception as e:
         logger.error(f"Error closing ride: {str(e)}", exc_info=True)
-        return error_response(f"Failed to close ride: {str(e)}")
+        return internal_error_response("Failed to close ride")

@@ -5,6 +5,11 @@ Description: >
   
   Backend API for cycling tour management providing centralized data access
   for Check-In App and future applications.
+  
+  Table Strategy: Hybrid (Shared + Tour-Specific)
+  - Shared tables (SAM-managed): RiderProfile, Tour
+  - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
+    CheckIn-{tourId}, User-{tourId}
 
 Metadata:
   cfn-lint:
@@ -23,12 +28,14 @@ Globals:
       - x86_64
     Environment:
       Variables:
+        # Shared table names (SAM-managed)
         RIDER_PROFILE_TABLE: !Ref RiderProfileTable
         TOUR_TABLE: !Ref TourTable
-        TOUR_RIDER_TABLE: !Ref TourRiderTable
-        RIDE_TABLE: !Ref RideTable
-        CHECKIN_TABLE: !Ref CheckInTable
-        USER_TABLE: !Ref UserTable
+        # Dynamic table name resolution
+        STACK_NAME: !Ref AWS::StackName
+        # Metadata
+        SUBSCRIPTION_ID: !Ref SubscriptionId
+        ENVIRONMENT: !Ref Environment
         PHOTOS_BUCKET: !Ref PhotosBucket
         LOG_LEVEL: INFO
     Tags:
@@ -36,6 +43,7 @@ Globals:
       Environment: !Ref Environment
       Application: TourManagement
       ManagedBy: SAM
+      SubscriptionId: !Ref SubscriptionId
       Owner: !If [HasOwner, !Ref Owner, !Ref AWS::NoValue]
       CostCenter: !If [HasCostCenter, !Ref CostCenter, !Ref AWS::NoValue]
 
@@ -52,6 +60,16 @@ Parameters:
   CognitoUserPoolArn:
     Type: String
     Description: ARN of the Cognito User Pool for authentication
+    Default: ''
+  
+  CognitoAppClientId:
+    Type: String
+    Description: Cognito User Pool App Client ID (required when CognitoUserPoolArn is provided)
+    Default: ''
+  
+  SubscriptionId:
+    Type: String
+    Description: Unique identifier for this deployment instance (for tracking and cost attribution)
     Default: ''
   
   Owner:
@@ -79,6 +97,23 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: !Ref Environment
+      # JWT authentication via Cognito: enabled when CognitoUserPoolArn is provided.
+      # When not provided (default), all routes are open (suitable for dev/local testing).
+      Auth: !If
+        - HasCognitoUserPool
+        - DefaultAuthorizer: CognitoAuthorizer
+          Authorizers:
+            CognitoAuthorizer:
+              AuthorizationScopes:
+                - openid
+              IdentitySource: $request.header.Authorization
+              JwtConfiguration:
+                issuer: !Sub
+                  - 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}'
+                  - UserPoolId: !Select [1, !Split ['/', !Select [5, !Split [':', !Ref CognitoUserPoolArn]]]]
+                audience:
+                  - !Ref CognitoAppClientId
+        - !Ref 'AWS::NoValue'
       CorsConfiguration:
         AllowOrigins:
           - '*'  # TODO: Restrict to specific domains in production
@@ -117,7 +152,7 @@ Resources:
       BuildMethod: python3.11
 
   # ============================================================================
-  # LAMBDA FUNCTIONS - TOURS
+  # LAMBDA FUNCTIONS - TOURS (Shared Tour table)
   # ============================================================================
   
   GetActiveTourFunction:
@@ -131,6 +166,12 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref TourTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !Sub '${TourTable.Arn}/index/*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -163,12 +204,18 @@ Resources:
     Properties:
       CodeUri: src/functions/tours/
       Handler: list_tours.lambda_handler
-      Description: List all tours with optional filters
+      Description: List all tours with optional status filter
       Layers:
         - !Ref CommonLayer
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref TourTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !Sub '${TourTable.Arn}/index/*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -177,10 +224,110 @@ Resources:
             Path: /v1/tours
             Method: GET
 
+  CreateTourFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/tours/
+      Handler: create_tour.lambda_handler
+      Description: Create and provision a new tour (creates tour-specific DynamoDB tables)
+      Timeout: 120
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TourTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:CreateTable
+                - dynamodb:DescribeTable
+                - dynamodb:TagResource
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours
+            Method: POST
+
+  ArchiveTourFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/tours/
+      Handler: archive_tour.lambda_handler
+      Description: Archive a completed tour (optionally export data, delete tour-specific tables)
+      Timeout: 120
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TourTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DeleteTable
+                - dynamodb:DescribeTable
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                - !Sub '${PhotosBucket.Arn}/archives/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/archive
+            Method: POST
+
   # ============================================================================
   # LAMBDA FUNCTIONS - RIDERS
   # ============================================================================
   
+  GetRiderProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: get_rider_profile.lambda_handler
+      Description: Get rider profile by profile ID
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}
+            Method: GET
+
+  UpdateRiderProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: update_rider_profile.lambda_handler
+      Description: Update rider profile
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiderProfileTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}
+            Method: PUT
+
   GetTourRidersFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -191,9 +338,16 @@ Resources:
         - !Ref CommonLayer
       Policies:
         - DynamoDBReadPolicy:
-            TableName: !Ref TourRiderTable
-        - DynamoDBReadPolicy:
             TableName: !Ref RiderProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:BatchGetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -211,15 +365,15 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
         - Statement:
             - Effect: Allow
               Action:
+                - dynamodb:GetItem
                 - dynamodb:Query
               Resource:
-                - !GetAtt TourRiderTable.Arn
-                - !Sub '${TourRiderTable.Arn}/index/*'
-        - DynamoDBReadPolicy:
-            TableName: !Ref RiderProfileTable
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -245,15 +399,15 @@ Resources:
             - Effect: Allow
               Action:
                 - dynamodb:Query
+                - dynamodb:GetItem
               Resource:
-                - !GetAtt RideTable.Arn
-                - !Sub '${RideTable.Arn}/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/rides/today
+            Path: /v1/tours/{tourId}/rides/today
             Method: GET
 
   GetRideFunction:
@@ -268,16 +422,39 @@ Resources:
         - Statement:
             - Effect: Allow
               Action:
-                - dynamodb:Query
                 - dynamodb:GetItem
               Resource:
-                - !GetAtt RideTable.Arn
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/rides/{rideId}
+            Path: /v1/tours/{tourId}/rides/{rideId}
+            Method: GET
+
+  ListRidesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: list_rides.lambda_handler
+      Description: List all rides for a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides
             Method: GET
 
   CreateRideFunction:
@@ -285,12 +462,20 @@ Resources:
     Properties:
       CodeUri: src/functions/rides/
       Handler: create_ride.lambda_handler
-      Description: Create a new ride
+      Description: Create a new ride for a tour
       Layers:
         - !Ref CommonLayer
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref RideTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -308,14 +493,19 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref RideTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/rides/{rideId}
+            Path: /v1/tours/{tourId}/rides/{rideId}
             Method: PUT
 
   CloseRideFunction:
@@ -327,14 +517,19 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref RideTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/rides/{rideId}/close
+            Path: /v1/tours/{tourId}/rides/{rideId}/close
             Method: POST
 
   # ============================================================================
@@ -350,23 +545,20 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref CheckInTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref RideTable
         - Statement:
             - Effect: Allow
               Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
                 - dynamodb:Query
               Resource:
-                - !GetAtt TourRiderTable.Arn
-                - !Sub '${TourRiderTable.Arn}/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/checkins
+            Path: /v1/tours/{tourId}/checkins
             Method: POST
 
   GetRideCheckInsFunction:
@@ -382,14 +574,15 @@ Resources:
             - Effect: Allow
               Action:
                 - dynamodb:Query
+                - dynamodb:GetItem
               Resource:
-                - !GetAtt CheckInTable.Arn
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/rides/{rideId}/checkins
+            Path: /v1/tours/{tourId}/rides/{rideId}/checkins
             Method: GET
 
   GetDashboardDataFunction:
@@ -402,27 +595,72 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
         - Statement:
             - Effect: Allow
               Action:
                 - dynamodb:Query
                 - dynamodb:GetItem
+                - dynamodb:Scan
+                - dynamodb:BatchGetItem
               Resource:
-                - !GetAtt RideTable.Arn
-                - !GetAtt TourRiderTable.Arn
-                - !GetAtt CheckInTable.Arn
-                - !GetAtt RiderProfileTable.Arn
-                - !Sub '${RideTable.Arn}/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
         HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/rides/{rideId}/dashboard
+            Path: /v1/tours/{tourId}/rides/{rideId}/dashboard
             Method: GET
 
   # ============================================================================
-  # DYNAMODB TABLES
+  # LAMBDA FUNCTIONS - USERS
+  # ============================================================================
+
+  GetCurrentUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/users/
+      Handler: get_current_user.lambda_handler
+      Description: Get current authenticated user details from JWT token
+      Layers:
+        - !Ref CommonLayer
+      Policies: []
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/users/me
+            Method: GET
+
+  ListTourUsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/users/
+      Handler: list_tour_users.lambda_handler
+      Description: List all users/staff for a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/users
+            Method: GET
+
+  # ============================================================================
+  # DYNAMODB TABLES (Shared - SAM-managed)
   # ============================================================================
   
   RiderProfileTable:
@@ -487,9 +725,18 @@ Resources:
       AttributeDefinitions:
         - AttributeName: PK
           AttributeType: S
+        - AttributeName: status
+          AttributeType: S
       KeySchema:
         - AttributeName: PK
           KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-Tour'
@@ -512,251 +759,11 @@ Resources:
             Value: !Ref CostCenter
           - !Ref AWS::NoValue
 
-  TourRiderTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub '${AWS::StackName}-TourRider'
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
-      SSESpecification:
-        SSEEnabled: true
-      AttributeDefinitions:
-        - AttributeName: PK
-          AttributeType: S
-        - AttributeName: SK
-          AttributeType: S
-        - AttributeName: riderId
-          AttributeType: S
-        - AttributeName: tourId
-          AttributeType: S
-        - AttributeName: profileId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: PK
-          KeyType: HASH
-        - AttributeName: SK
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: RiderIdIndex
-          KeySchema:
-            - AttributeName: riderId
-              KeyType: HASH
-            - AttributeName: tourId
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-        - IndexName: ProfileIdIndex
-          KeySchema:
-            - AttributeName: profileId
-              KeyType: HASH
-            - AttributeName: tourId
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-TourRider'
-        - Key: Project
-          Value: tour-data-api
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Application
-          Value: TourManagement
-        - Key: ManagedBy
-          Value: SAM
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
-
-  RideTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub '${AWS::StackName}-Ride'
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
-      SSESpecification:
-        SSEEnabled: true
-      AttributeDefinitions:
-        - AttributeName: PK
-          AttributeType: S
-        - AttributeName: SK
-          AttributeType: S
-        - AttributeName: date
-          AttributeType: S
-        - AttributeName: tourId
-          AttributeType: S
-        - AttributeName: status
-          AttributeType: S
-      KeySchema:
-        - AttributeName: PK
-          KeyType: HASH
-        - AttributeName: SK
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: DateIndex
-          KeySchema:
-            - AttributeName: date
-              KeyType: HASH
-            - AttributeName: tourId
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-        - IndexName: StatusIndex
-          KeySchema:
-            - AttributeName: status
-              KeyType: HASH
-            - AttributeName: date
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-Ride'
-        - Key: Project
-          Value: tour-data-api
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Application
-          Value: TourManagement
-        - Key: ManagedBy
-          Value: SAM
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
-
-  CheckInTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub '${AWS::StackName}-CheckIn'
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
-      SSESpecification:
-        SSEEnabled: true
-      AttributeDefinitions:
-        - AttributeName: PK
-          AttributeType: S
-        - AttributeName: SK
-          AttributeType: S
-        - AttributeName: riderId
-          AttributeType: S
-        - AttributeName: timestamp
-          AttributeType: S
-        - AttributeName: tourIdRiderId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: PK
-          KeyType: HASH
-        - AttributeName: SK
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: RiderIdIndex
-          KeySchema:
-            - AttributeName: riderId
-              KeyType: HASH
-            - AttributeName: timestamp
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-        - IndexName: TourRiderIndex
-          KeySchema:
-            - AttributeName: tourIdRiderId
-              KeyType: HASH
-            - AttributeName: timestamp
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-CheckIn'
-        - Key: Project
-          Value: tour-data-api
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Application
-          Value: TourManagement
-        - Key: ManagedBy
-          Value: SAM
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
-
-  UserTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub '${AWS::StackName}-User'
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
-      SSESpecification:
-        SSEEnabled: true
-      AttributeDefinitions:
-        - AttributeName: PK
-          AttributeType: S
-        - AttributeName: SK
-          AttributeType: S
-        - AttributeName: email
-          AttributeType: S
-        - AttributeName: tourId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: PK
-          KeyType: HASH
-        - AttributeName: SK
-          KeyType: RANGE
-      GlobalSecondaryIndexes:
-        - IndexName: EmailIndex
-          KeySchema:
-            - AttributeName: email
-              KeyType: HASH
-            - AttributeName: tourId
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-User'
-        - Key: Project
-          Value: tour-data-api
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Application
-          Value: TourManagement
-        - Key: ManagedBy
-          Value: SAM
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
+  # ============================================================================
+  # Tour-specific tables (TourRider, Ride, CheckIn, User) are NOT defined here.
+  # They are provisioned at runtime by CreateTourFunction when a tour is created.
+  # Table naming: {StackName}-{TableType}-{tourId}
+  # ============================================================================
 
   # ============================================================================
   # S3 BUCKET FOR RIDER PHOTOS
@@ -850,32 +857,14 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-TourTable'
 
-  TourRiderTableName:
-    Description: Tour Rider DynamoDB table name
-    Value: !Ref TourRiderTable
-    Export:
-      Name: !Sub '${AWS::StackName}-TourRiderTable'
-
-  RideTableName:
-    Description: Ride DynamoDB table name
-    Value: !Ref RideTable
-    Export:
-      Name: !Sub '${AWS::StackName}-RideTable'
-
-  CheckInTableName:
-    Description: CheckIn DynamoDB table name
-    Value: !Ref CheckInTable
-    Export:
-      Name: !Sub '${AWS::StackName}-CheckInTable'
-
-  UserTableName:
-    Description: User DynamoDB table name
-    Value: !Ref UserTable
-    Export:
-      Name: !Sub '${AWS::StackName}-UserTable'
-
   PhotosBucketName:
     Description: S3 bucket for rider photos
     Value: !Ref PhotosBucket
     Export:
       Name: !Sub '${AWS::StackName}-PhotosBucket'
+
+  StackName:
+    Description: Stack name for dynamic tour-specific table name resolution
+    Value: !Ref AWS::StackName
+    Export:
+      Name: !Sub '${AWS::StackName}-StackName'

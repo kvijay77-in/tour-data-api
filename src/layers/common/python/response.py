@@ -98,6 +98,16 @@ def not_found_response(resource: str, identifier: str) -> Dict[str, Any]:
     )
 
 
+def bad_request_response(message: str, details: Optional[Dict] = None) -> Dict[str, Any]:
+    """Create a 400 bad request response"""
+    return error_response(
+        error_code="BAD_REQUEST",
+        message=message,
+        status_code=400,
+        details=details
+    )
+
+
 def validation_error_response(message: str, details: Optional[Dict] = None) -> Dict[str, Any]:
     """Create a 400 validation error response"""
     return error_response(

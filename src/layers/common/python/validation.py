@@ -25,7 +25,7 @@ def validate_rider_id(rider_id: str) -> None:
     Raises:
         ValidationError: If format is invalid
     """
-    if not re.match(r'^R\d{1,3}$', rider_id):
+    if not re.match(r'^R([1-9]\d{0,2})$', rider_id):
         raise ValidationError(
             f"Invalid Rider ID format: {rider_id}. Expected format: R1, R2, R57, R102",
             {"field": "riderId", "value": rider_id}
@@ -42,7 +42,12 @@ def validate_rider_id(rider_id: str) -> None:
 
 def validate_tour_id(tour_id: str) -> None:
     """
-    Validate Tour ID format (TOUR followed by year)
+    Validate Tour ID format (free-form, used as DynamoDB table name suffix).
+    
+    Rules:
+    - Allowed characters: a-z, A-Z, 0-9, _, -, .
+    - Length: 3-50 characters
+    - Must start with a letter or number
     
     Args:
         tour_id: Tour ID to validate
@@ -50,9 +55,16 @@ def validate_tour_id(tour_id: str) -> None:
     Raises:
         ValidationError: If format is invalid
     """
-    if not re.match(r'^TOUR\d{4}$', tour_id):
+    if not tour_id or len(tour_id) < 3 or len(tour_id) > 50:
         raise ValidationError(
-            f"Invalid Tour ID format: {tour_id}. Expected format: TOUR2026",
+            f"Invalid Tour ID: '{tour_id}'. Must be 3-50 characters long",
+            {"field": "tourId", "value": tour_id}
+        )
+    
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_.\-]{2,49}$', tour_id):
+        raise ValidationError(
+            f"Invalid Tour ID format: '{tour_id}'. Must start with letter/number, "
+            "allowed chars: a-z, A-Z, 0-9, _, -, .",
             {"field": "tourId", "value": tour_id}
         )
 
@@ -102,6 +114,11 @@ def validate_iso_date(date_str: str, field_name: str = "date") -> None:
     Raises:
         ValidationError: If format is invalid
     """
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        raise ValidationError(
+            f"Invalid date format: {date_str}. Expected format: YYYY-MM-DD",
+            {"field": field_name, "value": date_str}
+        )
     try:
         datetime.strptime(date_str, '%Y-%m-%d')
     except ValueError:

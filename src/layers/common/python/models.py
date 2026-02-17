@@ -3,6 +3,11 @@ Data models for tour-data-api
 
 These models represent the data structures stored in DynamoDB
 and returned by the API endpoints.
+
+Table Strategy (Hybrid):
+- Shared tables (SAM-managed): RiderProfile, Tour
+- Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
+  CheckIn-{tourId}, User-{tourId}
 """
 
 from typing import Optional, List, Dict, Any
@@ -16,8 +21,9 @@ from enum import Enum
 # ============================================================================
 
 class TourStatus(str, Enum):
-    """Tour status values"""
+    """Tour status values - flow: PLANNING -> PROVISIONING -> ACTIVE -> COMPLETED -> ARCHIVED"""
     PLANNING = "PLANNING"
+    PROVISIONING = "PROVISIONING"
     ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"
     ARCHIVED = "ARCHIVED"
@@ -70,12 +76,23 @@ class TourRiderStatus(str, Enum):
 
 
 # ============================================================================
+# TOUR-SPECIFIC TABLE TYPES (for dynamic table name resolution)
+# ============================================================================
+
+TOUR_TABLE_TYPES = ['TourRider', 'Ride', 'CheckIn', 'User']
+
+
+# ============================================================================
 # DATA CLASSES
 # ============================================================================
 
 @dataclass
 class RiderProfile:
-    """Rider profile data (master data, tour-agnostic)"""
+    """
+    Rider profile data (master data, tour-agnostic)
+    Stored in shared RiderProfile table.
+    PK: PROFILE#<uuid>
+    """
     profile_id: str
     name: str
     email: str
@@ -100,14 +117,19 @@ class RiderProfile:
 
 @dataclass
 class Tour:
-    """Tour definition (yearly tour)"""
+    """
+    Tour definition (shared Tour table).
+    PK: TOUR#<tourId>
+    tourId is free-form (e.g., India-Coast-2026, TDF2026)
+    """
     tour_id: str
-    year: int
     name: str
     start_date: str
     end_date: str
     status: TourStatus
     description: Optional[str] = None
+    provisioned_at: Optional[str] = None
+    archived_at: Optional[str] = None
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     
@@ -115,24 +137,27 @@ class Tour:
         """Convert to dictionary"""
         data = asdict(self)
         data['status'] = self.status.value
-        return data
+        return {k: v for k, v in data.items() if v is not None}
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
-        item['PK'] = f"TOUR#{self.year}"
+        item['PK'] = f"TOUR#{self.tour_id}"
         item['tourId'] = self.tour_id
         return item
 
 
 @dataclass
 class TourRider:
-    """Rider registration for a specific tour"""
-    tour_id: str
+    """
+    Rider registration for a specific tour.
+    Stored in tour-specific TourRider-{tourId} table.
+    PK: RIDER#<riderId> (no SK - table is tour-scoped)
+    """
     rider_id: str
     profile_id: str
-    qr_code_data: str
     status: TourRiderStatus
+    qr_code_data: Optional[str] = None
     registered_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
@@ -141,14 +166,12 @@ class TourRider:
         """Convert to dictionary"""
         data = asdict(self)
         data['status'] = self.status.value
-        return data
+        return {k: v for k, v in data.items() if v is not None}
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
-        item['PK'] = f"TOUR#{self.tour_id}"
-        item['SK'] = f"RIDER#{self.rider_id}"
-        item['tourId'] = self.tour_id
+        item['PK'] = f"RIDER#{self.rider_id}"
         item['riderId'] = self.rider_id
         item['profileId'] = self.profile_id
         return item
@@ -174,9 +197,12 @@ class Stage:
 
 @dataclass
 class Ride:
-    """Daily ride configuration"""
+    """
+    Daily ride configuration.
+    Stored in tour-specific Ride-{tourId} table.
+    PK: RIDE#<rideId> (no SK - table is tour-scoped)
+    """
     ride_id: str
-    tour_id: str
     date: str
     ride_no: int
     name: str
@@ -203,20 +229,21 @@ class Ride:
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
-        item['PK'] = f"TOUR#{self.tour_id}"
-        item['SK'] = f"RIDE#{self.ride_id}"
+        item['PK'] = f"RIDE#{self.ride_id}"
         item['rideId'] = self.ride_id
-        item['tourId'] = self.tour_id
         return item
 
 
 @dataclass
 class CheckIn:
-    """Check-in record for a rider at a stage"""
+    """
+    Check-in record for a rider at a stage.
+    Stored in tour-specific CheckIn-{tourId} table.
+    PK: RIDE#<rideId>, SK: CHECKIN#<riderId>#<stageNumber>#<timestamp>
+    """
     check_in_id: str
     rider_id: str
     ride_id: str
-    tour_id: str
     stage_number: int
     stage_id: str
     timestamp: str
@@ -251,15 +278,19 @@ class CheckIn:
         item['PK'] = f"RIDE#{self.ride_id}"
         item['SK'] = f"CHECKIN#{self.rider_id}#{self.stage_number:03d}#{self.timestamp}"
         item['checkInId'] = self.check_in_id
-        item['tourIdRiderId'] = f"{self.tour_id}#{self.rider_id}"
+        item['riderId'] = self.rider_id
+        item['rideId'] = self.ride_id
         return item
 
 
 @dataclass
 class User:
-    """User profile for Check-In App"""
+    """
+    User profile for Check-In App.
+    Stored in tour-specific User-{tourId} table.
+    PK: USER#<userId> (no SK - table is tour-scoped)
+    """
     user_id: str
-    tour_id: str
     username: str
     email: str
     name: str
@@ -279,9 +310,7 @@ class User:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
         item['PK'] = f"USER#{self.user_id}"
-        item['SK'] = f"TOUR#{self.tour_id}"
         item['userId'] = self.user_id
-        item['tourId'] = self.tour_id
         return item
 
 
@@ -308,7 +337,6 @@ def create_ride_from_dynamodb_item(item: Dict[str, Any]) -> Ride:
     
     return Ride(
         ride_id=item['rideId'],
-        tour_id=item['tourId'],
         date=item['date'],
         ride_no=item['rideNo'],
         name=item['name'],

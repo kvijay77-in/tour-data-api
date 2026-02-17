@@ -58,10 +58,13 @@ sam local start-api
 # Test active tour endpoint
 curl http://localhost:3000/v1/tours/active
 
+# List rides for a tour
+curl http://localhost:3000/v1/tours/India-Coast-2026/rides
+
 # Create check-in (requires valid tour/rider data in DynamoDB)
-curl -X POST http://localhost:3000/v1/checkins \
+curl -X POST http://localhost:3000/v1/tours/India-Coast-2026/checkins \
   -H "Content-Type: application/json" \
-  -d '{"tourId": "TOUR#123", "riderId": "RIDER#456", "rideId": "RIDE#789", "checkInType": "NORMAL"}'
+  -d '{"riderId": "R57", "rideId": "RIDE001", "stageId": "S001", "checkInType": "NORMAL"}'
 ```
 
 #### Testing Individual Lambda Functions
@@ -243,11 +246,11 @@ make sync
 # View CloudWatch logs for a function
 make logs FUNCTION=GetActiveTourFunction
 
-# Tail logs in real-time
-make logs-tail FUNCTION=CreateCheckinFunction
+# Tail logs in real-time (alias)
+make logs-tail FUNCTION=CreateCheckInFunction
 
 # Example with specific function
-make logs FUNCTION=GetRideCheckinsFunction
+make logs-function FUNCTION=GetRideCheckInsFunction
 ```
 
 ### Cleanup and Validation
@@ -287,7 +290,7 @@ make invoke FUNCTION=GetActiveTourFunction EVENT=events/get-active-tour.json
 make clean
 make build
 
-# Verify Python version (requires 3.12+)
+# Verify Python version (requires 3.11+)
 python --version
 
 # Ensure virtual environment is activated
@@ -354,25 +357,28 @@ pytest tests/test_lambda_functions.py -v
 
 **Solution**:
 ```bash
-# List all tables
+# List all tables (includes shared and tour-specific)
 aws dynamodb list-tables
 
-# Describe table structure
-aws dynamodb describe-table --table-name RiderProfile
+# Describe shared table structure
+aws dynamodb describe-table --table-name tour-data-api-RiderProfile
 
-# Scan table (dev only! Use carefully)
-aws dynamodb scan --table-name RiderProfile --limit 10
+# Scan shared table (dev only! Use carefully)
+aws dynamodb scan --table-name tour-data-api-RiderProfile --limit 10
 
-# Get specific item
+# Get specific rider profile item
 aws dynamodb get-item \
-  --table-name RiderProfile \
-  --key '{"PK": {"S": "RIDER#123"}, "SK": {"S": "PROFILE"}}'
+  --table-name tour-data-api-RiderProfile \
+  --key '{"PK": {"S": "PROFILE#abc-123-uuid"}}'
+
+# Scan a tour-specific table
+aws dynamodb scan --table-name tour-data-api-Ride-India-Coast-2026 --limit 10
 ```
 
 **Common Issues**:
-- **Table not found**: Ensure tables are deployed (`sam deploy`)
+- **Table not found**: Shared tables require `sam deploy` first; tour-specific tables require creating a tour via `POST /v1/tours`
 - **Access denied**: Check Lambda function's IAM execution role has DynamoDB permissions
-- **Validation errors**: Verify data matches table schema (PK, SK, GSIs)
+- **Validation errors**: Verify data matches table schema (PK, GSIs)
 - **Throttling**: Consider switching to on-demand billing or increasing provisioned capacity
 
 ### API Gateway Issues

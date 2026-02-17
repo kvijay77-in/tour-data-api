@@ -1,63 +1,53 @@
 """
-Lambda function to get a rider profile by rider ID
-"""
-import json
-import os
-import sys
+Lambda function to get a rider profile by profile ID
 
-# Add common layer to path
+Shared RiderProfile table (PK: PROFILE#<profileId>).
+Route: GET /v1/riders/profile/{profileId}
+"""
+
+import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, not_found_response, error_response, bad_request_response
-from validation import validate_rider_id, ValidationError
+from response import success_response, not_found_response, bad_request_response, internal_error_response
 from dynamodb_utils import get_item
 
 logger = get_logger(__name__)
 
-RIDER_PROFILE_TABLE = os.environ['RIDER_PROFILE_TABLE']
-
 
 def lambda_handler(event, context):
     """
-    Get a rider profile by rider ID
+    Get a rider profile by profile ID
     
-    Path parameter: riderId (e.g., R1, R42)
+    Path parameter: profileId (UUID)
     
     Returns:
     - 200: Rider profile found
-    - 400: Invalid rider ID format
-    - 404: Rider not found
+    - 400: Missing profileId
+    - 404: Profile not found
     - 500: Server error
     """
     try:
-        # Extract rider ID from path parameters
-        rider_id = event.get('pathParameters', {}).get('riderId')
+        # Extract profile ID from path parameters
+        profile_id = event.get('pathParameters', {}).get('profileId')
         
-        if not rider_id:
-            return bad_request_response("riderId is required in path")
-        
-        # Validate rider ID format
-        try:
-            validate_rider_id(rider_id)
-        except ValidationError as e:
-            logger.warning(f"Invalid rider ID format: {rider_id}", exc_info=True)
-            return bad_request_response(str(e))
+        if not profile_id:
+            return bad_request_response("profileId is required in path")
         
         # Get rider profile from DynamoDB
-        logger.info(f"Fetching rider profile: {rider_id}")
+        logger.info(f"Fetching rider profile: {profile_id}")
         rider = get_item(
-            table_name=RIDER_PROFILE_TABLE,
-            key={'riderId': rider_id}
+            table_name_env='RIDER_PROFILE_TABLE',
+            key={'PK': f'PROFILE#{profile_id}'}
         )
         
         if not rider:
-            logger.info(f"Rider not found: {rider_id}")
-            return not_found_response(f"Rider {rider_id} not found")
+            logger.info(f"Rider profile not found: {profile_id}")
+            return not_found_response("RiderProfile", profile_id)
         
-        logger.info(f"Successfully retrieved rider profile: {rider_id}")
+        logger.info(f"Successfully retrieved rider profile: {profile_id}")
         return success_response(rider)
         
     except Exception as e:
         logger.error(f"Error getting rider profile: {str(e)}", exc_info=True)
-        return error_response(f"Failed to get rider profile: {str(e)}")
+        return internal_error_response("Failed to get rider profile")

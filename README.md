@@ -19,18 +19,25 @@ This API supports managing cycling tours with approximately 100 riders, 7-8 ride
 - **Runtime**: Python 3.11
 - **Infrastructure**: AWS SAM (Serverless Application Model)
 - **Authentication**: AWS Cognito with JWT tokens
-- **Storage**: DynamoDB (6 tables), S3 (rider photos)
-- **Functions**: 15 Lambda functions handling tours, riders, rides, check-ins, and users
+- **Storage**: DynamoDB (2 shared tables + tour-specific tables provisioned at runtime), S3 (rider photos, archive exports)
+- **Functions**: 20 Lambda functions handling tours, riders, rides, check-ins, and users
 - **CI/CD**: GitHub Actions with automated testing and multi-environment deployment
 
 ### Data Model
 
-- **RiderProfile**: Rider personal information
-- **Tour**: Tour details and status
-- **TourRider**: Rider participation in specific tours
-- **Ride**: Daily ride schedule and routes
-- **CheckIn**: Rider check-ins at destinations
-- **User**: Admin/staff user accounts
+The system uses a **hybrid table strategy**:
+
+**Shared Tables (SAM-managed):**
+- **RiderProfile**: Rider personal information (persists across tours)
+- **Tour**: Tour details, status, and lifecycle data
+
+**Tour-Specific Tables (provisioned at runtime per tour):**
+- **TourRider-{tourId}**: Rider participation in a specific tour
+- **Ride-{tourId}**: Daily ride schedule and routes for a tour
+- **CheckIn-{tourId}**: Rider check-ins at destinations for a tour
+- **User-{tourId}**: Admin/staff user accounts for a tour
+
+Tour-specific tables are created when a tour is provisioned (`POST /v1/tours`) and can be archived/deleted when a tour is complete (`POST /v1/tours/{tourId}/archive`).
 
 ### Business Rules
 
@@ -52,14 +59,14 @@ The check-in system enforces important business logic:
   
 - **Additional Validations**:
   - Rider must be enrolled in the tour
-  - Ride must not be closed (ACTIVE or SCHEDULED status)
+  - Ride must not be closed (ACTIVE or PLANNED status)
   - No duplicate check-ins for the same rider/ride/stage combination
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.11+
 - AWS CLI configured with appropriate credentials
 - AWS SAM CLI ([installation guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html))
 - Make (optional, for using Makefile commands)
@@ -121,30 +128,34 @@ Authorization: Bearer <jwt-token>
 ### Endpoints
 
 #### Tours
-- `GET /tours/active` - Get currently active tour
-- `GET /tours/{tourId}` - Get tour details
+- `GET /v1/tours/active` - Get currently active tour
+- `GET /v1/tours/{tourId}` - Get tour details
+- `GET /v1/tours` - List all tours (optional `?status=` filter)
+- `POST /v1/tours` - Create and provision a new tour
+- `POST /v1/tours/{tourId}/archive` - Archive a completed tour
 
 #### Riders
-- `GET /riders/{riderId}` - Get rider profile
-- `PUT /riders/{riderId}` - Update rider profile
-- `GET /tours/{tourId}/riders/{riderId}` - Get tour rider details
+- `GET /v1/riders/profile/{profileId}` - Get rider profile
+- `PUT /v1/riders/profile/{profileId}` - Update rider profile
+- `GET /v1/tours/{tourId}/riders` - Get all riders for a tour
+- `GET /v1/tours/{tourId}/riders/{riderId}` - Get tour rider details
 
 #### Rides
-- `GET /tours/{tourId}/rides/today` - Get today's ride
-- `GET /tours/{tourId}/rides` - List all rides for tour
-- `GET /tours/{tourId}/rides/{rideId}` - Get ride details
-- `POST /tours/{tourId}/rides` - Create a new ride
-- `PUT /tours/{tourId}/rides/{rideId}` - Update ride
-- `POST /tours/{tourId}/rides/{rideId}/close` - Close ride
+- `GET /v1/tours/{tourId}/rides/today` - Get today's ride
+- `GET /v1/tours/{tourId}/rides` - List all rides for a tour
+- `GET /v1/tours/{tourId}/rides/{rideId}` - Get ride details
+- `POST /v1/tours/{tourId}/rides` - Create a new ride
+- `PUT /v1/tours/{tourId}/rides/{rideId}` - Update ride
+- `POST /v1/tours/{tourId}/rides/{rideId}/close` - Close ride
 
 #### Check-ins
-- `POST /checkins` - Create check-in
-- `GET /tours/{tourId}/rides/{rideId}/checkins` - Get ride check-ins
-- `GET /dashboard/{rideId}` - Get dashboard data for ride
+- `POST /v1/tours/{tourId}/checkins` - Create check-in
+- `GET /v1/tours/{tourId}/rides/{rideId}/checkins` - Get ride check-ins
+- `GET /v1/tours/{tourId}/rides/{rideId}/dashboard` - Get dashboard data for ride
 
 #### Users
-- `GET /users/me` - Get current user
-- `GET /tours/{tourId}/users` - List tour users
+- `GET /v1/users/me` - Get current user
+- `GET /v1/tours/{tourId}/users` - List tour users
 
 For detailed API specifications, see [docs/SolutionDesign.md](docs/SolutionDesign.md).
 

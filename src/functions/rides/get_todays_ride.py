@@ -1,29 +1,28 @@
 """
 Lambda function to get today's ride for a tour
-"""
-import json
-import os
-import sys
-from datetime import datetime, date
 
-# Add common layer to path
+Uses tour-specific Ride-{tourId} table with DateIndex GSI.
+Route: GET /v1/tours/{tourId}/rides/today
+"""
+
+import sys
+from datetime import date
+
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, not_found_response, error_response, bad_request_response
+from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, ValidationError
-from dynamodb_utils import query_items
+from dynamodb_utils import query_tour_items
 
 logger = get_logger(__name__)
-
-RIDE_TABLE = os.environ['RIDE_TABLE']
 
 
 def lambda_handler(event, context):
     """
     Get today's ride for a tour
     
-    Path parameter: tourId (e.g., TOUR2026)
+    Path parameter: tourId (e.g., India-Coast-2026)
     
     Returns:
     - 200: Today's ride found
@@ -42,37 +41,32 @@ def lambda_handler(event, context):
         try:
             validate_tour_id(tour_id)
         except ValidationError as e:
-            logger.warning(f"Invalid tour ID format: {tour_id}", exc_info=True)
             return bad_request_response(str(e))
         
         # Get today's date in ISO format
         today = date.today().isoformat()
         
-        # Query rides for this tour and date
+        # Query rides for today using DateIndex GSI
         logger.info(f"Querying rides for tour {tour_id} on {today}")
-        rides = query_items(
-            table_name=RIDE_TABLE,
-            key_condition_expression='tourId = :tourId AND begins_with(rideId, :ridePrefix)',
-            expression_attribute_values={
-                ':tourId': tour_id,
-                ':ridePrefix': f"{tour_id}#"
-            }
+        rides = query_tour_items(
+            table_type='Ride',
+            tour_id=tour_id,
+            key_condition_expression='#date = :date',
+            expression_values={':date': today},
+            expression_names={'#date': 'date'},
+            index_name='DateIndex'
         )
         
-        # Filter for today's ride
-        todays_ride = None
-        for ride in rides:
-            if ride.get('rideDate') == today:
-                todays_ride = ride
-                break
-        
-        if not todays_ride:
+        if not rides:
             logger.info(f"No ride found for tour {tour_id} on {today}")
-            return not_found_response(f"No ride scheduled for {today}")
+            return not_found_response("Ride", today)
         
-        logger.info(f"Successfully retrieved today's ride: {todays_ride['rideId']}")
+        # Return first ride for today
+        todays_ride = rides[0]
+        
+        logger.info(f"Successfully retrieved today's ride: {todays_ride.get('rideId')}")
         return success_response(todays_ride)
         
     except Exception as e:
         logger.error(f"Error getting today's ride: {str(e)}", exc_info=True)
-        return error_response(f"Failed to get today's ride: {str(e)}")
+        return internal_error_response("Failed to get today's ride")

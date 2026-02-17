@@ -44,10 +44,17 @@ test: ## Run unit tests
 test-coverage: ## Run tests with coverage report
 	pytest tests/ --cov=src --cov-report=html --cov-report=term
 
-logs: ## Tail logs for all functions
+logs: ## Tail logs for all functions (or specific: make logs FUNCTION=GetActiveTourFunction)
+ifdef FUNCTION
+	sam logs -n $(FUNCTION) --tail
+else
 	sam logs --tail
+endif
 
 logs-function: ## Tail logs for specific function (usage: make logs-function FUNCTION=GetActiveTourFunction)
+	sam logs -n $(FUNCTION) --tail
+
+logs-tail: ## Alias for logs-function (usage: make logs-tail FUNCTION=CreateCheckinFunction)
 	sam logs -n $(FUNCTION) --tail
 
 clean: ## Clean build artifacts

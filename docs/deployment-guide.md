@@ -195,8 +195,8 @@ The CI/CD workflow is defined in `.github/workflows/ci-cd.yml`.
 ### Key Features
 
 - **Manual Trigger**: Uses `workflow_dispatch` for manual execution
-- **Environment Selection**: Choose target environment (dev/test/prod) when triggering
-- **Multi-Stage Pipeline**: Test → Build → Deploy
+- **Environment Selection**: Choose target environment (dev/test/prod) when triggering — the selected environment determines which deploy job runs
+- **Multi-Stage Pipeline**: Test → Build → Deploy (to selected environment)
 - **Environment-Specific Credentials**: Uses different AWS credentials for prod
 - **Coverage Reporting**: Uploads test coverage to Codecov
 
@@ -239,16 +239,20 @@ When the CI/CD pipeline (or `sam deploy`) executes, the following AWS resources 
 
 ### Compute & API
 
-#### Lambda Functions (15)
+#### Lambda Functions (20)
 
 **Tours:**
 - `GetActiveTourFunction` - Get currently active tour
 - `GetTourFunction` - Get specific tour details
+- `ListToursFunction` - List all tours with optional status filter
+- `CreateTourFunction` - Create and provision a new tour (creates tour-specific tables)
+- `ArchiveTourFunction` - Archive a completed tour (optionally export data, delete tour tables)
 
 **Riders:**
-- `GetRiderProfileFunction` - Get rider profile
-- `UpdateRiderProfileFunction` - Update rider information
-- `GetTourRiderFunction` - Get tour rider enrollment details
+- `GetRiderProfileFunction` - Get rider profile by profile ID
+- `UpdateRiderProfileFunction` - Update rider profile
+- `GetTourRidersFunction` - Get all riders for a tour with profile data
+- `GetTourRiderByIdFunction` - Get tour rider enrollment details
 
 **Rides:**
 - `GetTodaysRideFunction` - Get today's ride
@@ -259,8 +263,8 @@ When the CI/CD pipeline (or `sam deploy`) executes, the following AWS resources 
 - `CloseRideFunction` - Close a ride
 
 **Check-ins:**
-- `CreateCheckinFunction` - Create check-in record
-- `GetRideCheckinsFunction` - Get check-ins for a ride
+- `CreateCheckInFunction` - Create check-in record
+- `GetRideCheckInsFunction` - Get check-ins for a ride
 - `GetDashboardDataFunction` - Get dashboard statistics
 
 **Users:**
@@ -271,33 +275,41 @@ When the CI/CD pipeline (or `sam deploy`) executes, the following AWS resources 
 - **CommonLayer**: Shared utilities and dependencies used across all functions
 
 #### API Gateway
-- **HTTP API**: RESTful API with 15+ endpoints
-- **15 Lambda Permissions**: API Gateway invoke permissions for each function
+- **HTTP API**: RESTful API with 20 endpoints under `/v1/` prefix
+- **20 Lambda Permissions**: API Gateway invoke permissions for each function
+- **JWT Authorizer**: Cognito-based JWT authentication (conditional, enabled when CognitoUserPoolArn is provided)
 - **Routes**: All API routes defined in template.yaml
 
 ### Data Storage
 
-#### DynamoDB Tables (6)
+#### DynamoDB Tables (Hybrid Strategy)
+
+The project uses a **hybrid table strategy**: shared tables are SAM-managed, while tour-specific tables are provisioned at runtime per tour.
+
+**Shared Tables (SAM-managed, always present):**
 
 All tables use **On-demand billing mode** for cost efficiency:
 
-- **RiderProfile** - Rider master data
+- **RiderProfile** - Rider master data (persists across tours)
   - GSI: EmailIndex (for email lookups)
   
-- **Tour** - Tour information
+- **Tour** - Tour information and lifecycle status
   - GSI: StatusIndex (for status-based queries)
+
+**Tour-Specific Tables (runtime-provisioned per tour):**
+
+Created by `CreateTourFunction` when a tour is provisioned, deleted by `ArchiveTourFunction` when archived:
+
+- **TourRider-{tourId}** - Tour enrollment mapping
+  - Links riders to a specific tour
   
-- **TourRider** - Tour enrollment mapping
-  - Links riders to specific tours
+- **Ride-{tourId}** - Daily ride details
+  - GSI: DateIndex (for date-based queries), StatusIndex (for status filtering)
   
-- **Ride** - Daily ride details
-  - GSI: DateIndex (for date-based queries)
+- **CheckIn-{tourId}** - Check-in records
+  - GSI: RideIndex (for ride-based queries)
   
-- **CheckIn** - Check-in records
-  - GSI: Multiple indexes for various query patterns
-  
-- **User** - Admin/staff user accounts
-  - Authentication and authorization data
+- **User-{tourId}** - Admin/staff user accounts for a tour
 
 #### S3 Bucket
 - **Rider Photo Storage**: Stores rider profile photos
@@ -306,7 +318,7 @@ All tables use **On-demand billing mode** for cost efficiency:
 
 ### Security & Permissions
 
-#### IAM Roles (15)
+#### IAM Roles (20)
 
 One execution role per Lambda function following least-privilege principle:
 
@@ -316,9 +328,11 @@ One execution role per Lambda function following least-privilege principle:
 - **Transparent to consumer applications** - consumers only handle JWT authentication
 
 **Example Roles:**
-- `CreateCheckinFunctionRole` - Can write to CheckIn table
-- `GetRideCheckinsFunctionRole` - Read-only access to CheckIn table
-- `UpdateRiderProfileFunctionRole` - Can update RiderProfile table
+- `CreateCheckInFunctionRole` - Can write to tour-specific CheckIn table
+- `GetRideCheckInsFunctionRole` - Read-only access to tour-specific CheckIn and Ride tables
+- `UpdateRiderProfileFunctionRole` - Can update shared RiderProfile table
+- `CreateTourFunctionRole` - Can create DynamoDB tables, write to shared Tour table
+- `ArchiveTourFunctionRole` - Can delete DynamoDB tables, write to S3 for data export
 
 > **Important**: Consumer applications don't interact with these IAM roles. Apps authenticate users via Cognito, receive JWT tokens, and include tokens in API requests. API Gateway validates tokens and invokes Lambda functions, which then use their execution roles to access AWS resources.
 
@@ -335,7 +349,7 @@ One execution role per Lambda function following least-privilege principle:
 
 ### Monitoring & Logging
 
-#### CloudWatch Log Groups (15)
+#### CloudWatch Log Groups (20)
 
 - One log group per Lambda function
 - Retention policies configured (default: 7 days)
@@ -371,20 +385,21 @@ If VPC configuration is enabled:
 
 ### Resource Summary
 
-**Total Resources Created**: ~70+ AWS resources
+**Total SAM-Managed Resources**: ~55+ AWS resources (plus additional tour-specific tables created at runtime)
 
 | Resource Type | Count | Purpose |
 |---------------|-------|---------|
-| Lambda Functions | 15 | Business logic and API handlers |
+| Lambda Functions | 20 | Business logic and API handlers |
 | Lambda Layers | 1 | Shared code and dependencies |
-| DynamoDB Tables | 6 | Data persistence |
-| S3 Buckets | 1-2 | Photo storage + deployment artifacts |
-| IAM Roles | 15 | Lambda execution permissions |
+| DynamoDB Tables (shared) | 2 | Persistent data (RiderProfile, Tour) |
+| DynamoDB Tables (per tour) | 4 per tour | Tour-scoped data (TourRider, Ride, CheckIn, User) |
+| S3 Buckets | 1 | Photo storage + archive exports |
+| IAM Roles | 20 | Lambda execution permissions |
 | API Gateway APIs | 1 | HTTP API endpoints |
-| CloudWatch Log Groups | 15 | Function logs |
-| Lambda Permissions | 15 | API Gateway invoke permissions |
+| CloudWatch Log Groups | 20 | Function logs |
+| Lambda Permissions | 20 | API Gateway invoke permissions |
 
-> **Note**: The exact resources depend on your `template.yaml` configuration. All resources are tagged with project identifiers for cost tracking and management.
+> **Note**: Tour-specific DynamoDB tables are provisioned at runtime by `CreateTourFunction` and are not included in the SAM template. The exact total depends on the number of active tours. All resources are tagged with project identifiers for cost tracking and management.
 
 ---
 

@@ -1,33 +1,32 @@
 """
 Lambda function to list all rides for a tour
-"""
-import json
-import os
-import sys
 
-# Add common layer to path
+Uses tour-specific Ride-{tourId} table (scan + optional status filter via StatusIndex GSI).
+Route: GET /v1/tours/{tourId}/rides
+"""
+
+import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, error_response, bad_request_response
+from response import success_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, ValidationError
-from dynamodb_utils import query_items
+from dynamodb_utils import scan_tour_items, query_tour_items
+from models import RideStatus
 
 logger = get_logger(__name__)
-
-RIDE_TABLE = os.environ['RIDE_TABLE']
 
 
 def lambda_handler(event, context):
     """
     List all rides for a tour (optionally filtered by status)
     
-    Path parameter: tourId (e.g., TOUR2026)
-    Query parameter: status (optional - SCHEDULED, ACTIVE, CLOSED)
+    Path parameter: tourId (e.g., India-Coast-2026)
+    Query parameter: status (optional - PLANNED, ACTIVE, COMPLETED, CLOSED)
     
     Returns:
     - 200: List of rides (may be empty)
-    - 400: Invalid tour ID
+    - 400: Invalid tour ID or status
     - 500: Server error
     """
     try:
@@ -41,37 +40,49 @@ def lambda_handler(event, context):
         try:
             validate_tour_id(tour_id)
         except ValidationError as e:
-            logger.warning(f"Invalid tour ID format: {tour_id}", exc_info=True)
             return bad_request_response(str(e))
         
         # Get optional status filter from query parameters
-        status_filter = event.get('queryStringParameters', {}).get('status') if event.get('queryStringParameters') else None
+        query_params = event.get('queryStringParameters') or {}
+        status_filter = query_params.get('status')
         
         # Validate status if provided
-        if status_filter and status_filter not in ['SCHEDULED', 'ACTIVE', 'CLOSED']:
-            return bad_request_response("Invalid status. Must be SCHEDULED, ACTIVE, or CLOSED")
-        
-        # Query all rides for this tour
-        logger.info(f"Querying rides for tour: {tour_id}")
-        rides = query_items(
-            table_name=RIDE_TABLE,
-            key_condition_expression='tourId = :tourId',
-            expression_attribute_values={
-                ':tourId': tour_id
-            }
-        )
-        
-        # Filter by status if specified
         if status_filter:
-            rides = [ride for ride in rides if ride.get('status') == status_filter]
-            logger.info(f"Filtered to {len(rides)} rides with status {status_filter}")
+            valid_statuses = [s.value for s in RideStatus]
+            if status_filter not in valid_statuses:
+                return bad_request_response(
+                    f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+                )
         
-        # Sort rides by date (rideDate field)
-        rides.sort(key=lambda r: r.get('rideDate', ''))
+        logger.info(f"Listing rides for tour: {tour_id}, status filter: {status_filter or 'all'}")
+        
+        if status_filter:
+            # Use StatusIndex GSI for efficient status filtering
+            rides = query_tour_items(
+                table_type='Ride',
+                tour_id=tour_id,
+                key_condition_expression='#status = :status',
+                expression_values={':status': status_filter},
+                expression_names={'#status': 'status'},
+                index_name='StatusIndex'
+            )
+        else:
+            # Scan all rides (table is tour-scoped, so this is bounded)
+            rides = scan_tour_items(
+                table_type='Ride',
+                tour_id=tour_id
+            )
+        
+        # Sort rides by date
+        rides.sort(key=lambda r: r.get('date', ''))
         
         logger.info(f"Successfully retrieved {len(rides)} rides for tour {tour_id}")
-        return success_response(rides)
+        return success_response({
+            'rides': rides,
+            'count': len(rides),
+            'tourId': tour_id
+        })
         
     except Exception as e:
         logger.error(f"Error listing rides: {str(e)}", exc_info=True)
-        return error_response(f"Failed to list rides: {str(e)}")
+        return internal_error_response("Failed to list rides")
