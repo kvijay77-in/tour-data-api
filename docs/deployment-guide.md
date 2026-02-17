@@ -2,462 +2,283 @@
 
 [← Back to README](../README.md)
 
-This guide covers CI/CD pipeline configuration, GitHub Actions setup, multi-environment deployment, and AWS resources inventory.
+This guide walks you through setting up and deploying the Tour Data API — the backend system that powers rider check-ins, tour management, and ride tracking for your cycling tours. Written for tour organizers and non-developer administrators.
 
 ## Table of Contents
-- [CI/CD Pipeline](#cicd-pipeline)
-- [Setting up GitHub Actions](#setting-up-github-actions)
-- [Workflow File](#workflow-file)
-- [AWS Resources Created by Deployment](#aws-resources-created-by-deployment)
-- [Environments](#environments)
+
+- [What Is This System?](#what-is-this-system)
+- [What You Need Before Starting](#what-you-need-before-starting)
+- [One-Time Setup (Do This Once)](#one-time-setup-do-this-once)
+  - [Step 1: Set Up AWS Credentials](#step-1-set-up-aws-credentials)
+  - [Step 2: Set Up User Authentication (Cognito)](#step-2-set-up-user-authentication-cognito)
+  - [Step 3: Configure Deployment Settings](#step-3-configure-deployment-settings)
+  - [Step 4: Add Secrets to GitHub](#step-4-add-secrets-to-github)
+- [How to Deploy](#how-to-deploy)
+  - [Option A: Deploy from GitHub (Recommended)](#option-a-deploy-from-github-recommended)
+  - [Option B: Deploy from Your Computer](#option-b-deploy-from-your-computer)
+- [Environments Explained](#environments-explained)
+- [What Happens When You Deploy](#what-happens-when-you-deploy)
+- [After Deployment: Getting Your API URL](#after-deployment-getting-your-api-url)
+- [Common Questions](#common-questions)
+- [Troubleshooting](#troubleshooting)
+- [AWS Resources Reference](#aws-resources-reference)
 
 ---
 
-## CI/CD Pipeline
+## What Is This System?
 
-The project includes a GitHub Actions workflow for continuous integration and deployment.
+The Tour Data API is the **backend server** that your check-in app and other tour applications talk to. It handles:
 
-> **Note**: The pipeline is configured for **manual triggering only**. It will not run automatically on code commits.
+- **Tour setup** — Creating tours, adding riders, defining daily rides and stages
+- **Rider check-ins** — Recording when riders arrive at checkpoints (via QR scan, manual entry, or marking Not Riding / Quit Riding)
+- **Live dashboards** — Showing real-time ride status and statistics
+- **User access** — Controlling who can use the system (administrators, pit-stop crew, hotel staff)
 
-### How to Trigger the Pipeline
-
-1. Go to your GitHub repository → **Actions** tab
-2. Select the **CI/CD Pipeline** workflow from the left sidebar
-3. Click **Run workflow** button
-4. Select the target environment (dev, test, or prod)
-5. Click **Run workflow** to start the pipeline
-
-### Pipeline Stages
-
-When manually triggered, the pipeline executes these stages:
-
-#### 1. Test Stage
-
-- Runs linters (pylint, black)
-- Executes unit tests with coverage
-- Uploads coverage reports to Codecov
-
-**What it does**:
-```bash
-# Install dependencies
-pip install -r requirements-dev.txt
-
-# Run linter
-pylint src/layers/common/python/*.py
-
-# Check code formatting
-black --check src/
-
-# Run tests with coverage
-pytest --cov=src --cov-report=xml
-```
-
-#### 2. Build Stage
-
-- Validates SAM template
-- Builds application artifacts
-
-**What it does**:
-```bash
-# Validate template syntax
-sam validate
-
-# Build application
-sam build
-```
-
-#### 3. Deploy Stage
-
-Deploys to the chosen environment (dev, test, or prod):
-- Provisions/updates all AWS resources
-- Applies resource tags for cost tracking
-- Outputs API endpoint URL
-
-**What it does**:
-```bash
-# Deploy to selected environment
-sam deploy \
-  --config-env $ENVIRONMENT \
-  --no-confirm-changeset \
-  --no-fail-on-empty-changeset
-```
+**"Deploying"** means putting this system live on Amazon Web Services (AWS) so your apps can connect to it over the internet. Think of it like turning on the engine — the code is already written, deployment is what makes it run.
 
 ---
 
-## Setting up GitHub Actions
+## What You Need Before Starting
 
-To enable the CI/CD pipeline, you need to configure secrets in your GitHub repository.
+Before your first deployment, make sure you have:
 
-### Required Secrets
+| Requirement | What It Is | How to Get It |
+|---|---|---|
+| **AWS Account** | Your Amazon cloud account where the system runs | [Create one at aws.amazon.com](https://aws.amazon.com/) |
+| **GitHub Account** | Where the project code is stored | [Create one at github.com](https://github.com/) |
+| **AWS CLI** | A command-line tool to talk to AWS | [Install guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) |
+| **SAM CLI** | A tool that packages and deploys the system | [Install guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) |
+| **Python 3.11+** | The programming language the system uses | [Download from python.org](https://www.python.org/downloads/) |
 
-Add these secrets to your GitHub repository (Settings → Secrets and variables → Actions):
-
-#### For Dev/Test Environments
-
-- `AWS_ACCESS_KEY_ID` - AWS access key with deployment permissions
-- `AWS_SECRET_ACCESS_KEY` - AWS secret key
-
-#### For Production Environment
-
-- `AWS_ACCESS_KEY_ID_PROD` - AWS access key for production account
-- `AWS_SECRET_ACCESS_KEY_PROD` - AWS secret key for production
-
-> **Best Practice**: Use separate AWS accounts for production to isolate environments and improve security.
-
-### Create IAM User for GitHub Actions
-
-Create a dedicated IAM user with the necessary permissions for deployment:
-
-```bash
-# Create deployment user
-aws iam create-user --user-name github-actions-deployer
-```
-
-#### Attach Required Policies
-
-SAM deployment requires multiple permissions. Attach these managed policies:
-
-```bash
-# CloudFormation permissions (create/update stacks)
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
-
-# IAM permissions (create Lambda execution roles)
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/IAMFullAccess
-
-# S3 permissions (deployment artifacts)
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
-
-# Lambda permissions (create/update functions)
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AWSLambda_FullAccess
-
-# API Gateway permissions (create/update APIs)
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator
-
-# DynamoDB permissions (create/update tables)
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
-```
-
-#### Create Access Keys
-
-```bash
-# Create access keys for the user
-aws iam create-access-key --user-name github-actions-deployer
-```
-
-Save the `AccessKeyId` and `SecretAccessKey` from the output. Add these to your GitHub secrets.
-
-### Alternative: Create Custom Policy (Least Privilege)
-
-For better security, create a custom policy with only the required permissions:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "cloudformation:*",
-        "s3:*",
-        "lambda:*",
-        "apigateway:*",
-        "dynamodb:*",
-        "iam:CreateRole",
-        "iam:DeleteRole",
-        "iam:GetRole",
-        "iam:PassRole",
-        "iam:AttachRolePolicy",
-        "iam:DetachRolePolicy",
-        "iam:PutRolePolicy",
-        "iam:DeleteRolePolicy",
-        "logs:CreateLogGroup",
-        "logs:DeleteLogGroup",
-        "logs:PutRetentionPolicy"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
+> **Tip**: If you have a technical person helping you, they likely already have AWS CLI, SAM CLI, and Python installed. You mainly need the AWS account and GitHub access.
 
 ---
 
-## Workflow File
+## One-Time Setup (Do This Once)
 
-The CI/CD workflow is defined in `.github/workflows/ci-cd.yml`.
+These steps only need to be done once. After this initial setup, deploying updates is just a few clicks.
 
-### Key Features
+### Step 1: Set Up AWS Credentials
 
-- **Manual Trigger**: Uses `workflow_dispatch` for manual execution
-- **Environment Selection**: Choose target environment (dev/test/prod) when triggering — the selected environment determines which deploy job runs
-- **Multi-Stage Pipeline**: Test → Build → Deploy (to selected environment)
-- **Environment-Specific Credentials**: Uses different AWS credentials for prod
-- **Coverage Reporting**: Uploads test coverage to Codecov
+Your computer needs permission to create resources in your AWS account. See the [AWS Setup Guide](aws-setup-guide.md) for detailed instructions.
 
-### Workflow Structure
+**Quick check** — Run this command in your terminal to see if it's already configured:
 
-```yaml
-name: CI/CD Pipeline
-
-on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to deploy to'
-        required: true
-        default: 'dev'
-        type: choice
-        options:
-          - dev
-          - test
-          - prod
-
-jobs:
-  test:
-    # Run tests and linting
-  
-  build:
-    # Build application
-  
-  deploy:
-    # Deploy to selected environment
+```bash
+aws sts get-caller-identity
 ```
 
-For the complete workflow configuration, see [.github/workflows/ci-cd.yml](../.github/workflows/ci-cd.yml).
+If you see your account ID, you're good. If you get an error, follow the [AWS Setup Guide](aws-setup-guide.md).
 
----
+### Step 2: Set Up User Authentication (Cognito)
 
-## AWS Resources Created by Deployment
+AWS Cognito manages user logins for the check-in app. You need to create a "User Pool" (think of it as a user directory) and an "App Client" (the connection between the app and the user directory).
 
-When the CI/CD pipeline (or `sam deploy`) executes, the following AWS resources are automatically created/updated:
+#### 2a. Create a User Pool
 
-### Compute & API
+Run this command in your terminal:
 
-#### Lambda Functions (20)
+```bash
+aws cognito-idp create-user-pool \
+  --pool-name tour-data-api-users \
+  --auto-verified-attributes email \
+  --username-attributes email
+```
 
-**Tours:**
-- `GetActiveTourFunction` - Get currently active tour
-- `GetTourFunction` - Get specific tour details
-- `ListToursFunction` - List all tours with optional status filter
-- `CreateTourFunction` - Create and provision a new tour (creates tour-specific tables)
-- `ArchiveTourFunction` - Archive a completed tour (optionally export data, delete tour tables)
+**Save the `Id` value** from the output — it looks like `us-east-1_AbCdEfGhI`. This is your **User Pool ID**.
 
-**Riders:**
-- `GetRiderProfileFunction` - Get rider profile by profile ID
-- `UpdateRiderProfileFunction` - Update rider profile
-- `GetTourRidersFunction` - Get all riders for a tour with profile data
-- `GetTourRiderByIdFunction` - Get tour rider enrollment details
+#### 2b. Create an App Client
 
-**Rides:**
-- `GetTodaysRideFunction` - Get today's ride
-- `GetRideFunction` - Get specific ride details
-- `ListRidesFunction` - List all rides for a tour
-- `CreateRideFunction` - Create a new ride
-- `UpdateRideFunction` - Update ride details
-- `CloseRideFunction` - Close a ride
+Replace `<pool-id>` with the User Pool ID from step 2a:
 
-**Check-ins:**
-- `CreateCheckInFunction` - Create check-in record
-- `GetRideCheckInsFunction` - Get check-ins for a ride
-- `GetDashboardDataFunction` - Get dashboard statistics
+```bash
+aws cognito-idp create-user-pool-client \
+  --user-pool-id <pool-id> \
+  --client-name tour-check-in-app \
+  --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH \
+  --no-generate-secret
+```
 
-**Users:**
-- `GetCurrentUserFunction` - Get current authenticated user
-- `ListTourUsersFunction` - List users with tour access
+**Save the `ClientId` value** from the output — it looks like `1a2b3c4d5e6f7g8h9i0j`. This is your **App Client ID**.
 
-#### Lambda Layer
-- **CommonLayer**: Shared utilities and dependencies used across all functions
+#### 2c. Build Your Cognito ARN
 
-#### API Gateway
-- **HTTP API**: RESTful API with 20 endpoints under `/v1/` prefix
-- **20 Lambda Permissions**: API Gateway invoke permissions for each function
-- **JWT Authorizer**: Cognito-based JWT authentication (conditional, enabled when CognitoUserPoolArn is provided)
-- **Routes**: All API routes defined in template.yaml
+You'll need the full ARN (Amazon Resource Name) for deployment. Build it using this pattern:
 
-### Data Storage
+```
+arn:aws:cognito-idp:<region>:<account-id>:userpool/<pool-id>
+```
 
-#### DynamoDB Tables (Hybrid Strategy)
+**Example**: If your region is `us-east-1`, your account ID is `123456789012`, and your pool ID is `us-east-1_AbCdEfGhI`, your ARN is:
 
-The project uses a **hybrid table strategy**: shared tables are SAM-managed, while tour-specific tables are provisioned at runtime per tour.
+```
+arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI
+```
 
-**Shared Tables (SAM-managed, always present):**
+> **Where to find your Account ID**: Run `aws sts get-caller-identity` — it shows your 12-digit Account number.
 
-All tables use **On-demand billing mode** for cost efficiency:
+#### Summary: Save These Two Values
 
-- **RiderProfile** - Rider master data (persists across tours)
-  - GSI: EmailIndex (for email lookups)
-  
-- **Tour** - Tour information and lifecycle status
-  - GSI: StatusIndex (for status-based queries)
+You will need them for deployment:
 
-**Tour-Specific Tables (runtime-provisioned per tour):**
+| Value | Example | Where It Goes |
+|---|---|---|
+| **Cognito User Pool ARN** | `arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI` | `CognitoUserPoolArn` parameter |
+| **App Client ID** | `1a2b3c4d5e6f7g8h9i0j` | `CognitoAppClientId` parameter |
 
-Created by `CreateTourFunction` when a tour is provisioned, deleted by `ArchiveTourFunction` when archived:
+### Step 3: Configure Deployment Settings
 
-- **TourRider-{tourId}** - Tour enrollment mapping
-  - Links riders to a specific tour
-  
-- **Ride-{tourId}** - Daily ride details
-  - GSI: DateIndex (for date-based queries), StatusIndex (for status filtering)
-  
-- **CheckIn-{tourId}** - Check-in records
-  - GSI: RideIndex (for ride-based queries)
-  
-- **User-{tourId}** - Admin/staff user accounts for a tour
+Deployment settings live in the `samconfig.toml` file at the root of the project. This file tells the deployment tool which AWS region to use, what to name your resources, and which parameters to pass.
 
-#### S3 Bucket
-- **Rider Photo Storage**: Stores rider profile photos
-  - Lifecycle policies for cost optimization
-  - Versioning enabled for data protection
+Open `samconfig.toml` and update the `parameter_overrides` line for **each environment** you plan to use. Add your Cognito values:
 
-### Security & Permissions
-
-#### IAM Roles (20)
-
-One execution role per Lambda function following least-privilege principle:
-
-**Role Responsibilities:**
-- Define AWS resource access (DynamoDB, S3, CloudWatch)
-- Automatically assumed by Lambda during execution
-- **Transparent to consumer applications** - consumers only handle JWT authentication
-
-**Example Roles:**
-- `CreateCheckInFunctionRole` - Can write to tour-specific CheckIn table
-- `GetRideCheckInsFunctionRole` - Read-only access to tour-specific CheckIn and Ride tables
-- `UpdateRiderProfileFunctionRole` - Can update shared RiderProfile table
-- `CreateTourFunctionRole` - Can create DynamoDB tables, write to shared Tour table
-- `ArchiveTourFunctionRole` - Can delete DynamoDB tables, write to S3 for data export
-
-> **Important**: Consumer applications don't interact with these IAM roles. Apps authenticate users via Cognito, receive JWT tokens, and include tokens in API requests. API Gateway validates tokens and invokes Lambda functions, which then use their execution roles to access AWS resources.
-
-#### IAM Policies
-
-- Least-privilege policies attached to each execution role
-- Policies define specific permissions (GetItem, PutItem, Query, etc.)
-
-#### API Gateway Authorizer
-
-- JWT authorizer connected to Cognito
-- Validates JWT tokens from consumer applications
-- Rejects requests with invalid/expired tokens
-
-### Monitoring & Logging
-
-#### CloudWatch Log Groups (20)
-
-- One log group per Lambda function
-- Retention policies configured (default: 7 days)
-- Contains execution logs, errors, and custom logging
-
-#### CloudWatch Alarms (Optional)
-
-Can be added for monitoring:
-- Lambda errors and throttles
-- API Gateway 4xx/5xx errors
-- DynamoDB throttling events
-
-### Networking (Optional)
-
-If VPC configuration is enabled:
-- **VPC Integration**: Lambda functions with VPC access
-- **Security Groups**: Control inbound/outbound traffic
-- **Subnets**: Private subnets for Lambda functions
-
-### CloudFormation
-
-#### CloudFormation Stack
-
-- **Stack Name**: `tour-data-api` (or custom name from samconfig.toml)
-- **Stack Status**: Tracks deployment state
-- **Change Sets**: Previews changes before deployment
-
-#### SAM Deployment Bucket
-
-- S3 bucket for storing deployment artifacts
-- Created automatically by SAM CLI
-- Named: `aws-sam-cli-managed-<region>-<hash>`
-
-### Resource Summary
-
-**Total SAM-Managed Resources**: ~55+ AWS resources (plus additional tour-specific tables created at runtime)
-
-| Resource Type | Count | Purpose |
-|---------------|-------|---------|
-| Lambda Functions | 20 | Business logic and API handlers |
-| Lambda Layers | 1 | Shared code and dependencies |
-| DynamoDB Tables (shared) | 2 | Persistent data (RiderProfile, Tour) |
-| DynamoDB Tables (per tour) | 4 per tour | Tour-scoped data (TourRider, Ride, CheckIn, User) |
-| S3 Buckets | 1 | Photo storage + archive exports |
-| IAM Roles | 20 | Lambda execution permissions |
-| API Gateway APIs | 1 | HTTP API endpoints |
-| CloudWatch Log Groups | 20 | Function logs |
-| Lambda Permissions | 20 | API Gateway invoke permissions |
-
-> **Note**: Tour-specific DynamoDB tables are provisioned at runtime by `CreateTourFunction` and are not included in the SAM template. The exact total depends on the number of active tours. All resources are tagged with project identifiers for cost tracking and management.
-
----
-
-## Environments
-
-The project supports three deployment environments with isolated resources.
-
-### Environment Types
-
-- **dev** (default): Development environment
-- **test**: Testing/staging environment
-- **prod**: Production environment
-
-### Environment Configuration
-
-Environments are configured in [samconfig.toml](../samconfig.toml).
-
-**Example configuration:**
+**For development (the `[default.deploy.parameters]` section):**
 
 ```toml
-# Development environment (default)
 [default.deploy.parameters]
-stack_name = "tour-data-api"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
-parameter_overrides = "Environment=dev"
-
-# Test environment
-[test.deploy.parameters]
-stack_name = "tour-data-api-test"
-capabilities = "CAPABILITY_IAM"
-confirm_changeset = true
-resolve_s3 = true
-parameter_overrides = "Environment=test"
-
-# Production environment
-[prod.deploy.parameters]
-stack_name = "tour-data-api-prod"
-capabilities = "CAPABILITY_IAM"
-confirm_changeset = false
-resolve_s3 = true
-parameter_overrides = "Environment=prod"
+parameter_overrides = "Environment=dev CognitoUserPoolArn=arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI CognitoAppClientId=1a2b3c4d5e6f7g8h9i0j"
 ```
 
-### Environment-Specific Configurations
+**For test (the `[test.deploy.parameters]` section):**
 
-Each environment has:
-- **Separate CloudFormation stack** - Independent resource lifecycle
-- **Environment tag** - All resources tagged with `Environment: dev/test/prod`
-- **Separate AWS accounts** (recommended for prod) - Enhanced security isolation
-- **Different stack names** - Prevents resource conflicts
-- **Environment parameter** - Passed during deployment:
-  ```bash
-  sam deploy --parameter-overrides Environment=prod
-  ```
+```toml
+[test.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+parameter_overrides = "Environment=test CognitoUserPoolArn=arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI CognitoAppClientId=1a2b3c4d5e6f7g8h9i0j"
+```
 
-### Deploying to Different Environments
+**For production (the `[prod.deploy.parameters]` section):**
+
+```toml
+[prod.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+parameter_overrides = "Environment=prod CognitoUserPoolArn=arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_PrOdPoOl CognitoAppClientId=prodclientid123"
+```
+
+> **Best Practice**: Use a **separate Cognito User Pool** for production so test users and real users don't mix.
+
+#### Optional Parameters
+
+You can also add these optional values to `parameter_overrides` for cost tracking:
+
+| Parameter | Purpose | Example |
+|---|---|---|
+| `Owner` | Who is responsible for these resources | `Owner=\"Tour Operations Team\"` |
+| `CostCenter` | For billing/cost allocation | `CostCenter=\"CC-1234\"` |
+| `SubscriptionId` | Your tracking identifier | `SubscriptionId=\"sub-001\"` |
+
+**Example with all parameters:**
+
+```toml
+parameter_overrides = "Environment=prod CognitoUserPoolArn=arn:aws:cognito-idp:... CognitoAppClientId=abc123 Owner=\"Tour Ops\" CostCenter=\"CC-5678\" SubscriptionId=\"sub-001\""
+```
+
+### Step 4: Add Secrets to GitHub
+
+For the automated deployment pipeline to work, GitHub needs your AWS credentials stored as secrets (encrypted values that only the pipeline can read).
+
+#### How to Add Secrets
+
+1. Go to your GitHub repository in your web browser
+2. Click **Settings** (top menu bar, far right)
+3. In the left sidebar, click **Secrets and variables** → **Actions**
+4. Click **New repository secret**
+5. Add each secret listed below (one at a time)
+
+#### Required Secrets
+
+| Secret Name | Value | Used For |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID` | Your AWS access key | Dev and test deployments |
+| `AWS_SECRET_ACCESS_KEY` | Your AWS secret key | Dev and test deployments |
+
+#### Additional Secrets for Production
+
+If you use a separate AWS account for production (recommended):
+
+| Secret Name | Value | Used For |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID_PROD` | Production AWS access key | Production deployments only |
+| `AWS_SECRET_ACCESS_KEY_PROD` | Production AWS secret key | Production deployments only |
+
+> **Where to get AWS access keys**: See the [Creating an AWS Deployment User](#creating-an-aws-deployment-user) section below.
+
+---
+
+## How to Deploy
+
+There are two ways to deploy. Option A (GitHub) is recommended for most users.
+
+### Option A: Deploy from GitHub (Recommended)
+
+This is the simplest method — you click a few buttons on GitHub and the system takes care of everything: running tests, building the application, and deploying it to AWS.
+
+#### Step-by-Step Instructions
+
+**1. Open the Actions page**
+
+Go to your GitHub repository and click the **Actions** tab in the top navigation bar.
+
+**2. Select the pipeline**
+
+In the left sidebar, you'll see a list of workflows. Click **CI/CD Pipeline**.
+
+**3. Start the deployment**
+
+Click the **Run workflow** button (blue button on the right side).
+
+A small dropdown will appear with these options:
+
+- **Branch**: Leave as `main` (this is the latest stable code)
+- **Environment to deploy to**: Select one of:
+  - `dev` — For development and testing
+  - `test` — For staging and pre-production verification
+  - `prod` — For the live production system
+
+**4. Confirm and run**
+
+Click the green **Run workflow** button to start.
+
+**5. Monitor progress**
+
+The pipeline will appear as a new entry in the workflow runs list. Click on it to watch progress. You'll see three stages:
+
+| Stage | What It Does | Duration |
+|---|---|---|
+| **Run Tests** | Checks code quality and runs automated tests | ~1-2 minutes |
+| **Build Application** | Validates the configuration and packages the code | ~1-2 minutes |
+| **Deploy to [environment]** | Creates/updates all AWS resources and publishes the API | ~3-5 minutes |
+
+A green checkmark (✓) means success. A red X means something went wrong — see [Troubleshooting](#troubleshooting).
+
+**6. Get your API URL**
+
+After successful deployment, the API endpoint URL appears in the deploy job output. See [After Deployment: Getting Your API URL](#after-deployment-getting-your-api-url).
+
+### Option B: Deploy from Your Computer
+
+If you prefer to deploy directly from your terminal (or need to deploy without GitHub Actions), you can use the SAM CLI.
+
+#### First-Time Deploy
+
+```bash
+# 1. Build the application
+sam build
+
+# 2. Deploy to dev environment
+sam deploy
+```
+
+The tool will show you a summary of what it's about to create and ask for confirmation. Type `y` to proceed.
+
+#### Deploy to a Specific Environment
 
 ```bash
 # Deploy to dev (default)
@@ -468,54 +289,335 @@ sam deploy --config-env test
 
 # Deploy to production
 sam deploy --config-env prod
-
-# Or use Make commands
-make deploy          # dev
-make deploy-test     # test
-make deploy-prod     # prod
 ```
 
-### Cost Tracking by Environment
+#### Using Make Commands (Shortcut)
 
-All resources are automatically tagged with their environment, enabling:
+If you have `make` installed, these shortcuts are available:
 
-- **Separate cost analysis** per environment in AWS Cost Explorer
-- **Budget alerts** specific to production resources
-- **Easy identification** of development vs production costs
-- **Cost attribution** to specific teams or projects
-
-**Example: View costs by environment**
 ```bash
-# Use AWS Cost Explorer
-# Filter by Tag: Environment = prod
-
-# Or use AWS CLI
-aws ce get-cost-and-usage \
-  --time-period Start=2026-01-01,End=2026-01-31 \
-  --granularity MONTHLY \
-  --metrics UnblendedCost \
-  --filter file://cost-filter.json
+make deploy          # Build and deploy to dev
+make deploy-test     # Build and deploy to test
+make deploy-prod     # Build and deploy to prod (asks for confirmation)
 ```
 
-See [Infrastructure Guide → Resource Tagging Strategy](infrastructure-guide.md#resource-tagging-strategy) for details on using tags for cost tracking.
+---
 
-### Best Practices
+## Environments Explained
 
-1. **Use separate AWS accounts for production** - Enhanced security and cost isolation
-2. **Tag all resources** - Enable cost tracking and resource management
-3. **Test in dev/test first** - Never deploy directly to production
-4. **Use different credentials** - Prod should use separate AWS credentials
-5. **Enable change confirmation** - Review changes before applying in production
-6. **Monitor production closely** - Set up CloudWatch alarms and budgets
-7. **Backup production data** - Enable DynamoDB point-in-time recovery for prod
+The system supports three separate environments. Each is completely independent — they have their own databases, their own API URL, and their own resources. Changes to one environment do not affect the others.
+
+| Environment | Purpose | When to Use |
+|---|---|---|
+| **dev** | Development and experimentation | When building new features or testing changes |
+| **test** | Staging and verification | Before going live — verify everything works with realistic data |
+| **prod** | Live production system | The real system your tour staff and riders use during a tour |
+
+**How they stay separate**: Each environment creates its own set of AWS resources with a unique name. For example:
+- Dev stack: `tour-data-api` → API at `https://abc123.execute-api.us-east-1.amazonaws.com/dev/`
+- Test stack: `tour-data-api-test` → API at `https://def456.execute-api.us-east-1.amazonaws.com/test/`
+- Prod stack: `tour-data-api-prod` → API at `https://ghi789.execute-api.us-east-1.amazonaws.com/prod/`
+
+> **Recommendation**: Always deploy and verify changes in **dev** or **test** before deploying to **prod**.
+
+---
+
+## What Happens When You Deploy
+
+When you trigger a deployment (whether from GitHub or your computer), the system automatically:
+
+### Stage 1: Tests (automated, ~1-2 min)
+
+Runs all automated checks to make sure nothing is broken:
+- Code quality checks (linting)
+- Code formatting verification
+- Automated unit tests
+
+If any test fails, deployment **stops** and nothing changes in your live system.
+
+### Stage 2: Build (~1-2 min)
+
+Packages the application code:
+- Validates the infrastructure configuration
+- Bundles all 20 API functions with their dependencies
+- Prepares everything for upload to AWS
+
+### Stage 3: Deploy to AWS (~3-5 min)
+
+Creates or updates all the required resources in your AWS account:
+
+**What gets created (first deployment):**
+
+- **1 API Gateway** — The "front door" that receives requests from your apps. This gives you your API URL.
+- **20 Lambda Functions** — The business logic that processes each request (managing tours, riders, rides, check-ins, and users).
+- **1 Shared Code Layer** — Common utilities shared across all functions.
+- **2 Database Tables** — `RiderProfile` (rider personal data) and `Tour` (tour details) — these persist across tours.
+- **1 S3 Storage Bucket** — For rider photos and archived tour data.
+- **20 Security Roles** — Each function gets only the permissions it needs (e.g., the check-in function can write check-in records but can't delete tours).
+- **20 Log Groups** — For monitoring and debugging.
+- **JWT Authentication** — Connects to your Cognito User Pool so only authorized users can access the API.
+
+**What gets created later (when you create a tour via the API):**
+
+When you use the API to create a new tour (e.g., "India-Coast-2026"), the system automatically creates 4 additional database tables just for that tour:
+- `TourRider-India-Coast-2026` — Rider enrollment for this tour
+- `Ride-India-Coast-2026` — Daily rides and routes
+- `CheckIn-India-Coast-2026` — Check-in records
+- `User-India-Coast-2026` — Staff accounts for this tour
+
+When the tour is over and archived, these tables can be exported as a backup and then deleted to save costs.
+
+**What happens on subsequent deployments:**
+
+Only things that changed are updated. If you add a new feature, only the affected functions are updated. Databases and stored data are **never deleted** during updates.
+
+---
+
+## After Deployment: Getting Your API URL
+
+Your API URL is the address your check-in app and other tools use to connect to the system.
+
+### From GitHub Actions
+
+1. After deployment completes, click on the completed **Deploy to [environment]** job
+2. Expand the **Build and Deploy** step
+3. Look for the `api_endpoint` value in the output
+
+### From Your Terminal
+
+After deploying with `sam deploy`, run:
+
+```bash
+# For dev
+aws cloudformation describe-stacks \
+  --stack-name tour-data-api \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
+  --output text
+
+# For test
+aws cloudformation describe-stacks \
+  --stack-name tour-data-api-test \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
+  --output text
+
+# For prod
+aws cloudformation describe-stacks \
+  --stack-name tour-data-api-prod \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
+  --output text
+```
+
+### Testing the API
+
+Once you have the URL, verify it's working:
+
+```bash
+# Replace <api-url> with your actual API URL
+curl <api-url>/v1/tours
+```
+
+You should get a JSON response. If you get an "Unauthorized" error, that's expected — it means authentication is working. You'll need a JWT token from Cognito to access the API. See [AWS Setup Guide → Get JWT Token for Testing](aws-setup-guide.md#5-get-jwt-token-for-testing).
+
+---
+
+## Common Questions
+
+**Q: How long does a deployment take?**
+A: About 5-10 minutes total (tests + build + deploy). The first deployment takes slightly longer because everything is being created from scratch.
+
+**Q: Will deployment affect my existing data?**
+A: No. Deployments only update the application code and infrastructure configuration. Your tour data, rider profiles, and check-in records are preserved.
+
+**Q: Can I roll back if something goes wrong?**
+A: Yes. AWS CloudFormation keeps track of every deployment. If a deployment fails partway through, it automatically rolls back to the previous working state.
+
+**Q: How much does it cost to run?**
+A: The system uses a "pay-per-use" model. For a typical cycling tour (~100 riders, 7-8 rides), estimated costs are very low (under $5/month). See the [Infrastructure Guide](infrastructure-guide.md) for detailed cost estimates.
+
+**Q: Can I deploy to multiple environments at the same time?**
+A: Yes. Each environment is independent. You could deploy to `dev` and `prod` simultaneously without them affecting each other.
+
+**Q: Do I need to deploy every time I create a new tour?**
+A: No. Tour creation happens through the API itself — once the system is deployed, you create tours by sending a request to `POST /v1/tours`. Deployment is only needed when the application code changes.
+
+---
+
+## Troubleshooting
+
+### Deployment Failed at "Run Tests"
+
+**What it means**: An automated test encountered an error.
+
+**What to do**:
+1. Click on the failed job in GitHub Actions
+2. Read the error message — it usually tells you exactly what failed
+3. If you recently changed code, review your changes
+4. Ask your developer to investigate the test failure
+
+### Deployment Failed at "Build"
+
+**What it means**: The configuration file (template.yaml) has an error.
+
+**What to do**:
+1. Click on the failed job to see the error details
+2. Common cause: syntax errors in configuration files
+3. Run `sam validate --lint` locally to check for errors
+
+### Deployment Failed at "Deploy"
+
+**What it means**: AWS couldn't create or update a resource.
+
+**What to do**:
+1. Check the error message in the deploy output
+2. Common causes:
+   - **Invalid Cognito ARN**: Double-check your `CognitoUserPoolArn` value in samconfig.toml
+   - **Missing permissions**: The AWS user needs sufficient permissions (see [Creating an AWS Deployment User](#creating-an-aws-deployment-user))
+   - **Resource limit**: You may have hit an AWS service limit — contact AWS support
+
+### "Unauthorized" Error When Calling the API
+
+**What it means**: The API is working but requires authentication.
+
+**What to do**: Get a JWT token from Cognito and include it in your request. See [AWS Setup Guide → Get JWT Token for Testing](aws-setup-guide.md#5-get-jwt-token-for-testing).
+
+### "Stack already exists" Error
+
+**What it means**: A deployment with the same name already exists.
+
+**What to do**: This is usually fine — subsequent deployments update the existing stack. If you need to completely start over:
+
+```bash
+# Delete the existing stack (WARNING: this deletes all resources)
+sam delete --stack-name tour-data-api
+```
+
+---
+
+## Creating an AWS Deployment User
+
+For the GitHub Actions pipeline (and for manual deployments from your terminal), you need an AWS user that has permission to create and manage the required resources.
+
+### Create the User
+
+```bash
+aws iam create-user --user-name github-actions-deployer
+```
+
+### Attach Permissions
+
+The deployment user needs permissions for CloudFormation, Lambda, DynamoDB, API Gateway, S3, and IAM. Attach these policies:
+
+```bash
+# CloudFormation — create/update deployment stacks
+aws iam attach-user-policy --user-name github-actions-deployer \
+  --policy-arn arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+
+# IAM — create execution roles for Lambda functions
+aws iam attach-user-policy --user-name github-actions-deployer \
+  --policy-arn arn:aws:iam::aws:policy/IAMFullAccess
+
+# S3 — upload deployment packages
+aws iam attach-user-policy --user-name github-actions-deployer \
+  --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+# Lambda — create/update functions
+aws iam attach-user-policy --user-name github-actions-deployer \
+  --policy-arn arn:aws:iam::aws:policy/AWSLambda_FullAccess
+
+# API Gateway — create/update API endpoints
+aws iam attach-user-policy --user-name github-actions-deployer \
+  --policy-arn arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator
+
+# DynamoDB — create/update database tables
+aws iam attach-user-policy --user-name github-actions-deployer \
+  --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+```
+
+### Generate Access Keys
+
+```bash
+aws iam create-access-key --user-name github-actions-deployer
+```
+
+This outputs an `AccessKeyId` and `SecretAccessKey`. **Save both values immediately** — the secret key is only shown once.
+
+These are the values you add to GitHub Secrets in [Step 4](#step-4-add-secrets-to-github):
+- `AccessKeyId` → GitHub secret `AWS_ACCESS_KEY_ID`
+- `SecretAccessKey` → GitHub secret `AWS_SECRET_ACCESS_KEY`
+
+> **Security Note**: For production, create a separate deployment user with separate access keys and store them as `AWS_ACCESS_KEY_ID_PROD` and `AWS_SECRET_ACCESS_KEY_PROD` in GitHub Secrets. This way, compromised dev credentials can't affect production.
+
+---
+
+## AWS Resources Reference
+
+This is a detailed inventory of everything the deployment creates in your AWS account. You don't need to understand all of this — it's here for reference and for anyone helping you manage the system.
+
+### Resource Summary
+
+| Resource Type | Count | What It Does |
+|---|---|---|
+| API Gateway (HTTP API) | 1 | Receives requests from your apps |
+| Lambda Functions | 20 | Processes each type of request |
+| Lambda Layer | 1 | Shared code used by all functions |
+| DynamoDB Tables (shared) | 2 | Stores rider profiles and tour info |
+| DynamoDB Tables (per tour) | 4 per active tour | Stores tour-specific data (riders, rides, check-ins, users) |
+| S3 Bucket | 1 | Stores rider photos and archived tour exports |
+| IAM Roles | 20 | Security permissions for each function |
+| CloudWatch Log Groups | 20 | Logs for monitoring and debugging |
+| JWT Authorizer | 1 | Validates user login tokens |
+
+### Lambda Functions (All 20)
+
+| Function | API Endpoint | What It Does |
+|---|---|---|
+| GetActiveTourFunction | `GET /v1/tours/active` | Get the currently active tour |
+| GetTourFunction | `GET /v1/tours/{tourId}` | Get details for a specific tour |
+| ListToursFunction | `GET /v1/tours` | List all tours |
+| CreateTourFunction | `POST /v1/tours` | Create a new tour and its database tables |
+| ArchiveTourFunction | `POST /v1/tours/{tourId}/archive` | Archive a completed tour |
+| GetRiderProfileFunction | `GET /v1/riders/profile/{profileId}` | Get a rider's profile |
+| UpdateRiderProfileFunction | `PUT /v1/riders/profile/{profileId}` | Update a rider's profile |
+| GetTourRidersFunction | `GET /v1/tours/{tourId}/riders` | List all riders in a tour |
+| GetTourRiderByIdFunction | `GET /v1/tours/{tourId}/riders/{riderId}` | Get a specific rider's tour details |
+| GetTodaysRideFunction | `GET /v1/tours/{tourId}/rides/today` | Get today's scheduled ride |
+| GetRideFunction | `GET /v1/tours/{tourId}/rides/{rideId}` | Get details for a specific ride |
+| ListRidesFunction | `GET /v1/tours/{tourId}/rides` | List all rides in a tour |
+| CreateRideFunction | `POST /v1/tours/{tourId}/rides` | Create a new daily ride |
+| UpdateRideFunction | `PUT /v1/tours/{tourId}/rides/{rideId}` | Update ride details |
+| CloseRideFunction | `POST /v1/tours/{tourId}/rides/{rideId}/close` | Close a ride (no more check-ins) |
+| CreateCheckInFunction | `POST /v1/tours/{tourId}/checkins` | Record a rider check-in |
+| GetRideCheckInsFunction | `GET /v1/tours/{tourId}/rides/{rideId}/checkins` | Get all check-ins for a ride |
+| GetDashboardDataFunction | `GET /v1/tours/{tourId}/rides/{rideId}/dashboard` | Get live dashboard data |
+| GetCurrentUserFunction | `GET /v1/users/me` | Get current logged-in user info |
+| ListTourUsersFunction | `GET /v1/tours/{tourId}/users` | List staff members for a tour |
+
+### Database Tables
+
+**Always present (created during deployment):**
+
+| Table | Stores | Persists Across Tours? |
+|---|---|---|
+| RiderProfile | Rider personal info (name, email, emergency contacts) | Yes — rider data is shared across all tours |
+| Tour | Tour details (name, dates, status) | Yes — all tours are listed here |
+
+**Created per tour (when you create a tour via the API):**
+
+| Table Pattern | Stores | Example Table Name |
+|---|---|---|
+| TourRider-{tourId} | Which riders are enrolled in this tour | `tour-data-api-TourRider-India-Coast-2026` |
+| Ride-{tourId} | Daily ride schedule, routes, and stages | `tour-data-api-Ride-India-Coast-2026` |
+| CheckIn-{tourId} | Rider check-in records for each stage | `tour-data-api-CheckIn-India-Coast-2026` |
+| User-{tourId} | Staff/admin accounts for this tour | `tour-data-api-User-India-Coast-2026` |
 
 ---
 
 ## Related Documentation
 
-- [Infrastructure Guide](infrastructure-guide.md) - Resource tagging, monitoring, and cost estimation
-- [AWS Setup Guide](aws-setup-guide.md) - AWS credentials and Cognito setup
-- [Development Guide](development-guide.md) - Local development and testing
+- [AWS Setup Guide](aws-setup-guide.md) — AWS credentials, Cognito authentication, getting JWT tokens
+- [Infrastructure Guide](infrastructure-guide.md) — Resource tagging, monitoring, and cost estimation
+- [Development Guide](development-guide.md) — For developers: local testing, code structure, troubleshooting
+- [Requirements](Requirements.md) — Detailed feature requirements and business rules
 
 ---
 

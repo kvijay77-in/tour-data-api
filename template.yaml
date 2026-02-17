@@ -59,13 +59,11 @@ Parameters:
   
   CognitoUserPoolArn:
     Type: String
-    Description: ARN of the Cognito User Pool for authentication
-    Default: ''
+    Description: ARN of the Cognito User Pool for JWT authentication (required)
   
   CognitoAppClientId:
     Type: String
-    Description: Cognito User Pool App Client ID (required when CognitoUserPoolArn is provided)
-    Default: ''
+    Description: Cognito User Pool App Client ID for JWT audience validation (required)
   
   SubscriptionId:
     Type: String
@@ -79,12 +77,11 @@ Parameters:
   
   CostCenter:
     Type: String
-    Description: Cost center code for billing and chargeback
+    Description: Cost center code for billing and charge back
     Default: ''
 
 Conditions:
   IsProd: !Equals [!Ref Environment, prod]
-  HasCognitoUserPool: !Not [!Equals [!Ref CognitoUserPoolArn, '']]
   HasOwner: !Not [!Equals [!Ref Owner, '']]
   HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
 
@@ -97,23 +94,22 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: !Ref Environment
-      # JWT authentication via Cognito: enabled when CognitoUserPoolArn is provided.
-      # When not provided (default), all routes are open (suitable for dev/local testing).
-      Auth: !If
-        - HasCognitoUserPool
-        - DefaultAuthorizer: CognitoAuthorizer
-          Authorizers:
-            CognitoAuthorizer:
-              AuthorizationScopes:
-                - openid
-              IdentitySource: $request.header.Authorization
-              JwtConfiguration:
-                issuer: !Sub
-                  - 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}'
-                  - UserPoolId: !Select [1, !Split ['/', !Select [5, !Split [':', !Ref CognitoUserPoolArn]]]]
-                audience:
-                  - !Ref CognitoAppClientId
-        - !Ref 'AWS::NoValue'
+      # JWT authentication via Cognito.
+      # CognitoUserPoolArn and CognitoAppClientId must be provided at deploy time.
+      # For local development, sam local start-api bypasses HTTP API authorizers.
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            AuthorizationScopes:
+              - openid
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub
+                - 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}'
+                - UserPoolId: !Select [1, !Split ['/', !Select [5, !Split [':', !Ref CognitoUserPoolArn]]]]
+              audience:
+                - !Ref CognitoAppClientId
       CorsConfiguration:
         AllowOrigins:
           - '*'  # TODO: Restrict to specific domains in production

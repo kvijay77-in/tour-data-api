@@ -142,7 +142,7 @@ Or configure in `samconfig.toml`:
 parameter_overrides = "CognitoUserPoolArn=arn:aws:cognito-idp:... CognitoAppClientId=..."
 ```
 
-> **Note**: When `CognitoUserPoolArn` is not provided (empty default), the API runs without JWT authentication. This is suitable for local development and testing. For production, always provide both `CognitoUserPoolArn` and `CognitoAppClientId`.
+> **Note**: Both `CognitoUserPoolArn` and `CognitoAppClientId` are required parameters. The API uses JWT authentication for all deployed environments. For local development with `sam local start-api`, the HTTP API authorizer is not enforced, so you can test without Cognito tokens.
 
 ### 4. Create Test Users
 
