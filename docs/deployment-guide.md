@@ -27,12 +27,16 @@ This guide walks you through setting up and deploying the Tour Data API — the 
 
 ## What Is This System?
 
-The Tour Data API is the **backend server** that your check-in app and other tour applications talk to. It handles:
+The Tour Data API is the **backend server** that your check-in app and other tour applications talk to. It stores and manages all the data behind the scenes — it does not have its own user interface.
 
-- **Tour setup** — Creating tours, adding riders, defining daily rides and stages
-- **Rider check-ins** — Recording when riders arrive at checkpoints (via QR scan, manual entry, or marking Not Riding / Quit Riding)
-- **Live dashboards** — Showing real-time ride status and statistics
-- **User access** — Controlling who can use the system (administrators, pit-stop crew, hotel staff)
+Specifically, it provides the data services for:
+
+- **Tour management** — Storing tour details, rider enrolments, daily rides and stages
+- **Rider check-ins** — Recording when riders arrive at checkpoints (the check-in app sends the data here)
+- **Rider profiles** — Maintaining rider personal information across tours
+- **Data retrieval** — Serving ride data, check-in records, and rider information to any app that requests it
+
+The check-in app (and any future apps) handle their own dashboards, user interfaces, and access control. This system only provides the API endpoints they connect to.
 
 **"Deploying"** means putting this system live on Amazon Web Services (AWS) so your apps can connect to it over the internet. Think of it like turning on the engine — the code is already written, deployment is what makes it run.
 
