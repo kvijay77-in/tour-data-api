@@ -17,8 +17,7 @@ confirm_changeset = true
 resolve_s3 = true
 # Cognito User Pool is auto-created by default. No need to provide CognitoUserPoolArn/CognitoAppClientId
 # unless you want to use an existing User Pool.
-# Optional tags: Owner and CostCenter
-# parameter_overrides = "Environment=dev Owner=\"DevTeam\" CostCenter=\"CC-1234\""
+# parameter_overrides = "Environment=dev"
 parameter_overrides = "Environment=dev"
 
 [default.package.parameters]
@@ -43,7 +42,7 @@ capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
 # Cognito User Pool is auto-created by default.
-# parameter_overrides = "Environment=test Owner=\"QA Team\" CostCenter=\"CC-1234\""
+# parameter_overrides = "Environment=test"
 parameter_overrides = "Environment=test"
 
 # Production environment configuration
@@ -56,6 +55,5 @@ capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
 # Cognito User Pool is auto-created by default.
-# To use an existing User Pool, add: CognitoUserPoolArn=arn:aws:cognito-idp:... CognitoAppClientId=...
-# parameter_overrides = "Environment=prod Owner=\"Operations Team\" CostCenter=\"CC-5678\""
+# parameter_overrides = "Environment=prod"
 parameter_overrides = "Environment=prod"

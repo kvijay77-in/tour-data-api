@@ -2,11 +2,15 @@
 
 [← Back to README](../README.md)
 
-This guide covers local development setup, testing, code quality tools, troubleshooting, and useful development workflows.
+Complete guide for setting up your development environment, deploying to the dev AWS environment, local testing, and daily development workflows.
 
 ## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Initial Setup](#initial-setup)
+- [Deploy to Dev Environment](#deploy-to-dev-environment)
 - [Local Development](#local-development)
-- [Running Tests](#running-tests)
+- [Unit Testing](#unit-testing)
 - [Code Quality](#code-quality)
 - [Useful Commands](#useful-commands)
 - [Troubleshooting](#troubleshooting)
@@ -14,164 +18,215 @@ This guide covers local development setup, testing, code quality tools, troubles
 
 ---
 
-## Local Development
+## Prerequisites
 
-> **Remember**: Activate your virtual environment before running any commands:
-> ```bash
-> source venv/bin/activate
-> ```
+| Tool | Version | Purpose | Install Guide |
+|------|---------|---------|---------------|
+| **Python** | 3.11+ | Runtime for Lambda functions | [python.org](https://www.python.org/downloads/) |
+| **AWS CLI** | v2 | Interact with AWS services | [Install guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) |
+| **SAM CLI** | Latest | Build and deploy SAM applications | [Install guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) |
+| **Docker** | Latest | Required for `sam local` commands | [docker.com](https://www.docker.com/get-started) |
+| **Git** | Any | Version control | [git-scm.com](https://git-scm.com/) |
+| **Make** | Any | Optional — shortcut commands | Pre-installed on Linux/Mac |
 
-### Understanding Local Development Data
+---
 
-**Important**: By default, `sam local start-api` connects to your **real AWS DynamoDB tables** - not local data.
+## Initial Setup
 
-When you run the local API:
-- Lambda functions execute on your local machine (using Docker)
-- **Data operations go to actual AWS resources** (DynamoDB tables, S3 buckets)
-- Uses your AWS credentials from `aws configure`
-- **Any data changes affect your AWS environment** (typically dev environment)
-
-**Pros**: Test with realistic data, proper AWS service integration  
-**Cons**: Requires AWS credentials, changes affect real environment, incurs minimal AWS costs
-
-### Local Development Options
-
-#### Option 1: Use AWS Resources (Default - Recommended)
+### 1. Clone the Repository
 
 ```bash
-# Local API connects to your AWS DynamoDB tables
-sam local start-api
-
-# API available at http://localhost:3000
-# All data operations go to your AWS account
+git clone <repository-url>
+cd tour-data-api
 ```
 
-**Prerequisites**:
-- AWS credentials configured (`aws configure`)
-- DynamoDB tables already deployed to AWS (`sam deploy`)
-- Proper IAM permissions for DynamoDB access
+### 2. Set Up Virtual Environment
 
-**Best for**: Integration testing, testing with realistic data, full API endpoint testing
-
-**Example requests**:
 ```bash
-# Test active tour endpoint
+python3.14 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+> **Note**: Python 3.11 to 3.14 are supported. 3.14 is the default.
+
+### 3. Install Development Dependencies
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+This installs local development tools (pytest, moto, pylint, black, boto3). These are **not** deployed to AWS — they are for local development only.
+
+### 4. Run Preflight Check
+
+Verify all tools and configuration are in place:
+
+```bash
+make check-config
+```
+
+This checks for AWS CLI, SAM CLI, Python, and valid AWS credentials. Fix any reported issues before continuing.
+
+### 5. Configure AWS Credentials
+
+Your terminal needs permission to access your AWS account. Verify:
+
+```bash
+aws sts get-caller-identity
+```
+
+If you see your account ID, you're all set. If you get an error, follow the [AWS Setup Guide](aws-setup-guide.md) for configuration options (SSO, STS assume role, or access keys).
+
+---
+
+## Deploy to Dev Environment
+
+Deploy the application to your AWS dev environment. This creates all AWS resources (API Gateway, Lambda functions, DynamoDB tables, Cognito User Pool, S3 bucket).
+
+### Build
+
+```bash
+sam build
+# or
+make build
+```
+
+### Deploy
+
+```bash
+sam deploy
+# or
+make deploy
+```
+
+SAM shows a summary of resources to be created/updated and asks for confirmation. Type `y` to proceed.
+
+> **First deployment** creates everything from scratch and takes slightly longer (~5-10 min). Subsequent deployments only update what changed.
+
+### Verify Deployment
+
+After deployment completes, note the outputs:
+
+- **API URL**: Your API endpoint (e.g., `https://<api-id>.execute-api.<region>.amazonaws.com/dev/`)
+- **Cognito User Pool ID**: Auto-created user authentication pool
+- **Cognito App Client ID**: Client ID for your applications
+
+Retrieve the API URL anytime:
+
+```bash
+aws cloudformation describe-stacks \
+  --stack-name tour-data-api \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
+  --output text
+```
+
+Test the deployment:
+
+```bash
+curl <api-url>/v1/tours
+```
+
+> **Note**: Most endpoints require JWT authentication. An "Unauthorized" response confirms the API is running correctly. See [AWS Setup Guide → Get JWT Token for Testing](aws-setup-guide.md#3-get-jwt-token-for-testing) for creating test users and generating tokens.
+
+---
+
+## Local Development
+
+### Local API with AWS Resources
+
+`sam local start-api` runs Lambda functions on your machine (via Docker) but connects to **real AWS resources** (DynamoDB, S3). Data changes affect your dev environment.
+
+**Requires**: AWS credentials configured and dev environment deployed (`sam deploy`).
+
+```bash
+sam local start-api
+# or
+make local-api
+
+# API available at http://localhost:3000
+```
+
+Example requests:
+
+```bash
+# Get active tour
 curl http://localhost:3000/v1/tours/active
 
 # List rides for a tour
 curl http://localhost:3000/v1/tours/India-Coast-2026/rides
 
-# Create check-in (requires valid tour/rider data in DynamoDB)
+# Create a check-in
 curl -X POST http://localhost:3000/v1/tours/India-Coast-2026/checkins \
   -H "Content-Type: application/json" \
   -d '{"riderId": "R57", "rideId": "RIDE001", "stageId": "S001", "checkInType": "NORMAL"}'
 ```
 
-#### Testing Individual Lambda Functions
+### Testing Individual Lambda Functions
 
-You can also test individual Lambda functions locally with sample events:
+Test a single function with a sample event:
 
 ```bash
-# Test single function (connects to AWS DynamoDB)
 sam local invoke GetActiveTourFunction -e events/get-active-tour.json
 
-# Test check-in function
-sam local invoke CreateCheckInFunction -e events/create-checkin.json
-
-# Use Make command
+# Or with Make
 make invoke FUNCTION=GetActiveTourFunction EVENT=events/get-active-tour.json
 ```
 
-> **Note**: These commands run Lambda functions locally but still connect to real AWS resources. For testing without AWS, see Option 2 below.
-
-#### Option 2: Unit Testing with Mocked AWS Services
-
-Run unit tests with pytest and moto (AWS service mocking):
-
-```bash
-# Run all unit tests with mocked AWS services
-pytest
-
-# Run with coverage
-pytest --cov=src --cov-report=html
-
-# Run specific test file
-pytest tests/test_lambda_functions.py -v
-
-# Run specific test function
-pytest tests/test_lambda_functions.py::test_get_active_tour_success -v
-```
-
-**How It Works:**
-- Uses **moto** library to mock AWS DynamoDB (no real AWS resources)
-- Tests run with in-memory mock databases
-- Production code (`dynamodb_utils.py`) remains clean - no test logic
-- Standard Python testing approach using pytest fixtures
-
-**Best for**: Unit testing, CI/CD pipelines, testing business logic without AWS, offline development
-
-**Pros**: No AWS credentials needed, fast execution, no AWS costs, proper separation of concerns  
-**Cons**: Mocks may not catch all AWS-specific edge cases
-
-See [tests/test_lambda_functions.py](../tests/test_lambda_functions.py) for examples.
-
-> **Note**: For local API testing with real AWS resources, use Option 1 above. For unit testing without AWS, use pytest with moto.
+> **Note**: Local invocations also connect to real AWS resources. For testing without AWS, use unit tests below.
 
 ---
 
-## Running Tests
+## Unit Testing
 
-> **Important**: Always ensure your virtual environment is activated before running tests:
-> ```bash
-> source venv/bin/activate  # On Linux/Mac
-> # or
-> venv\Scripts\activate     # On Windows
-> ```
+Unit tests use **pytest** with **moto** (AWS service mocking). No AWS credentials or deployed resources needed.
+
+### How It Works
+
+- **moto** creates in-memory mock DynamoDB tables
+- Tests run entirely locally — no AWS costs
+- Production code remains clean (no test logic mixed in)
+- Fixtures in `tests/conftest.py` set up the mock environment
+- Test data in `tests/fixtures/mock_data.py`
+
+See [tests/test_lambda_functions.py](../tests/test_lambda_functions.py) for examples.
 
 ### Run All Tests
 
 ```bash
-# Run all tests
 pytest
-
-# or use Make
+# or
 make test
 ```
 
-### Run Tests with Coverage
+### Test Coverage
 
 ```bash
-# Run with coverage report
 pytest --cov=src --cov-report=html
+# or
+make test-coverage
 
-# View coverage report
-# Open htmlcov/index.html in your browser
+# Open htmlcov/index.html in your browser to view the report
 ```
 
 ### Run Specific Tests
 
 ```bash
-# Run specific test file
+# Specific test file
 pytest tests/test_validation.py
 
-# Run specific test function
+# Specific test function
 pytest tests/test_validation.py::test_validate_checkin_success -v
 
-# Run tests matching a pattern
+# Tests matching a pattern
 pytest -k "checkin" -v
 ```
 
 ### Test Verbosity
 
 ```bash
-# Verbose output
-pytest -v
-
-# Extra verbose (show print statements)
-pytest -vv
-
-# Show local variables on failure
-pytest -l
+pytest -v      # Verbose output
+pytest -vv     # Extra verbose (show print statements)
+pytest -l      # Show local variables on failure
 ```
 
 ---
@@ -181,39 +236,24 @@ pytest -l
 ### Linting
 
 ```bash
-# Run linter on common utilities
-pylint src/layers/common/python/*.py
-
-# Run linter on all source code
-pylint src/
-
-# or use Make
-make lint
+pylint src/layers/common/python/*.py   # Common utilities
+pylint src/                             # All source code
+make lint                               # Using Make
 ```
 
 ### Code Formatting
 
 ```bash
-# Format all code with black
-black src/
-
-# Check formatting without making changes
-black --check src/
-
-# or use Make
-make format
+black src/                  # Format all code
+black --check src/          # Check without changing
+make format                 # Using Make
 ```
 
-### Pre-commit Checks
-
-Before committing code, run:
+### Before Committing
 
 ```bash
-# Lint and format
 make lint
 make format
-
-# Run tests
 make test
 ```
 
@@ -221,60 +261,25 @@ make test
 
 ## Useful Commands
 
-### Build and Deploy
+| Command | Description |
+|---------|-------------|
+| `make build` | Build the SAM application |
+| `make deploy` | Build and deploy to dev |
+| `make validate` | Validate SAM template |
+| `make test` | Run all unit tests |
+| `make test-coverage` | Run tests with coverage report |
+| `make lint` | Lint Python code |
+| `make format` | Format code with Black |
+| `make local-api` | Start local API (connects to AWS) |
+| `make invoke FUNCTION=X EVENT=Y` | Invoke a function locally |
+| `make logs FUNCTION=X` | View CloudWatch logs |
+| `make logs-tail FUNCTION=X` | Tail logs in real-time |
+| `make sync` | Sync code changes (fast iteration) |
+| `make clean` | Clean build artifacts |
+| `make delete` | Delete CloudFormation stack |
+| `make check-config` | Run preflight checks |
 
-```bash
-# Build the application
-make build
-
-# Build and deploy to dev environment
-make deploy
-
-# Deploy to test environment
-make deploy-test
-
-# Deploy to production (with confirmation)
-make deploy-prod
-
-# Sync code changes (build + deploy)
-make sync
-```
-
-### Monitoring and Logs
-
-```bash
-# View CloudWatch logs for a function
-make logs FUNCTION=GetActiveTourFunction
-
-# Tail logs in real-time (alias)
-make logs-tail FUNCTION=CreateCheckInFunction
-
-# Example with specific function
-make logs-function FUNCTION=GetRideCheckInsFunction
-```
-
-### Cleanup and Validation
-
-```bash
-# Clean build artifacts
-make clean
-
-# Validate SAM template
-make validate
-```
-
-### Local Testing
-
-```bash
-# Start local API (connects to AWS resources)
-sam local start-api
-
-# Invoke specific function locally
-sam local invoke FunctionName -e events/event-file.json
-
-# Using Make
-make invoke FUNCTION=GetActiveTourFunction EVENT=events/get-active-tour.json
-```
+> **Note**: For deploying to test or prod environments, see the [Deployment Guide](deployment-guide.md).
 
 ---
 
@@ -282,19 +287,15 @@ make invoke FUNCTION=GetActiveTourFunction EVENT=events/get-active-tour.json
 
 ### SAM Build Fails
 
-**Issue**: Build fails with dependency errors or Python version mismatch
-
-**Solution**:
 ```bash
 # Clear cache and rebuild
-make clean
-make build
+make clean && make build
 
-# Verify Python version (requires 3.11+)
+# Verify Python version (3.11+ required)
 python --version
 
 # Ensure virtual environment is activated
-source venv/bin/activate
+source .venv/bin/activate
 
 # Reinstall dependencies
 pip install -r requirements-dev.txt
@@ -302,9 +303,6 @@ pip install -r requirements-dev.txt
 
 ### Deployment Fails
 
-**Issue**: Deployment fails with CloudFormation errors
-
-**Solution**:
 ```bash
 # Validate template syntax
 make validate
@@ -315,21 +313,18 @@ aws sts get-caller-identity
 # View CloudFormation events for details
 aws cloudformation describe-stack-events --stack-name tour-data-api
 
-# Check specific stack status
+# Check stack status
 aws cloudformation describe-stacks --stack-name tour-data-api
 ```
 
-**Common Issues**:
-- **Insufficient IAM permissions**: Ensure your AWS credentials have necessary permissions
+**Common causes**:
+- **Insufficient IAM permissions**: Ensure your AWS user has rights to create Lambda, DynamoDB, API Gateway, S3, Cognito, and IAM roles
 - **S3 bucket conflicts**: SAM creates deployment buckets; name conflicts can cause failures
-- **Parameter errors**: Check `samconfig.toml` for correct parameter values
+- **Parameter errors**: Check `samconfig.toml` for correct values
 - **Resource limits**: Verify you haven't hit AWS service limits
 
 ### Lambda Function Errors
 
-**Issue**: Lambda function returns errors or unexpected results
-
-**Solution**:
 ```bash
 # View recent logs
 make logs FUNCTION=YourFunctionName
@@ -337,36 +332,33 @@ make logs FUNCTION=YourFunctionName
 # Tail logs in real-time
 make logs-tail FUNCTION=YourFunctionName
 
-# Test locally with AWS resources
+# Test locally
 sam local invoke YourFunctionName -e events/your-event.json
 
-# Or run unit tests with mocked AWS services
+# Run unit tests
 pytest tests/test_lambda_functions.py -v
 ```
 
-**Debugging Tips**:
+**Debugging tips**:
 - Check CloudWatch Logs for detailed error messages
 - Verify function has correct IAM permissions for DynamoDB/S3 access
 - Test with sample events in `events/` directory
-- Use `print()` statements in code (will appear in CloudWatch Logs)
+- Use `print()` statements (output appears in CloudWatch Logs)
 - Verify request payload matches expected schema
 
 ### DynamoDB Issues
 
-**Issue**: DynamoDB operations fail or return unexpected results
-
-**Solution**:
 ```bash
-# List all tables (includes shared and tour-specific)
+# List all tables (shared + tour-specific)
 aws dynamodb list-tables
 
-# Describe shared table structure
+# Describe a table
 aws dynamodb describe-table --table-name tour-data-api-RiderProfile
 
-# Scan shared table (dev only! Use carefully)
+# Scan a table (dev only, use carefully)
 aws dynamodb scan --table-name tour-data-api-RiderProfile --limit 10
 
-# Get specific rider profile item
+# Get a specific item
 aws dynamodb get-item \
   --table-name tour-data-api-RiderProfile \
   --key '{"PK": {"S": "PROFILE#abc-123-uuid"}}'
@@ -375,57 +367,47 @@ aws dynamodb get-item \
 aws dynamodb scan --table-name tour-data-api-Ride-India-Coast-2026 --limit 10
 ```
 
-**Common Issues**:
-- **Table not found**: Shared tables require `sam deploy` first; tour-specific tables require creating a tour via `POST /v1/tours`
-- **Access denied**: Check Lambda function's IAM execution role has DynamoDB permissions
+**Common causes**:
+- **Table not found**: Shared tables require `sam deploy`; tour-specific tables require creating a tour via `POST /v1/tours`
+- **Access denied**: Check Lambda execution role has DynamoDB permissions
 - **Validation errors**: Verify data matches table schema (PK, GSIs)
-- **Throttling**: Consider switching to on-demand billing or increasing provisioned capacity
+- **Throttling**: On-demand billing is the default; check if provisioned capacity was mistakenly set
 
 ### API Gateway Issues
 
-**Issue**: API returns 403 Forbidden or 401 Unauthorized
-
-**Solution**:
+**403 Forbidden / 401 Unauthorized**:
 - Verify JWT token is valid and not expired
-- Check Cognito User Pool is configured correctly
-- Ensure `Authorization: Bearer <token>` header is present
-- Verify API Gateway authorizer is properly configured
+- Check `Authorization: Bearer <token>` header is present
+- Verify Cognito User Pool is configured correctly
 
-**Issue**: API returns 502 Bad Gateway
-
-**Solution**:
+**502 Bad Gateway**:
 - Check Lambda function logs for errors
-- Verify Lambda function returns proper response format
-- Ensure Lambda function timeout is sufficient (default 30s)
+- Verify function returns proper response format
+- Ensure Lambda timeout is sufficient (default 30s)
 
 ### Local Development Issues
 
-**Issue**: `sam local start-api` fails to start
+**`sam local start-api` fails to start**:
 
-**Solution**:
 ```bash
 # Ensure Docker is running
 docker ps
 
-# Build application first
+# Build first
 sam build
 
-# Check for port conflicts (default: 3000)
+# Check for port conflicts
 lsof -i :3000
 
-# Use different port if needed
+# Use a different port
 sam local start-api --port 3001
 ```
 
-**Issue**: Local API can't connect to AWS resources
+**Local API can't connect to AWS**:
 
-**Solution**:
 ```bash
-# Verify AWS credentials
+# Verify credentials
 aws sts get-caller-identity
-
-# Check IAM permissions
-aws iam get-user
 
 # Ensure DynamoDB tables exist
 aws dynamodb list-tables
@@ -435,23 +417,21 @@ aws dynamodb list-tables
 
 ## Support
 
-For issues and questions:
-
-1. **Check Documentation**: Review documentation in `docs/` folder
-2. **CloudWatch Logs**: Check CloudWatch logs for detailed error messages
-3. **SAM Template**: Review template configuration in `template.yaml`
-4. **AWS Console**: Use AWS Console to inspect resources directly
-5. **GitHub Issues**: Create an issue in the repository with:
+1. **Check documentation** in `docs/` folder
+2. **CloudWatch Logs** for detailed error messages
+3. **SAM template** — review `template.yaml` configuration
+4. **AWS Console** — inspect resources directly
+5. **GitHub Issues** — create an issue with:
    - Error messages and logs
    - Steps to reproduce
    - Environment details (OS, Python version, SAM version)
 
 ### Useful Resources
 
-- [AWS SAM Troubleshooting Guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-troubleshooting.html)
+- [AWS SAM Troubleshooting](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-troubleshooting.html)
 - [AWS Lambda Troubleshooting](https://docs.aws.amazon.com/lambda/latest/dg/lambda-troubleshooting.html)
 - [DynamoDB Troubleshooting](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.Errors.html)
-- [Python Pytest Documentation](https://docs.pytest.org/)
+- [Pytest Documentation](https://docs.pytest.org/)
 - [Moto Documentation](https://docs.getmoto.org/)
 
 ---

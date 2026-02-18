@@ -98,9 +98,9 @@ tour-data-api/
 - **`Requirements.md`**: Detailed business requirements and use cases
 - **`SolutionDesign.md`**: System architecture, data model, API specifications
 - **`project-structure.md`**: This file - project organization documentation
-- **`aws-setup-guide.md`**: AWS CLI configuration and Cognito setup
-- **`deployment-guide.md`**: CI/CD pipeline, GitHub Actions, multi-environment deployment
-- **`development-guide.md`**: Local development, testing, troubleshooting
+- **`aws-setup-guide.md`**: AWS CLI configuration, Cognito setup, JWT tokens
+- **`deployment-guide.md`**: CI/CD via GitHub Actions, multi-environment deployment
+- **`development-guide.md`**: Environment setup, deploy to dev, local testing, troubleshooting
 - **`infrastructure-guide.md`**: Resource tagging, monitoring, cost estimation
 - **`docs-index.md`**: Complete documentation index
 

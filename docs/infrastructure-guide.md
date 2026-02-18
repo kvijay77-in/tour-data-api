@@ -476,7 +476,7 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 
 - **Linting**: pylint
 - **Formatting**: black
-- **Python Version**: 3.11
+- **Python Version**: 3.11+
 - **Package Management**: pip with requirements.txt
 
 ### Project Size

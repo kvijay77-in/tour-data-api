@@ -9,6 +9,7 @@ These instructions are general for our interaction and MUST BE STRICTLY FOLLOWED
 - If any inputs during our interaction contradict the requirement, flag it and ask for clarifications.
 - Understand the overall project requirements, features, and constraints as described in /docs/Requirements.md.
 - Ensure all code suggestions and implementations strictly adhere to the requirements specified in /docs/Requirements.md. 
+- Review and update related documents for any Design and/or code changes to keep them in sync with the implementation. 
 - Always follow what was asked, do not code extra features or changes unless explicitly requested.
 - Follow instructions and do not deviate from the task at hand.
 - Do not go overboard and keep suggestions concise and relevant.

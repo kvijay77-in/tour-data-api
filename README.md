@@ -16,14 +16,16 @@ This API supports managing cycling tours with approximately 100 riders, 7-8 ride
 ## 🏗️ Architecture
 
 - **Platform**: AWS Serverless (Lambda, API Gateway HTTP API, DynamoDB)
-- **Runtime**: Python 3.11
+- **Runtime[^1]**: Python 3.14*
 - **Infrastructure**: AWS SAM (Serverless Application Model)
 - **Authentication**: AWS Cognito with JWT tokens
 - **Storage**: DynamoDB (2 shared tables + tour-specific tables provisioned at runtime), S3 (rider photos, archive exports)
 - **Functions**: 20 Lambda functions handling tours, riders, rides, check-ins, and users
 - **CI/CD**: GitHub Actions with automated testing and multi-environment deployment
 
-### Data Model
+[^1]: Supports 3.11 to 3.14. 3.14 is the default.
+
+## Data Model
 
 The system uses a **hybrid table strategy**:
 
@@ -39,7 +41,7 @@ The system uses a **hybrid table strategy**:
 
 Tour-specific tables are created when a tour is provisioned (`POST /v1/tours`) and can be archived/deleted when a tour is complete (`POST /v1/tours/{tourId}/archive`).
 
-### Business Rules
+## Business Rules
 
 The check-in system enforces important business logic:
 
@@ -62,52 +64,10 @@ The check-in system enforces important business logic:
   - Ride must not be closed (ACTIVE or PLANNED status)
   - No duplicate check-ins for the same rider/ride/stage combination
 
-## 🚀 Quick Start
+## Getting Started
 
-### Prerequisites
-
-- Python 3.11+
-- AWS CLI configured with appropriate credentials
-- AWS SAM CLI ([installation guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html))
-- Make (optional, for using Makefile commands)
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd tour-data-api
-   ```
-
-2. **Set up virtual environment**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-
-4. **Configure AWS credentials**
-   
-   Verify AWS CLI is configured:
-   ```bash
-   aws sts get-caller-identity
-   ```
-   
-   If not configured, see [AWS Setup Guide](docs/aws-setup-guide.md) for AWS CLI and credential configuration.
-
-5. **Build the application**
-   ```bash
-   sam build
-   ```
-
-6. **Deploy to AWS**
-   ```bash
-   sam deploy --guided
-   ```
+- **Developers**: See the [Development Guide](docs/development-guide.md) for environment setup, deploying to dev, local testing, and daily workflows.
+- **CI/CD & Multi-Environment Deployment**: See the [Deployment Guide](docs/deployment-guide.md) for GitHub Actions setup and deploying to test/prod.
 
 ## 📚 API Documentation
 
@@ -213,9 +173,9 @@ For detailed project organization and folder structure, see [docs/project-struct
 | Document | Description |
 |----------|-------------|
 | [Documentation Index](docs/docs-index.md) | Complete guide to all project documentation |
-| [AWS Setup Guide](docs/aws-setup-guide.md) | AWS CLI credentials, Cognito authentication setup |
-| [Development Guide](docs/development-guide.md) | Local development, testing with moto, troubleshooting |
-| [Deployment Guide](docs/deployment-guide.md) | CI/CD pipeline, GitHub Actions, multi-environment deployment |
+| [AWS Setup Guide](docs/aws-setup-guide.md) | AWS CLI credentials, Cognito setup, JWT token generation |
+| [Development Guide](docs/development-guide.md) | Environment setup, deploy to dev, local testing, unit tests, troubleshooting |
+| [Deployment Guide](docs/deployment-guide.md) | CI/CD via GitHub Actions, multi-environment deployment, AWS resources reference |
 | [Infrastructure Guide](docs/infrastructure-guide.md) | Resource tagging, CloudWatch monitoring, cost estimation |
 | [Requirements](docs/Requirements.md) | Detailed requirements and use cases |
 | [Solution Design](docs/SolutionDesign.md) | Architecture, data model, API specifications |

@@ -15,7 +15,6 @@ Metadata:
   cfn-lint:
     config:
       ignore_checks:
-        - E3003  # Conditional tags with AWS::NoValue are valid but linter flags them
         - W8001  # CreateCognito condition references conditional resources
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
@@ -44,8 +43,6 @@ Globals:
       Application: TourManagement
       ManagedBy: SAM
       SubscriptionId: !Ref SubscriptionId
-      Owner: !If [HasOwner, !Ref Owner, !Ref AWS::NoValue]
-      CostCenter: !If [HasCostCenter, !Ref CostCenter, !Ref AWS::NoValue]
 
 Parameters:
   Environment:
@@ -82,21 +79,12 @@ Parameters:
     Description: Unique identifier for this deployment instance (for tracking and cost attribution)
     Default: ''
   
-  Owner:
-    Type: String
-    Description: Team or individual responsible for the resources
-    Default: ''
-  
-  CostCenter:
-    Type: String
-    Description: Cost center code for billing and charge back
-    Default: ''
+
 
 Conditions:
   IsProd: !Equals [!Ref Environment, prod]
   CreateCognito: !Equals [!Ref CognitoUserPoolArn, '']
-  HasOwner: !Not [!Equals [!Ref Owner, '']]
-  HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
+
 
 Resources:
   # ============================================================================
@@ -186,8 +174,6 @@ Resources:
         Environment: !Ref Environment
         Application: TourManagement
         ManagedBy: SAM
-        Owner: !If [HasOwner, !Ref Owner, !Ref AWS::NoValue]
-        CostCenter: !If [HasCostCenter, !Ref CostCenter, !Ref AWS::NoValue]
 
   # ============================================================================
   # LAMBDA LAYERS
@@ -759,16 +745,6 @@ Resources:
           Value: TourManagement
         - Key: ManagedBy
           Value: SAM
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
 
   TourTable:
     Type: AWS::DynamoDB::Table
@@ -805,16 +781,6 @@ Resources:
           Value: TourManagement
         - Key: ManagedBy
           Value: SAM
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
 
   # ============================================================================
   # Tour-specific tables (TourRider, Ride, CheckIn, User) are NOT defined here.
@@ -845,7 +811,8 @@ Resources:
         Rules:
           - Id: DeleteOldVersions
             Status: Enabled
-            NoncurrentVersionExpirationInDays: 90
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-photos'
@@ -857,16 +824,6 @@ Resources:
           Value: TourManagement
         - Key: ManagedBy
           Value: SAM
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
 
   PhotosBucketPolicy:
     Type: AWS::S3::BucketPolicy
