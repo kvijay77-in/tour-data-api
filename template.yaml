@@ -23,7 +23,7 @@ Globals:
   Function:
     Timeout: 30
     MemorySize: 512
-    Runtime: python3.11
+    Runtime: !Ref PythonRuntime
     Architectures:
       - x86_64
     Environment:
@@ -56,6 +56,16 @@ Parameters:
       - test
       - prod
     Description: Environment name (dev, test, or prod)
+
+  PythonRuntime:
+    Type: String
+    Default: python3.14
+    AllowedValues:
+      - python3.11
+      - python3.12
+      - python3.13
+      - python3.14
+    Description: Python runtime version for Lambda functions
   
   CognitoUserPoolArn:
     Type: String
@@ -191,9 +201,12 @@ Resources:
       ContentUri: src/layers/common/
       CompatibleRuntimes:
         - python3.11
+        - python3.12
+        - python3.13
+        - python3.14
       RetentionPolicy: Delete
     Metadata:
-      BuildMethod: python3.11
+      BuildMethod: python3.14
 
   # ============================================================================
   # LAMBDA FUNCTIONS - TOURS (Shared Tour table)
