@@ -7,7 +7,7 @@ import sys
 import os
 
 # Add common layer to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'layers', 'common', 'python'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'layers', 'common'))
 
 from validation import (
     validate_rider_id,

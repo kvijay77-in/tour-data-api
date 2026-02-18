@@ -14,7 +14,7 @@ from moto import mock_aws
 
 # Set up path for imports
 import sys
-sys.path.insert(0, 'src/layers/common/python')
+sys.path.insert(0, 'src/layers/common')
 sys.path.insert(0, 'src/functions/tours')
 
 from tests.fixtures.mock_data import MOCK_TOURS, MOCK_TOUR_ID

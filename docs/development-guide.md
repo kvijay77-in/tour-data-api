@@ -9,12 +9,12 @@ Complete guide for setting up your development environment, deploying to the dev
 - [Prerequisites](#prerequisites)
 - [Initial Setup](#initial-setup)
 - [Deploy to Dev Environment](#deploy-to-dev-environment)
-- [Local Development](#local-development)
 - [Unit Testing](#unit-testing)
 - [Code Quality](#code-quality)
 - [Useful Commands](#useful-commands)
 - [Troubleshooting](#troubleshooting)
 - [Support](#support)
+- [Advanced: Local Lambda Debugging](#advanced-local-lambda-debugging)
 
 ---
 
@@ -25,7 +25,6 @@ Complete guide for setting up your development environment, deploying to the dev
 | **Python** | 3.11+ | Runtime for Lambda functions | [python.org](https://www.python.org/downloads/) |
 | **AWS CLI** | v2 | Interact with AWS services | [Install guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) |
 | **SAM CLI** | Latest | Build and deploy SAM applications | [Install guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) |
-| **Docker** | Latest | Required for `sam local` commands | [docker.com](https://www.docker.com/get-started) |
 | **Git** | Any | Version control | [git-scm.com](https://git-scm.com/) |
 | **Make** | Any | Optional — shortcut commands | Pre-installed on Linux/Mac |
 
@@ -130,52 +129,6 @@ curl <api-url>/v1/tours
 
 ---
 
-## Local Development
-
-### Local API with AWS Resources
-
-`sam local start-api` runs Lambda functions on your machine (via Docker) but connects to **real AWS resources** (DynamoDB, S3). Data changes affect your dev environment.
-
-**Requires**: AWS credentials configured and dev environment deployed (`sam deploy`).
-
-```bash
-sam local start-api
-# or
-make local-api
-
-# API available at http://localhost:3000
-```
-
-Example requests:
-
-```bash
-# Get active tour
-curl http://localhost:3000/v1/tours/active
-
-# List rides for a tour
-curl http://localhost:3000/v1/tours/India-Coast-2026/rides
-
-# Create a check-in
-curl -X POST http://localhost:3000/v1/tours/India-Coast-2026/checkins \
-  -H "Content-Type: application/json" \
-  -d '{"riderId": "R57", "rideId": "RIDE001", "stageId": "S001", "checkInType": "NORMAL"}'
-```
-
-### Testing Individual Lambda Functions
-
-Test a single function with a sample event:
-
-```bash
-sam local invoke GetActiveTourFunction -e events/get-active-tour.json
-
-# Or with Make
-make invoke FUNCTION=GetActiveTourFunction EVENT=events/get-active-tour.json
-```
-
-> **Note**: Local invocations also connect to real AWS resources. For testing without AWS, use unit tests below.
-
----
-
 ## Unit Testing
 
 Unit tests use **pytest** with **moto** (AWS service mocking). No AWS credentials or deployed resources needed.
@@ -236,7 +189,7 @@ pytest -l      # Show local variables on failure
 ### Linting
 
 ```bash
-pylint src/layers/common/python/*.py   # Common utilities
+pylint src/layers/common/*.py           # Common utilities
 pylint src/                             # All source code
 make lint                               # Using Make
 ```
@@ -270,8 +223,6 @@ make test
 | `make test-coverage` | Run tests with coverage report |
 | `make lint` | Lint Python code |
 | `make format` | Format code with Black |
-| `make local-api` | Start local API (connects to AWS) |
-| `make invoke FUNCTION=X EVENT=Y` | Invoke a function locally |
 | `make logs FUNCTION=X` | View CloudWatch logs |
 | `make logs-tail FUNCTION=X` | Tail logs in real-time |
 | `make sync` | Sync code changes (fast iteration) |
@@ -385,34 +336,6 @@ aws dynamodb scan --table-name tour-data-api-Ride-India-Coast-2026 --limit 10
 - Verify function returns proper response format
 - Ensure Lambda timeout is sufficient (default 30s)
 
-### Local Development Issues
-
-**`sam local start-api` fails to start**:
-
-```bash
-# Ensure Docker is running
-docker ps
-
-# Build first
-sam build
-
-# Check for port conflicts
-lsof -i :3000
-
-# Use a different port
-sam local start-api --port 3001
-```
-
-**Local API can't connect to AWS**:
-
-```bash
-# Verify credentials
-aws sts get-caller-identity
-
-# Ensure DynamoDB tables exist
-aws dynamodb list-tables
-```
-
 ---
 
 ## Support
@@ -433,6 +356,67 @@ aws dynamodb list-tables
 - [DynamoDB Troubleshooting](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Programming.Errors.html)
 - [Pytest Documentation](https://docs.pytest.org/)
 - [Moto Documentation](https://docs.getmoto.org/)
+
+---
+
+## Advanced: Local Lambda Debugging
+
+> **Optional.** This section is for developers who want to run Lambda functions on their local machine. It requires [Docker](https://www.docker.com/get-started). For most workflows, unit tests (pytest + moto) and the deployed dev API are sufficient.
+
+### Local API with AWS Resources
+
+`sam local start-api` runs Lambda functions locally (via Docker) but connects to **real AWS resources** (DynamoDB, S3). Data changes affect your dev environment.
+
+**Requires**: Docker installed and running, AWS credentials configured, dev environment deployed.
+
+```bash
+sam local start-api
+# or
+make local-api
+
+# API available at http://localhost:3000
+```
+
+Example requests:
+
+```bash
+curl http://localhost:3000/v1/tours/active
+curl http://localhost:3000/v1/tours/India-Coast-2026/rides
+```
+
+### Testing Individual Lambda Functions
+
+```bash
+sam local invoke GetActiveTourFunction -e events/get-active-tour.json
+
+# Or with Make
+make invoke FUNCTION=GetActiveTourFunction EVENT=events/get-active-tour.json
+```
+
+### Troubleshooting Local API
+
+**`sam local start-api` fails to start**:
+
+```bash
+# Ensure Docker is running
+docker ps
+
+# Build first
+sam build
+
+# Check for port conflicts
+lsof -i :3000
+
+# Use a different port
+sam local start-api --port 3001
+```
+
+**Local API can't connect to AWS**:
+
+```bash
+aws sts get-caller-identity
+aws dynamodb list-tables
+```
 
 ---
 

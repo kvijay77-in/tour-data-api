@@ -85,6 +85,9 @@ all: validate build test deploy ## Run full pipeline: validate, build, test, dep
 check-config: ## Run preflight checks before deployment
 	@bash scripts/preflight-check.sh
 
+dev-test-setup: ## Export env vars for dev API testing (use with: source <(make dev-test-setup))
+	@bash scripts/dev-test-setup.sh
+
 setup-github-oidc: ## Set up GitHub OIDC for keyless deployments (one-time)
 	@echo "Setting up GitHub OIDC for passwordless deployments..."
 	@echo ""

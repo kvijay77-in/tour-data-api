@@ -51,14 +51,13 @@ tour-data-api/
 │   │       └── list_tour_users.py     # GET /v1/tours/{tourId}/users
 │   └── layers/
 │       └── common/                    # Shared utilities layer
+│           ├── __init__.py
 │           ├── requirements.txt       # Layer dependencies
-│           └── python/
-│               ├── __init__.py
-│               ├── dynamodb_utils.py  # DynamoDB operations (shared + tour-specific)
-│               ├── logger.py          # Logging utilities
-│               ├── models.py          # Data models and enums
-│               ├── response.py        # API response utilities
-│               └── validation.py      # Input validation
+│           ├── dynamodb_utils.py      # DynamoDB operations (shared + tour-specific)
+│           ├── logger.py              # Logging utilities
+│           ├── models.py              # Data models and enums
+│           ├── response.py            # API response utilities
+│           └── validation.py          # Input validation
 ├── tests/                             # Unit and integration tests
 │   ├── __init__.py
 │   ├── conftest.py                    # Pytest fixtures and setup
@@ -90,9 +89,7 @@ tour-data-api/
 
 ### Source Code (`src/`)
 - **`functions/`**: Contains all Lambda function handlers organized by feature domain (checkins, riders, rides, tours, users). Each domain has an `__init__.py` for package initialization.
-- **`layers/common/`**: Shared utilities and dependencies used across all Lambda functions
-  - `python/`: Python modules for models, validation, database operations, logging, and response formatting
-  - `requirements.txt`: Dependencies for the common layer
+- **`layers/common/`**: Shared utilities and dependencies used across all Lambda functions. Python modules (models, validation, database operations, logging, response formatting) and `requirements.txt` are at the layer root for correct SAM build packaging.
 
 ### Documentation (`docs/`)
 - **`Requirements.md`**: Detailed business requirements and use cases
@@ -119,6 +116,7 @@ tour-data-api/
 - **`Makefile`**: Automation scripts for common tasks (build, deploy, test, logs, preflight check, OIDC setup)
 - **`cloudformation/github-oidc.yaml`**: Bootstrap template for GitHub OIDC authentication (deployed once per AWS account)
 - **`scripts/preflight-check.sh`**: Pre-deployment checks for AWS CLI, SAM CLI, Python, credentials, and template validity
+- **`scripts/dev-test-setup.sh`**: Exports environment variables (API endpoint, JWT token, etc.) for dev API testing
 
 ### CI/CD (`.github/workflows/`)
 - **`ci-cd.yml`**: GitHub Actions workflow for manual-trigger testing and deployment
