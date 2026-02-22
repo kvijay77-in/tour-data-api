@@ -38,18 +38,8 @@ MOCK_TOUR_ID = 'TestTour-2026'
 
 
 @pytest.fixture
-def aws_credentials():
-    """Mock AWS credentials for moto"""
-    os.environ['AWS_ACCESS_KEY_ID'] = 'testing'
-    os.environ['AWS_SECRET_ACCESS_KEY'] = 'testing'
-    os.environ['AWS_SECURITY_TOKEN'] = 'testing'
-    os.environ['AWS_SESSION_TOKEN'] = 'testing'
-    os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
-
-
-@pytest.fixture
-def env_setup(aws_credentials):
-    """Set up environment variables"""
+def env_setup():
+    """Set up environment variables (AWS credentials already set at module level)"""
     os.environ['STACK_NAME'] = MOCK_STACK_NAME
     os.environ['ENVIRONMENT'] = 'test'
     os.environ['SUBSCRIPTION_ID'] = 'test-sub-001'

@@ -71,6 +71,11 @@ def get_tour_table_name_from_stack(stack_name):
     return f"{stack_name}-Tour"
 
 
+def _utc_now_iso():
+    """Get current UTC time in ISO 8601 format"""
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
+
+
 def provision_tour(args):
     """
     Provision a new tour with tour-specific tables
@@ -139,7 +144,7 @@ def provision_tour(args):
         sys.exit(1)
 
     # Create Tour record with PROVISIONING status
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
+    now = _utc_now_iso()
     tour_item = {
         'PK': f'TOUR#{tour_id}',
         'tourId': tour_id,
@@ -171,16 +176,18 @@ def provision_tour(args):
 
     except Exception as e:
         print(f"\nError provisioning tables: {e}")
-        # Update tour record with error
+        # Update tour record with error (put_item is safe here since we
+        # control the full item in this single-user CLI operation)
         tour_item['status'] = TourStatus.PLANNING.value
-        tour_item['updatedAt'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
+        tour_item['updatedAt'] = _utc_now_iso()
         tour_item['provisioningError'] = str(e)
         tour_table.put_item(Item=tour_item)
         print("Tour status updated to PLANNING with provisioning error")
         sys.exit(1)
 
-    # Update tour status to PLANNING
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
+    # Update tour status to PLANNING (put_item is safe here since we
+    # control the full item in this single-user CLI operation)
+    now = _utc_now_iso()
     tour_item['status'] = TourStatus.PLANNING.value
     tour_item['provisionedAt'] = now
     tour_item['updatedAt'] = now
