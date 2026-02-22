@@ -57,12 +57,14 @@ tour-data-api/
 │           ├── logger.py              # Logging utilities
 │           ├── models.py              # Data models and enums
 │           ├── response.py            # API response utilities
+│           ├── tour_provisioning.py   # Tour-specific table provisioning logic
 │           └── validation.py          # Input validation
 ├── tests/                             # Unit and integration tests
 │   ├── __init__.py
 │   ├── conftest.py                    # Pytest fixtures and setup
 │   ├── README.md                      # Testing documentation
 │   ├── test_lambda_functions.py       # Lambda function tests
+│   ├── test_tour_provisioning.py     # Tour provisioning utility tests
 │   ├── test_validation.py            # Validation utility tests
 │   └── fixtures/
 │       ├── __init__.py
@@ -82,7 +84,9 @@ tour-data-api/
 ├── cloudformation/                    # Supplementary CloudFormation templates
 │   └── github-oidc.yaml              # GitHub OIDC provider + IAM deploy role
 └── scripts/                           # Utility scripts
-    └── preflight-check.sh            # Pre-deployment environment validation
+    ├── preflight-check.sh            # Pre-deployment environment validation
+    ├── dev-test-setup.sh             # Exports env vars for dev API testing
+    └── provision_tour.py             # CLI script for tour provisioning (deployment method)
 ```
 
 **Key Structure Notes:**
@@ -117,6 +121,7 @@ tour-data-api/
 - **`cloudformation/github-oidc.yaml`**: Bootstrap template for GitHub OIDC authentication (deployed once per AWS account)
 - **`scripts/preflight-check.sh`**: Pre-deployment checks for AWS CLI, SAM CLI, Python, credentials, and template validity
 - **`scripts/dev-test-setup.sh`**: Exports environment variables (API endpoint, JWT token, etc.) for dev API testing
+- **`scripts/provision_tour.py`**: CLI tool for provisioning tours during deployment. Creates Tour record and 4 tour-specific DynamoDB tables. This is the deployment-time equivalent of the `POST /v1/tours` API endpoint.
 
 ### CI/CD (`.github/workflows/`)
 - **`ci-cd.yml`**: GitHub Actions workflow for manual-trigger testing and deployment

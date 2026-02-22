@@ -39,7 +39,16 @@ The system uses a **hybrid table strategy**:
 - **CheckIn-{tourId}**: Rider check-ins at destinations for a tour
 - **User-{tourId}**: Admin/staff user accounts for a tour
 
-Tour-specific tables are created when a tour is provisioned (`POST /v1/tours`) and can be archived/deleted when a tour is complete (`POST /v1/tours/{tourId}/archive`).
+Tour-specific tables are created when a tour is provisioned and can be archived/deleted when a tour is complete (`POST /v1/tours/{tourId}/archive`).
+
+### Tour Provisioning
+
+Tour-specific tables can be created through two methods:
+
+1. **CLI Script (Deployment Method):** `make provision-tour` or `python scripts/provision_tour.py` — for initial setup or CI/CD pipelines
+2. **API Endpoint (Runtime Method):** `POST /v1/tours` — for external apps (e.g., Check-In App) to create tours programmatically
+
+Both methods create the same Tour record and 4 tour-specific tables. See [Deployment Guide → After Deployment: Provisioning a Tour](docs/deployment-guide.md#after-deployment-provisioning-a-tour) for details.
 
 ## Business Rules
 

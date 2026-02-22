@@ -29,11 +29,17 @@ import os
 import sys
 from datetime import datetime, timezone
 
+import boto3
+from botocore.exceptions import ClientError
+
 # Add common layer to path for shared utilities
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'layers', 'common'))
 
-import boto3
-from botocore.exceptions import ClientError
+# Set a default region if not configured, to allow module-level boto3
+# initialization in dynamodb_utils.py. The script creates its own session
+# with the correct region for actual AWS operations.
+if not os.environ.get('AWS_DEFAULT_REGION') and not boto3.Session().region_name:
+    os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
 
 from validation import validate_tour_id, validate_iso_date, ValidationError
 from models import TourStatus, TOUR_TABLE_TYPES

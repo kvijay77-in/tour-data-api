@@ -98,10 +98,14 @@ Lambda functions resolve shared table names via environment variables (set by SA
 
 ### Tour Lifecycle and Table Management
 
-1. **Provisioning:** Tour admin creates a tour → Lambda creates the Tour record in shared Tour table + creates 4 tour-specific DynamoDB tables via boto3
+1. **Provisioning:** Tour-specific tables are created when a new tour is provisioned. Two methods are available:
+   - **CLI Script (Deployment Method):** `scripts/provision_tour.py` or `make provision-tour` — runs locally or in CI/CD pipelines, creates Tour record + 4 tables via boto3 directly
+   - **API Endpoint (Runtime Method):** `POST /v1/tours` — used by external apps (e.g., Check-In App) to create tours programmatically. The actual integration from external apps is out of scope for this project; this API capability is provided for their use.
 2. **Active use:** Lambda functions resolve tour-specific table names using `{STACK_NAME}-{TableType}-{tourId}`
 3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
 4. **De-provisioning:** For one-off usage, the operator can delete tour tables or the entire stack
+
+Both provisioning methods create the same resources: a Tour record in the shared Tour table and 4 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User) with identical schemas and configurations. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
 
 ### Key Design Benefits
 
@@ -766,17 +770,35 @@ tour-data-api/
 
 ### Managed at Runtime (Tour Provisioning)
 1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId} (with GSIs)
-2. Created by the tour provisioning Lambda function via boto3
+2. Created by the shared tour provisioning utility (`src/layers/common/tour_provisioning.py`) via boto3
 3. Follow the same naming convention, tagging, and billing mode as SAM-managed tables
 
 ### Tour Provisioning
 
-When a tour admin creates a new tour:
+Tour-specific tables can be created through two methods:
+
+**Method 1: CLI Script (Deployment Method)**
+
+For use during initial setup, CI/CD pipelines, or by operators:
+1. Run `make provision-tour` or `python scripts/provision_tour.py` with tour parameters
+2. Script resolves the Tour table name from CloudFormation stack outputs
+3. Creates a Tour record in the shared Tour table (status: PROVISIONING)
+4. Creates 4 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`
+5. Tables are created with on-demand billing, encryption, and standard tags
+6. Once all tables are active, Tour status is updated to PLANNING
+
+**Method 2: API Endpoint (Runtime Method)**
+
+For use by external applications (e.g., Check-In App):
 1. **POST /tours** → Creates a Tour record in the shared Tour table (status: PROVISIONING)
-2. Lambda creates 4 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`
+2. Lambda creates 4 DynamoDB tables using the same shared provisioning logic
 3. Tables are created with on-demand billing, encryption, and standard tags
 4. Once all tables are active, Tour status is updated to PLANNING
 5. The provisioning Lambda requires `dynamodb:CreateTable`, `dynamodb:DescribeTable`, and `dynamodb:TagResource` permissions
+
+> **Note:** The API method is provided for external app integration (e.g., Check-In App creating new tours). The actual integration from these external apps is out of scope for this project.
+
+Both methods use the same provisioning logic from `src/layers/common/tour_provisioning.py`, ensuring identical table schemas and configurations.
 
 When a tour admin archives a tour:
 1. **POST /tours/{tourId}/archive** → Optionally exports data to S3, then deletes tour-specific tables
