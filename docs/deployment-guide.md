@@ -332,10 +332,10 @@ Detailed inventory of everything deployment creates in your AWS account.
 
 **Shared tables (created during deployment):**
 
-| Table | Stores | Persists Across Tours? |
-|---|---|---|
-| RiderProfile | Rider personal info (name, email, emergency contacts) | Yes |
-| Tour | Tour details (name, dates, status) | Yes |
+| Table | Full Table Name | Stores | Persists Across Tours? |
+|---|---|---|---|
+| RiderProfile | `tour-data-api-RiderProfile` | Rider personal info (name, email, emergency contacts) | Yes |
+| Tour | `tour-data-api-Tour` | Tour details (name, dates, status) | Yes |
 
 **Tour-specific tables (created per tour via API):**
 
