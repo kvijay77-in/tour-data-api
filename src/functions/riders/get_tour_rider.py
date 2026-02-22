@@ -22,7 +22,7 @@ def lambda_handler(event, context):
     Get tour rider details (participation info)
     
     Path parameters:
-    - tourId: Tour identifier (e.g., India-Coast-2026)
+    - tourId: Tour identifier (e.g., TOT-2026)
     - riderId: Rider ID (e.g., R42)
     
     Returns:

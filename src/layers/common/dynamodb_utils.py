@@ -46,10 +46,10 @@ def get_tour_table_name(table_type: str, tour_id: str) -> str:
     
     Args:
         table_type: Table type (TourRider, Ride, CheckIn, User)
-        tour_id: Tour identifier (e.g., India-Coast-2026)
+        tour_id: Tour identifier (e.g., TOT-2026)
     
     Returns:
-        Full table name (e.g., tour-data-api-Ride-India-Coast-2026)
+        Full table name (e.g., tour-data-api-Ride-TOT-2026)
     """
     stack_name = os.environ.get('STACK_NAME')
     if not stack_name:
@@ -63,7 +63,7 @@ def get_tour_table(table_type: str, tour_id: str):
     
     Args:
         table_type: Table type (TourRider, Ride, CheckIn, User)
-        tour_id: Tour identifier (e.g., India-Coast-2026)
+        tour_id: Tour identifier (e.g., TOT-2026)
     
     Returns:
         DynamoDB table resource

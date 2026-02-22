@@ -315,7 +315,7 @@ aws dynamodb get-item \
   --key '{"PK": {"S": "PROFILE#abc-123-uuid"}}'
 
 # Scan a tour-specific table
-aws dynamodb scan --table-name tour-data-api-Ride-India-Coast-2026 --limit 10
+aws dynamodb scan --table-name tour-data-api-Ride-TOT-2026 --limit 10
 ```
 
 **Common causes**:
@@ -381,7 +381,7 @@ Example requests:
 
 ```bash
 curl http://localhost:3000/v1/tours/active
-curl http://localhost:3000/v1/tours/India-Coast-2026/rides
+curl http://localhost:3000/v1/tours/TOT-2026/rides
 ```
 
 ### Testing Individual Lambda Functions

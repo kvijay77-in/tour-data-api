@@ -207,16 +207,16 @@ Use the provisioning script to create a tour and its tables directly from the co
 ```bash
 # Using Make target
 make provision-tour \
-  TOUR_ID=India-Coast-2026 \
-  TOUR_NAME="India Coastal Ride 2026" \
+  TOUR_ID=TOT-2026 \
+  TOUR_NAME="Tour of Tamilnadu 2026" \
   START_DATE=2026-02-10 \
   END_DATE=2026-02-17
 
 # Using Python script directly (more options available)
 python scripts/provision_tour.py \
   --stack-name tour-data-api \
-  --tour-id India-Coast-2026 \
-  --name "India Coastal Ride 2026" \
+  --tour-id TOT-2026 \
+  --name "Tour of Tamilnadu 2026" \
   --start-date 2026-02-10 \
   --end-date 2026-02-17 \
   --description "Annual coastal cycling tour" \
@@ -227,8 +227,8 @@ For production environments:
 ```bash
 make provision-tour \
   STACK_NAME=tour-data-api-prod \
-  TOUR_ID=India-Coast-2026 \
-  TOUR_NAME="India Coastal Ride 2026" \
+  TOUR_ID=TOT-2026 \
+  TOUR_NAME="Tour of Tamilnadu 2026" \
   START_DATE=2026-02-10 \
   END_DATE=2026-02-17 \
   ENV=prod
@@ -245,8 +245,8 @@ curl -X POST https://<api-url>/v1/tours \
   -H "Authorization: Bearer <jwt-token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "tourId": "India-Coast-2026",
-    "name": "India Coastal Ride 2026",
+    "tourId": "TOT-2026",
+    "name": "Tour of Tamilnadu 2026",
     "startDate": "2026-02-10",
     "endDate": "2026-02-17",
     "description": "Annual coastal cycling tour"
@@ -341,10 +341,10 @@ Detailed inventory of everything deployment creates in your AWS account.
 
 | Table Pattern | Stores | Example |
 |---|---|---|
-| TourRider-{tourId} | Rider enrollment | `tour-data-api-TourRider-India-Coast-2026` |
-| Ride-{tourId} | Ride schedule and routes | `tour-data-api-Ride-India-Coast-2026` |
-| CheckIn-{tourId} | Check-in records | `tour-data-api-CheckIn-India-Coast-2026` |
-| User-{tourId} | Staff accounts | `tour-data-api-User-India-Coast-2026` |
+| TourRider-{tourId} | Rider enrollment | `tour-data-api-TourRider-TOT-2026` |
+| Ride-{tourId} | Ride schedule and routes | `tour-data-api-Ride-TOT-2026` |
+| CheckIn-{tourId} | Check-in records | `tour-data-api-CheckIn-TOT-2026` |
+| User-{tourId} | Staff accounts | `tour-data-api-User-TOT-2026` |
 
 ---
 

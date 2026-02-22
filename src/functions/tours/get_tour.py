@@ -21,7 +21,7 @@ def lambda_handler(event, context):
     Get tour by ID
     
     Path Parameters:
-        tourId: Tour identifier (e.g., India-Coast-2026)
+        tourId: Tour identifier (e.g., TOT-2026)
     """
     try:
         log_event(logger, event)

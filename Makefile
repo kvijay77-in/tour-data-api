@@ -80,7 +80,7 @@ lint: ## Lint Python code
 format: ## Format Python code
 	find src -name "*.py" -not -path "*/\.*" | xargs black
 
-provision-tour: ## Provision a new tour (usage: make provision-tour TOUR_ID=India-Coast-2026 TOUR_NAME="India Coastal Ride 2026" START_DATE=2026-02-10 END_DATE=2026-02-17)
+provision-tour: ## Provision a new tour (usage: make provision-tour TOUR_ID=TOT-2026 TOUR_NAME="Tour of Tamilnadu 2026" START_DATE=2026-02-10 END_DATE=2026-02-17)
 	@if [ -z "$(TOUR_ID)" ] || [ -z "$(TOUR_NAME)" ] || [ -z "$(START_DATE)" ] || [ -z "$(END_DATE)" ]; then \
 		echo "Usage: make provision-tour TOUR_ID=<id> TOUR_NAME=\"<name>\" START_DATE=YYYY-MM-DD END_DATE=YYYY-MM-DD [STACK_NAME=tour-data-api] [ENV=dev] [DESCRIPTION=\"...\"]"; \
 		exit 1; \

@@ -22,7 +22,7 @@ def lambda_handler(event, context):
     Get all riders enrolled in a specific tour
     
     Path parameters:
-    - tourId: Tour identifier (e.g., India-Coast-2026)
+    - tourId: Tour identifier (e.g., TOT-2026)
     
     Returns:
     - 200: List of tour riders with profile data

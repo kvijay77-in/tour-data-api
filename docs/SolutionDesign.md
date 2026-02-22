@@ -92,7 +92,7 @@ All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables 
 
 Examples (stack name: `tour-data-api`):
 - Shared: `tour-data-api-RiderProfile`, `tour-data-api-Tour`
-- Tour-specific: `tour-data-api-TourRider-India-Coast-2026`, `tour-data-api-Ride-India-Coast-2026`
+- Tour-specific: `tour-data-api-TourRider-TOT-2026`, `tour-data-api-Ride-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
 
@@ -150,7 +150,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | PK | String | `TOUR#<tourId>` |
-| tourId | String | Free-form unique identifier (e.g., `India-Coast-2026`, `TDF2026`, `charity-ride-01`) |
+| tourId | String | Free-form unique identifier (e.g., `TOT-2026`, `TDF2026`, `charity-ride-01`) |
 | name | String | Tour name |
 | startDate | String | ISO 8601 date |
 | endDate | String | ISO 8601 date |
@@ -314,7 +314,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | Entity | Format | Example |
 |--------|--------|---------|
 | Profile ID | UUID | `550e8400-e29b-41d4-a716-446655440000` |
-| Tour ID | Free-form (configurable by tour admin) | `India-Coast-2026`, `TDF2026`, `charity-ride-01` |
+| Tour ID | Free-form (configurable by tour admin) | `TOT-2026`, `TDF2026`, `charity-ride-01` |
 | Rider ID | R + Number (no padding) | `R1`, `R57`, `R102` |
 | Ride ID | RIDE + 3-digit padded | `RIDE001`, `RIDE008` |
 | Stage ID | S + 3-digit padded | `S001`, `S002` |
@@ -332,7 +332,7 @@ The `tourId` is a free-form identifier set by the tour administrator at tour cre
 | Uniqueness | Must be unique across all tours in the deployment |
 | Case-sensitive | `Tour2026` and `tour2026` are different |
 
-Examples of valid Tour IDs: `India-Coast-2026`, `TDF2026`, `summer-ride-2026.01`, `2026-charity-ride`, `test-tour-01`
+Examples of valid Tour IDs: `TOT-2026`, `TDF2026`, `summer-ride-2026.01`, `2026-charity-ride`, `test-tour-01`
 
 ## Check-In Status Derivation
 
@@ -483,7 +483,7 @@ Given the small data volume, costs will be minimal. However, following best prac
   "success": false,
   "error": {
     "code": "RIDER_NOT_FOUND",
-    "message": "Rider R57 not found in tour India-Coast-2026"
+    "message": "Rider R57 not found in tour TOT-2026"
   },
   "timestamp": "2026-02-10T10:30:00Z"
 }
@@ -515,8 +515,8 @@ Response: Array of Tour objects
 ```
 POST /tours
 Body: {
-  "tourId": "India-Coast-2026",
-  "name": "India Coastal Ride 2026",
+  "tourId": "TOT-2026",
+  "name": "Tour of Tamilnadu 2026",
   "startDate": "2026-02-10",
   "endDate": "2026-02-17",
   "description": "Annual coastal cycling tour"

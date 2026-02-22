@@ -11,8 +11,8 @@ complementing the API method (POST /v1/tours) used by external apps.
 Usage:
     python scripts/provision_tour.py \\
         --stack-name tour-data-api \\
-        --tour-id India-Coast-2026 \\
-        --name "India Coastal Ride 2026" \\
+        --tour-id TOT-2026 \\
+        --name "Tour of Tamilnadu 2026" \\
         --start-date 2026-02-10 \\
         --end-date 2026-02-17 \\
         --description "Annual coastal cycling tour" \\
@@ -214,8 +214,8 @@ Examples:
   # Provision a tour for the dev environment
   python scripts/provision_tour.py \\
     --stack-name tour-data-api \\
-    --tour-id India-Coast-2026 \\
-    --name "India Coastal Ride 2026" \\
+    --tour-id TOT-2026 \\
+    --name "Tour of Tamilnadu 2026" \\
     --start-date 2026-02-10 \\
     --end-date 2026-02-17
 
