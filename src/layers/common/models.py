@@ -120,7 +120,7 @@ class Tour:
     """
     Tour definition (shared Tour table).
     PK: TOUR#<tourId>
-    tourId is free-form (e.g., India-Coast-2026, TDF2026)
+    tourId is free-form (e.g., TOT-2026, TDF2026)
     """
     tour_id: str
     name: str

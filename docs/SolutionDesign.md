@@ -90,18 +90,22 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 
 All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables and `{AWS::StackName}-{TableType}-{tourId}` for tour-specific tables.
 
-Examples (stack name: `tour-data-api`):
-- Shared: `tour-data-api-RiderProfile`, `tour-data-api-Tour`
-- Tour-specific: `tour-data-api-TourRider-India-Coast-2026`, `tour-data-api-Ride-India-Coast-2026`
+Examples (stack name: `dev`, tour ID: `TOT-2026`):
+- Shared: `dev-RiderProfile`, `dev-Tour`
+- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
 
 ### Tour Lifecycle and Table Management
 
-1. **Provisioning:** Tour admin creates a tour → Lambda creates the Tour record in shared Tour table + creates 4 tour-specific DynamoDB tables via boto3
+1. **Provisioning:** Tour-specific tables are created when a new tour is provisioned. Two methods are available:
+   - **CLI Script (Deployment Method):** `scripts/provision_tour.py` or `make provision-tour` — runs locally or in CI/CD pipelines, creates Tour record + 4 tables via boto3 directly
+   - **API Endpoint (Runtime Method):** `POST /v1/tours` — used by external apps (e.g., Check-In App) to create tours programmatically. The actual integration from external apps is out of scope for this project; this API capability is provided for their use.
 2. **Active use:** Lambda functions resolve tour-specific table names using `{STACK_NAME}-{TableType}-{tourId}`
 3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
 4. **De-provisioning:** For one-off usage, the operator can delete tour tables or the entire stack
+
+Both provisioning methods create the same resources: a Tour record in the shared Tour table and 4 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User) with identical schemas and configurations. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
 
 ### Key Design Benefits
 
@@ -146,7 +150,7 @@ Lambda functions resolve shared table names via environment variables (set by SA
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | PK | String | `TOUR#<tourId>` |
-| tourId | String | Free-form unique identifier (e.g., `India-Coast-2026`, `TDF2026`, `charity-ride-01`) |
+| tourId | String | Free-form unique identifier (e.g., `TOT-2026`, `TDF2026`, `charity-ride-01`) |
 | name | String | Tour name |
 | startDate | String | ISO 8601 date |
 | endDate | String | ISO 8601 date |
@@ -310,7 +314,7 @@ Lambda functions resolve shared table names via environment variables (set by SA
 | Entity | Format | Example |
 |--------|--------|---------|
 | Profile ID | UUID | `550e8400-e29b-41d4-a716-446655440000` |
-| Tour ID | Free-form (configurable by tour admin) | `India-Coast-2026`, `TDF2026`, `charity-ride-01` |
+| Tour ID | Free-form (configurable by tour admin) | `TOT-2026`, `TDF2026`, `charity-ride-01` |
 | Rider ID | R + Number (no padding) | `R1`, `R57`, `R102` |
 | Ride ID | RIDE + 3-digit padded | `RIDE001`, `RIDE008` |
 | Stage ID | S + 3-digit padded | `S001`, `S002` |
@@ -328,7 +332,7 @@ The `tourId` is a free-form identifier set by the tour administrator at tour cre
 | Uniqueness | Must be unique across all tours in the deployment |
 | Case-sensitive | `Tour2026` and `tour2026` are different |
 
-Examples of valid Tour IDs: `India-Coast-2026`, `TDF2026`, `summer-ride-2026.01`, `2026-charity-ride`, `test-tour-01`
+Examples of valid Tour IDs: `TOT-2026`, `TDF2026`, `summer-ride-2026.01`, `2026-charity-ride`, `test-tour-01`
 
 ## Check-In Status Derivation
 
@@ -479,7 +483,7 @@ Given the small data volume, costs will be minimal. However, following best prac
   "success": false,
   "error": {
     "code": "RIDER_NOT_FOUND",
-    "message": "Rider R57 not found in tour India-Coast-2026"
+    "message": "Rider R57 not found in tour TOT-2026"
   },
   "timestamp": "2026-02-10T10:30:00Z"
 }
@@ -511,8 +515,8 @@ Response: Array of Tour objects
 ```
 POST /tours
 Body: {
-  "tourId": "India-Coast-2026",
-  "name": "India Coastal Ride 2026",
+  "tourId": "TOT-2026",
+  "name": "Tour of Tamilnadu 2026",
   "startDate": "2026-02-10",
   "endDate": "2026-02-17",
   "description": "Annual coastal cycling tour"
@@ -766,17 +770,35 @@ tour-data-api/
 
 ### Managed at Runtime (Tour Provisioning)
 1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId} (with GSIs)
-2. Created by the tour provisioning Lambda function via boto3
+2. Created by the shared tour provisioning utility (`src/layers/common/tour_provisioning.py`) via boto3
 3. Follow the same naming convention, tagging, and billing mode as SAM-managed tables
 
 ### Tour Provisioning
 
-When a tour admin creates a new tour:
+Tour-specific tables can be created through two methods:
+
+**Method 1: CLI Script (Deployment Method)**
+
+For use during initial setup, CI/CD pipelines, or by operators:
+1. Run `make provision-tour` or `python scripts/provision_tour.py` with tour parameters
+2. Script resolves the Tour table name from CloudFormation stack outputs
+3. Creates a Tour record in the shared Tour table (status: PROVISIONING)
+4. Creates 4 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`
+5. Tables are created with on-demand billing, encryption, and standard tags
+6. Once all tables are active, Tour status is updated to PLANNING
+
+**Method 2: API Endpoint (Runtime Method)**
+
+For use by external applications (e.g., Check-In App):
 1. **POST /tours** → Creates a Tour record in the shared Tour table (status: PROVISIONING)
-2. Lambda creates 4 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`
+2. Lambda creates 4 DynamoDB tables using the same shared provisioning logic
 3. Tables are created with on-demand billing, encryption, and standard tags
 4. Once all tables are active, Tour status is updated to PLANNING
 5. The provisioning Lambda requires `dynamodb:CreateTable`, `dynamodb:DescribeTable`, and `dynamodb:TagResource` permissions
+
+> **Note:** The API method is provided for external app integration (e.g., Check-In App creating new tours). The actual integration from these external apps is out of scope for this project.
+
+Both methods use the same provisioning logic from `src/layers/common/tour_provisioning.py`, ensuring identical table schemas and configurations.
 
 When a tour admin archives a tour:
 1. **POST /tours/{tourId}/archive** → Optionally exports data to S3, then deletes tour-specific tables

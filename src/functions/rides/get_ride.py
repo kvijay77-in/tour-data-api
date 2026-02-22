@@ -21,7 +21,7 @@ def lambda_handler(event, context):
     Get a specific ride by ID
     
     Path parameters:
-    - tourId: Tour identifier (e.g., India-Coast-2026)
+    - tourId: Tour identifier (e.g., TOT-2026)
     - rideId: Ride identifier (e.g., RIDE001)
     
     Returns:

@@ -50,7 +50,7 @@ class TestTourIdValidation:
     def test_valid_tour_ids(self):
         """Test valid Tour ID formats"""
         valid_ids = [
-            'TOUR2024', 'TOUR2025', 'India-Coast-2026',
+            'TOUR2024', 'TOUR2025', 'TOT-2026',
             'TDF2026', 'TestTour-2026', 'my.tour.2025',
             'abc'
         ]

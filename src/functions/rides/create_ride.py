@@ -30,7 +30,7 @@ def lambda_handler(event, context):
     """
     Create a new ride for a tour
     
-    Path parameter: tourId (e.g., India-Coast-2026)
+    Path parameter: tourId (e.g., TOT-2026)
     Body: JSON with ride details
     {
         "rideId": "RIDE001",

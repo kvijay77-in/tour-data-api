@@ -120,7 +120,7 @@ jobs:
         run: |
           sam build
           sam deploy --config-env default --no-confirm-changeset --no-fail-on-empty-changeset
-          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name tour-data-api --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
+          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name dev --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "api_endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
       
       - name: Run smoke tests
@@ -161,7 +161,7 @@ jobs:
         run: |
           sam build
           sam deploy --config-env test --no-confirm-changeset --no-fail-on-empty-changeset
-          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name tour-data-api-test --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
+          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name test --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "api_endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
       
       - name: Run integration tests
@@ -202,7 +202,7 @@ jobs:
         run: |
           sam build
           sam deploy --config-env prod --no-confirm-changeset --no-fail-on-empty-changeset
-          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name tour-data-api-prod --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
+          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name prod --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "api_endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
       
       - name: Run smoke tests

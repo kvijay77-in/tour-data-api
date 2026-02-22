@@ -21,7 +21,7 @@ def lambda_handler(event, context):
     Get all check-ins for a specific ride
     
     Path parameters:
-    - tourId: Tour identifier (e.g., India-Coast-2026)
+    - tourId: Tour identifier (e.g., TOT-2026)
     - rideId: Ride identifier (e.g., RIDE001)
     
     Returns:

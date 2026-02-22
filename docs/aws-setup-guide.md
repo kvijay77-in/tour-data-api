@@ -115,7 +115,7 @@ After deployment, retrieve the auto-created User Pool ID:
 
 ```bash
 aws cloudformation describe-stacks \
-  --stack-name tour-data-api \
+  --stack-name dev \
   --query "Stacks[0].Outputs[?OutputKey=='CognitoUserPoolIdOutput'].OutputValue" \
   --output text
 ```

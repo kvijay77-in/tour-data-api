@@ -12,6 +12,7 @@ This guide covers automated CI/CD deployment using GitHub Actions and multi-envi
 - [Deploying from Terminal](#deploying-from-terminal)
 - [Environments Explained](#environments-explained)
 - [What Happens When You Deploy](#what-happens-when-you-deploy)
+- [After Deployment: Provisioning a Tour](#after-deployment-provisioning-a-tour)
 - [After Deployment: Getting Your API URL](#after-deployment-getting-your-api-url)
 - [AWS Resources Reference](#aws-resources-reference)
 - [Advanced: Using an Existing Cognito User Pool](#advanced-using-an-existing-cognito-user-pool)
@@ -136,9 +137,9 @@ Three independent environments, each with their own AWS resources, databases, an
 
 | Environment | Stack Name | Purpose |
 |---|---|---|
-| **dev** | `tour-data-api` | Development and experimentation |
-| **test** | `tour-data-api-test` | Staging and pre-production verification |
-| **prod** | `tour-data-api-prod` | Live production system used during tours |
+| **dev** | `dev` | Development and experimentation |
+| **test** | `test` | Staging and pre-production verification |
+| **prod** | `prod` | Live production system used during tours |
 
 Each environment gets its own API URL:
 - Dev: `https://<id>.execute-api.<region>.amazonaws.com/dev/`
@@ -195,6 +196,69 @@ When a tour is archived, these tables can be exported and deleted to save costs.
 
 ---
 
+## After Deployment: Provisioning a Tour
+
+After the stack is deployed, tour-specific tables must be created before the tour can be used. There are two methods:
+
+### Method 1: CLI Script (Deployment Method)
+
+Use the provisioning script to create a tour and its tables directly from the command line. This is ideal for initial setup or automated deployment pipelines.
+
+```bash
+# Using Make target
+make provision-tour \
+  TOUR_ID=TOT-2026 \
+  TOUR_NAME="Tour of Tamilnadu 2026" \
+  START_DATE=2026-02-10 \
+  END_DATE=2026-02-17
+
+# Using Python script directly (more options available)
+python scripts/provision_tour.py \
+  --stack-name dev \
+  --tour-id TOT-2026 \
+  --name "Tour of Tamilnadu 2026" \
+  --start-date 2026-02-10 \
+  --end-date 2026-02-17 \
+  --description "Annual coastal cycling tour" \
+  --environment dev
+```
+
+For production environments:
+```bash
+make provision-tour \
+  STACK_NAME=prod \
+  TOUR_ID=TOT-2026 \
+  TOUR_NAME="Tour of Tamilnadu 2026" \
+  START_DATE=2026-02-10 \
+  END_DATE=2026-02-17 \
+  ENV=prod
+```
+
+The script creates the Tour record in the shared Tour table and provisions 4 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User).
+
+### Method 2: API Endpoint (Runtime Method)
+
+External applications (such as the Check-In App) can create tours programmatically via the API:
+
+```bash
+curl -X POST https://<api-url>/v1/tours \
+  -H "Authorization: Bearer <jwt-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tourId": "TOT-2026",
+    "name": "Tour of Tamilnadu 2026",
+    "startDate": "2026-02-10",
+    "endDate": "2026-02-17",
+    "description": "Annual coastal cycling tour"
+  }'
+```
+
+Both methods produce the same result: a Tour record and 4 tour-specific DynamoDB tables.
+
+> **Note**: The API method is designed for use by external apps like the Check-In App. The actual integration from these apps is out of scope for this project — this API capability is provided for their use.
+
+---
+
 ## After Deployment: Getting Your API URL
 
 ### From GitHub Actions
@@ -208,19 +272,19 @@ When a tour is archived, these tables can be exported and deleted to save costs.
 ```bash
 # Dev
 aws cloudformation describe-stacks \
-  --stack-name tour-data-api \
+  --stack-name dev \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
 
 # Test
 aws cloudformation describe-stacks \
-  --stack-name tour-data-api-test \
+  --stack-name test \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
 
 # Prod
 aws cloudformation describe-stacks \
-  --stack-name tour-data-api-prod \
+  --stack-name prod \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
 ```
@@ -268,19 +332,19 @@ Detailed inventory of everything deployment creates in your AWS account.
 
 **Shared tables (created during deployment):**
 
-| Table | Stores | Persists Across Tours? |
-|---|---|---|
-| RiderProfile | Rider personal info (name, email, emergency contacts) | Yes |
-| Tour | Tour details (name, dates, status) | Yes |
+| Table | Full Table Name | Stores | Persists Across Tours? |
+|---|---|---|---|
+| RiderProfile | `dev-RiderProfile` | Rider personal info (name, email, emergency contacts) | Yes |
+| Tour | `dev-Tour` | Tour details (name, dates, status) | Yes |
 
 **Tour-specific tables (created per tour via API):**
 
 | Table Pattern | Stores | Example |
 |---|---|---|
-| TourRider-{tourId} | Rider enrollment | `tour-data-api-TourRider-India-Coast-2026` |
-| Ride-{tourId} | Ride schedule and routes | `tour-data-api-Ride-India-Coast-2026` |
-| CheckIn-{tourId} | Check-in records | `tour-data-api-CheckIn-India-Coast-2026` |
-| User-{tourId} | Staff accounts | `tour-data-api-User-India-Coast-2026` |
+| TourRider-{tourId} | Rider enrollment | `dev-TourRider-TOT-2026` |
+| Ride-{tourId} | Ride schedule and routes | `dev-Ride-TOT-2026` |
+| CheckIn-{tourId} | Check-in records | `dev-CheckIn-TOT-2026` |
+| User-{tourId} | Staff accounts | `dev-User-TOT-2026` |
 
 ---
 
@@ -314,7 +378,7 @@ A: The system uses a pay-per-use model. For a typical cycling tour (~100 riders,
 A: Yes. Each environment is independent. You can deploy to `dev` and `prod` at the same time without them affecting each other.
 
 **Q: Do I need to deploy every time I create a new tour?**
-A: No. Tour creation happens through the API (`POST /v1/tours`) — once the system is deployed, you create tours by sending API requests. Deployment is only needed when the application code changes.
+A: No. Tour creation happens through the API (`POST /v1/tours`) or the CLI provisioning script (`make provision-tour`) — once the system is deployed, you create tours without redeploying. Deployment is only needed when the application code changes.
 
 ---
 
@@ -357,7 +421,7 @@ This is normal — subsequent deployments update the existing stack. To start co
 
 ```bash
 # WARNING: this deletes ALL resources and data
-sam delete --stack-name tour-data-api
+sam delete --stack-name dev
 ```
 
 ---

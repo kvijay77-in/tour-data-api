@@ -215,14 +215,14 @@ make logs-function FUNCTION=GetRideCheckInsFunction
 
 ```bash
 # List log groups
-aws logs describe-log-groups --log-group-name-prefix /aws/lambda/tour-data-api
+aws logs describe-log-groups --log-group-name-prefix /aws/lambda/dev
 
 # Get recent log events
-aws logs tail /aws/lambda/tour-data-api-GetActiveTourFunction --follow
+aws logs tail /aws/lambda/dev-GetActiveTourFunction --follow
 
 # Filter logs by pattern
 aws logs filter-log-events \
-  --log-group-name /aws/lambda/tour-data-api-CreateCheckinFunction \
+  --log-group-name /aws/lambda/dev-CreateCheckinFunction \
   --filter-pattern "ERROR"
 ```
 
@@ -267,7 +267,7 @@ Monitor critical metrics:
 ```bash
 # Create alarm for Lambda errors
 aws cloudwatch put-metric-alarm \
-  --alarm-name tour-data-api-lambda-errors \
+  --alarm-name dev-lambda-errors \
   --alarm-description "Alert when Lambda errors exceed threshold" \
   --metric-name Errors \
   --namespace AWS/Lambda \
@@ -276,7 +276,7 @@ aws cloudwatch put-metric-alarm \
   --threshold 5 \
   --comparison-operator GreaterThanThreshold \
   --evaluation-periods 1 \
-  --dimensions Name=FunctionName,Value=tour-data-api-CreateCheckinFunction
+  --dimensions Name=FunctionName,Value=dev-CreateCheckinFunction
 ```
 
 #### API Gateway Metrics

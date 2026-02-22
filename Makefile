@@ -80,6 +80,21 @@ lint: ## Lint Python code
 format: ## Format Python code
 	find src -name "*.py" -not -path "*/\.*" | xargs black
 
+provision-tour: ## Provision a new tour (usage: make provision-tour TOUR_ID=TOT-2026 TOUR_NAME="Tour of Tamilnadu 2026" START_DATE=2026-02-10 END_DATE=2026-02-17)
+	@if [ -z "$(TOUR_ID)" ] || [ -z "$(TOUR_NAME)" ] || [ -z "$(START_DATE)" ] || [ -z "$(END_DATE)" ]; then \
+		echo "Usage: make provision-tour TOUR_ID=<id> TOUR_NAME=\"<name>\" START_DATE=YYYY-MM-DD END_DATE=YYYY-MM-DD [STACK_NAME=dev] [ENV=dev] [DESCRIPTION=\"...\"]"; \
+		exit 1; \
+	fi
+	python scripts/provision_tour.py \
+		--stack-name $(or $(STACK_NAME),dev) \
+		--tour-id $(TOUR_ID) \
+		--name "$(TOUR_NAME)" \
+		--start-date $(START_DATE) \
+		--end-date $(END_DATE) \
+		--environment $(or $(ENV),dev) \
+		$(if $(DESCRIPTION),--description "$(DESCRIPTION)",) \
+		$(if $(SUBSCRIPTION_ID),--subscription-id $(SUBSCRIPTION_ID),)
+
 all: validate build test deploy ## Run full pipeline: validate, build, test, deploy
 
 check-config: ## Run preflight checks before deployment

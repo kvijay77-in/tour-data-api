@@ -22,7 +22,7 @@ def lambda_handler(event, context):
     """
     Get today's ride for a tour
     
-    Path parameter: tourId (e.g., India-Coast-2026)
+    Path parameter: tourId (e.g., TOT-2026)
     
     Returns:
     - 200: Today's ride found

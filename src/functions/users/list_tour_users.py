@@ -21,7 +21,7 @@ def lambda_handler(event, context):
     """
     List all users (admin/staff) for a tour
     
-    Path parameter: tourId (e.g., India-Coast-2026)
+    Path parameter: tourId (e.g., TOT-2026)
     Query parameter: role (optional - ADMINISTRATOR, SUPER_USER, PIT_STOP_CREW, HOTEL_STAFF, GUEST)
     
     Returns:

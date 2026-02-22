@@ -21,7 +21,7 @@ def lambda_handler(event, context):
     """
     List all rides for a tour (optionally filtered by status)
     
-    Path parameter: tourId (e.g., India-Coast-2026)
+    Path parameter: tourId (e.g., TOT-2026)
     Query parameter: status (optional - PLANNED, ACTIVE, COMPLETED, CLOSED)
     
     Returns:
