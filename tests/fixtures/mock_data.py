@@ -5,7 +5,7 @@ This module provides mock data and fixtures for testing Lambda functions
 without AWS connectivity. Use with pytest and moto for mocking AWS services.
 
 Table Strategy (Hybrid):
-- Shared tables: Tour, RiderProfile (resolved via env var)
+- Shared tables: TourMaster, RiderProfile (resolved via env var)
 - Tour-specific tables: TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId}
 """
 
@@ -15,7 +15,7 @@ from models import TourStatus, RideStatus, CheckInMethod, TourRiderStatus, UserR
 
 MOCK_TOUR_ID = 'TestTour-2026'
 
-# Shared Tour table data
+# Shared TourMaster table data
 MOCK_TOURS = [
     {
         'PK': f'TOUR#{MOCK_TOUR_ID}',

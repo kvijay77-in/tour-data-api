@@ -56,11 +56,11 @@ def lambda_environment():
     Sets up Lambda environment variables for testing
     
     Hybrid table strategy:
-    - Shared tables: resolved via env var (TOUR_TABLE, RIDER_PROFILE_TABLE)
+    - Shared tables: resolved via env var (TOUR_MASTER_TABLE, RIDER_PROFILE_TABLE)
     - Tour-specific tables: resolved dynamically via STACK_NAME + tourId
     """
     env_vars = {
-        'TOUR_TABLE': 'test-tour-table',
+        'TOUR_MASTER_TABLE': 'test-tour-master-table',
         'RIDER_PROFILE_TABLE': 'test-rider-table',
         'STACK_NAME': 'test-stack',
         'ENVIRONMENT': 'test',

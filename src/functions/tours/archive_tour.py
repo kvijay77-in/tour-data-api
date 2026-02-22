@@ -137,7 +137,7 @@ def lambda_handler(event, context):
         
         # Get tour record
         tour = get_item(
-            table_name_env='TOUR_TABLE',
+            table_name_env='TOUR_MASTER_TABLE',
             key={'PK': f'TOUR#{tour_id}'}
         )
         
@@ -186,7 +186,7 @@ def lambda_handler(event, context):
         if exported_keys:
             tour['archiveExportKeys'] = exported_keys
         
-        put_item('TOUR_TABLE', tour)
+        put_item('TOUR_MASTER_TABLE', tour)
         
         logger.info(f"Tour {tour_id} archived successfully")
         

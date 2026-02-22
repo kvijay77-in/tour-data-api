@@ -31,7 +31,7 @@ def lambda_handler(event, context):
         
         # Use StatusIndex GSI to query for ACTIVE tours
         items = query_items(
-            table_name_env='TOUR_TABLE',
+            table_name_env='TOUR_MASTER_TABLE',
             key_condition_expression='#status = :status',
             expression_values={':status': TourStatus.ACTIVE.value},
             expression_names={'#status': 'status'},

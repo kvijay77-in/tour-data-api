@@ -115,7 +115,7 @@ A browser-based admin UI for tour organizers to manage tours, riders, rides, and
 
 ~~`dynamodb_utils.py` functions all expect a `table_name_env` parameter but ~10 Lambda functions pass `table_name=` with the resolved table name string instead.~~
 
-**Resolution:** Hybrid table strategy implemented. Shared tables use `table_name_env=` (e.g., `get_item(table_name_env='TOUR_TABLE', ...)`). Tour-specific tables use `get_tour_item(table_type='Ride', tour_id=tour_id, ...)` and related `*_tour_*` functions that derive names dynamically as `{STACK_NAME}-{TableType}-{tourId}`.
+**Resolution:** Hybrid table strategy implemented. Shared tables use `table_name_env=` (e.g., `get_item(table_name_env='TOUR_MASTER_TABLE', ...)`). Tour-specific tables use `get_tour_item(table_type='Ride', tour_id=tour_id, ...)` and related `*_tour_*` functions that derive names dynamically as `{STACK_NAME}-{TableType}-{tourId}`.
 
 ---
 
@@ -253,7 +253,7 @@ A browser-based admin UI for tour organizers to manage tours, riders, rides, and
 
 ~~`docs/deployment-guide.md` states the Tour table has `GSI: StatusIndex` but template.yaml had no GSIs.~~
 
-**Resolution:** The Tour table in template.yaml now includes `StatusIndex` GSI with partition key `status`. Used by `get_active.py` and `list_tours.py` for efficient status-based queries.
+**Resolution:** The TourMaster table in template.yaml now includes `StatusIndex` GSI with partition key `status`. Used by `get_active.py` and `list_tours.py` for efficient status-based queries.
 
 ---
 
@@ -276,7 +276,7 @@ The following items were identified after the SolutionDesign.md was updated with
 ~~The current template.yaml defines 6 DynamoDB tables all as SAM-managed resources.~~
 
 **Resolution:** template.yaml completely restructured:
-- Shared tables (Tour with StatusIndex GSI, RiderProfile) remain SAM-managed
+- Shared tables (TourMaster with StatusIndex GSI, RiderProfile) remain SAM-managed
 - Tour-specific tables (TourRider, Ride, CheckIn, User) removed from template — provisioned at runtime by `create_tour.py`
 - `STACK_NAME`, `ENVIRONMENT`, `SUBSCRIPTION_ID` environment variables added to all functions
 - `SubscriptionId` added as SAM template parameter

@@ -7,7 +7,7 @@ Description: >
   for Check-In App and future applications.
   
   Table Strategy: Hybrid (Shared + Tour-Specific)
-  - Shared tables (SAM-managed): RiderProfile, Tour
+  - Shared tables (SAM-managed): RiderProfile, TourMaster
   - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
     CheckIn-{tourId}, User-{tourId}
 
@@ -29,7 +29,7 @@ Globals:
       Variables:
         # Shared table names (SAM-managed)
         RIDER_PROFILE_TABLE: !Ref RiderProfileTable
-        TOUR_TABLE: !Ref TourTable
+        TOUR_MASTER_TABLE: !Ref TourMasterTable
         # Dynamic table name resolution
         STACK_NAME: !Ref AWS::StackName
         # Metadata
@@ -206,13 +206,13 @@ Resources:
         - !Ref CommonLayer
       Policies:
         - DynamoDBReadPolicy:
-            TableName: !Ref TourTable
+            TableName: !Ref TourMasterTable
         - Statement:
             - Effect: Allow
               Action:
                 - dynamodb:Query
               Resource:
-                - !Sub '${TourTable.Arn}/index/*'
+                - !Sub '${TourMasterTable.Arn}/index/*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -231,7 +231,7 @@ Resources:
         - !Ref CommonLayer
       Policies:
         - DynamoDBReadPolicy:
-            TableName: !Ref TourTable
+            TableName: !Ref TourMasterTable
       Events:
         HttpApi:
           Type: HttpApi
@@ -250,13 +250,13 @@ Resources:
         - !Ref CommonLayer
       Policies:
         - DynamoDBReadPolicy:
-            TableName: !Ref TourTable
+            TableName: !Ref TourMasterTable
         - Statement:
             - Effect: Allow
               Action:
                 - dynamodb:Query
               Resource:
-                - !Sub '${TourTable.Arn}/index/*'
+                - !Sub '${TourMasterTable.Arn}/index/*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -276,7 +276,7 @@ Resources:
         - !Ref CommonLayer
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref TourTable
+            TableName: !Ref TourMasterTable
         - Statement:
             - Effect: Allow
               Action:
@@ -304,7 +304,7 @@ Resources:
         - !Ref CommonLayer
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref TourTable
+            TableName: !Ref TourMasterTable
         - Statement:
             - Effect: Allow
               Action:
@@ -508,7 +508,7 @@ Resources:
         - !Ref CommonLayer
       Policies:
         - DynamoDBReadPolicy:
-            TableName: !Ref TourTable
+            TableName: !Ref TourMasterTable
         - Statement:
             - Effect: Allow
               Action:
@@ -744,10 +744,10 @@ Resources:
         - Key: ManagedBy
           Value: SAM
 
-  TourTable:
+  TourMasterTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub '${AWS::StackName}-Tour'
+      TableName: !Sub '${AWS::StackName}-TourMaster'
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: !If [IsProd, true, false]
@@ -770,7 +770,7 @@ Resources:
             ProjectionType: ALL
       Tags:
         - Key: Name
-          Value: !Sub '${AWS::StackName}-Tour'
+          Value: !Sub '${AWS::StackName}-TourMaster'
         - Key: Project
           Value: tour-data-api
         - Key: Environment
@@ -863,11 +863,11 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-RiderProfileTable'
 
-  TourTableName:
-    Description: Tour DynamoDB table name
-    Value: !Ref TourTable
+  TourMasterTableName:
+    Description: TourMaster DynamoDB table name
+    Value: !Ref TourMasterTable
     Export:
-      Name: !Sub '${AWS::StackName}-TourTable'
+      Name: !Sub '${AWS::StackName}-TourMasterTable'
 
   PhotosBucketName:
     Description: S3 bucket for rider photos
