@@ -1,7 +1,7 @@
 """
 Lambda function to create a new ride for a tour
 
-Uses tour-specific Ride-{tourId} table and shared Tour table.
+Uses tour-specific Ride-{tourId} table and shared TourMaster table.
 Route: POST /v1/tours/{tourId}/rides
 """
 
@@ -98,7 +98,7 @@ def lambda_handler(event, context):
         # Check if tour exists and is in the right status
         logger.info(f"Checking if tour exists: {tour_id}")
         tour = get_item(
-            table_name_env='TOUR_TABLE',
+            table_name_env='TOUR_MASTER_TABLE',
             key={'PK': f'TOUR#{tour_id}'}
         )
         

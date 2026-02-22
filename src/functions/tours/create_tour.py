@@ -1,7 +1,7 @@
 """
 Create and provision a new tour Lambda function
 
-Creates the Tour record in the shared Tour table and provisions
+Creates the Tour record in the shared TourMaster table and provisions
 4 tour-specific DynamoDB tables: TourRider, Ride, CheckIn, User.
 """
 
@@ -41,7 +41,7 @@ def lambda_handler(event, context):
         description: Tour description (optional)
     
     Creates:
-        1. Tour record in shared Tour table (status: PROVISIONING)
+        1. Tour record in shared TourMaster table (status: PROVISIONING)
         2. Four tour-specific DynamoDB tables
         3. Updates Tour status to PLANNING once tables are active
     """
@@ -77,7 +77,7 @@ def lambda_handler(event, context):
         
         # Check tourId uniqueness
         existing = get_item(
-            table_name_env='TOUR_TABLE',
+            table_name_env='TOUR_MASTER_TABLE',
             key={'PK': f'TOUR#{tour_id}'}
         )
         
@@ -100,7 +100,7 @@ def lambda_handler(event, context):
         if body.get('description'):
             tour_item['description'] = body['description']
         
-        put_item('TOUR_TABLE', tour_item)
+        put_item('TOUR_MASTER_TABLE', tour_item)
         logger.info(f"Tour record created: {tour_id} (status: PROVISIONING)")
         
         # Provision tour-specific tables
@@ -114,14 +114,14 @@ def lambda_handler(event, context):
             tour_item['status'] = TourStatus.PLANNING.value
             tour_item['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
             tour_item['provisioningError'] = str(e)
-            put_item('TOUR_TABLE', tour_item)
+            put_item('TOUR_MASTER_TABLE', tour_item)
             return internal_error_response(f"Tour created but table provisioning failed: {str(e)}")
         
         # Update tour status to PLANNING
         tour_item['status'] = TourStatus.PLANNING.value
         tour_item['provisionedAt'] = datetime.utcnow().isoformat() + 'Z'
         tour_item['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
-        put_item('TOUR_TABLE', tour_item)
+        put_item('TOUR_MASTER_TABLE', tour_item)
         
         logger.info(f"Tour {tour_id} provisioned successfully with {len(created_tables)} tables")
         

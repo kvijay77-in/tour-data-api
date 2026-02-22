@@ -42,7 +42,7 @@ def lambda_handler(event, context):
         
         # Get tour from DynamoDB (PK = TOUR#<tourId>)
         tour = get_item(
-            table_name_env='TOUR_TABLE',
+            table_name_env='TOUR_MASTER_TABLE',
             key={'PK': f"TOUR#{tour_id}"}
         )
         

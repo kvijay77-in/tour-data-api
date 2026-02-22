@@ -50,7 +50,7 @@ def lambda_handler(event, context):
         if status_filter:
             # Use StatusIndex GSI for efficient filtering
             items = query_items(
-                table_name_env='TOUR_TABLE',
+                table_name_env='TOUR_MASTER_TABLE',
                 key_condition_expression='#status = :status',
                 expression_values={':status': status_filter},
                 expression_names={'#status': 'status'},
@@ -59,7 +59,7 @@ def lambda_handler(event, context):
         else:
             # Get all tours via scan
             items = scan_items(
-                table_name_env='TOUR_TABLE'
+                table_name_env='TOUR_MASTER_TABLE'
             )
         
         logger.info(f"Found {len(items)} tour(s)")

@@ -5,7 +5,7 @@ These models represent the data structures stored in DynamoDB
 and returned by the API endpoints.
 
 Table Strategy (Hybrid):
-- Shared tables (SAM-managed): RiderProfile, Tour
+- Shared tables (SAM-managed): RiderProfile, TourMaster
 - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
   CheckIn-{tourId}, User-{tourId}
 """
@@ -118,7 +118,7 @@ class RiderProfile:
 @dataclass
 class Tour:
     """
-    Tour definition (shared Tour table).
+    Tour definition (shared TourMaster table).
     PK: TOUR#<tourId>
     tourId is free-form (e.g., TOT-2026, TDF2026)
     """

@@ -329,7 +329,7 @@ Expected monthly costs for typical usage (100 riders, 7-8 rides per tour, 5-year
 - **On-demand pricing**: Pay only for actual reads/writes
 - **Storage**: $0.25/GB per month
 - **Typical usage**: 10k reads, 5k writes per month across all tables
-- **Hybrid table strategy**: Shared tables (RiderProfile, Tour) are always active; tour-specific tables only exist during active tours, reducing idle costs
+- **Hybrid table strategy**: Shared tables (RiderProfile, TourMaster) are always active; tour-specific tables only exist during active tours, reducing idle costs
 - **Cost optimization**: Use on-demand mode for variable workloads; archive completed tours to delete unused tables
 
 #### Lambda Costs
@@ -435,7 +435,7 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 - **DynamoDB Tables (Hybrid Strategy)**:
   - **Shared (SAM-managed, 2 tables)**:
     - RiderProfile (with EmailIndex GSI)
-    - Tour (with StatusIndex GSI)
+    - TourMaster (with StatusIndex GSI)
   - **Tour-specific (runtime-provisioned per tour, 4 tables each)**:
     - TourRider-{tourId}
     - Ride-{tourId} (with DateIndex, StatusIndex GSIs)

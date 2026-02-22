@@ -234,7 +234,7 @@ make provision-tour \
   ENV=prod
 ```
 
-The script creates the Tour record in the shared Tour table and provisions 4 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User).
+The script creates the Tour record in the shared TourMaster table and provisions 4 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User).
 
 ### Method 2: API Endpoint (Runtime Method)
 
@@ -335,7 +335,7 @@ Detailed inventory of everything deployment creates in your AWS account.
 | Table | Full Table Name | Stores | Persists Across Tours? |
 |---|---|---|---|
 | RiderProfile | `dev-RiderProfile` | Rider personal info (name, email, emergency contacts) | Yes |
-| Tour | `dev-Tour` | Tour details (name, dates, status) | Yes |
+| TourMaster | `dev-TourMaster` | Tour details (name, dates, status) | Yes |
 
 **Tour-specific tables (created per tour via API):**
 

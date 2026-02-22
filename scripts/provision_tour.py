@@ -2,7 +2,7 @@
 """
 Tour provisioning CLI script
 
-Provisions a new tour by creating a Tour record in the shared Tour table
+Provisions a new tour by creating a Tour record in the shared TourMaster table
 and creating 4 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User).
 
 This script provides the deployment-time method for tour provisioning,
@@ -20,7 +20,7 @@ Usage:
 
 Prerequisites:
     - AWS CLI configured with valid credentials
-    - Stack must be deployed (shared Tour table must exist)
+    - Stack must be deployed (shared TourMaster table must exist)
     - Python packages: boto3
 """
 
@@ -48,27 +48,27 @@ from tour_provisioning import provision_tour_tables
 
 def get_tour_table_name_from_stack(stack_name):
     """
-    Get the Tour table name from CloudFormation stack outputs
+    Get the TourMaster table name from CloudFormation stack outputs
 
     Args:
         stack_name: CloudFormation stack name
 
     Returns:
-        Tour table name
+        TourMaster table name
     """
     cf_client = boto3.client('cloudformation')
     try:
         response = cf_client.describe_stacks(StackName=stack_name)
         outputs = response['Stacks'][0].get('Outputs', [])
         for output in outputs:
-            if output['OutputKey'] == 'TourTableName':
+            if output['OutputKey'] == 'TourMasterTableName':
                 return output['OutputValue']
     except ClientError as e:
         print(f"Error: Could not describe stack '{stack_name}': {e}")
         sys.exit(1)
 
     # Fallback to naming convention
-    return f"{stack_name}-Tour"
+    return f"{stack_name}-TourMaster"
 
 
 def _utc_now_iso():
@@ -122,13 +122,13 @@ def provision_tour(args):
     dynamodb_client = session.client('dynamodb')
     dynamodb_resource = session.resource('dynamodb')
 
-    # Resolve Tour table name from stack
+    # Resolve TourMaster table name from stack
     tour_table_name = get_tour_table_name_from_stack(stack_name)
     tour_table = dynamodb_resource.Table(tour_table_name)
 
     print(f"Provisioning tour: {tour_id}")
     print(f"  Stack: {stack_name}")
-    print(f"  Tour table: {tour_table_name}")
+    print(f"  TourMaster table: {tour_table_name}")
     print(f"  Environment: {environment}")
     print()
 
