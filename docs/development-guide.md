@@ -114,7 +114,7 @@ Retrieve the API URL anytime:
 
 ```bash
 aws cloudformation describe-stacks \
-  --stack-name tour-data-api \
+  --stack-name dev \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
 ```
@@ -262,10 +262,10 @@ make validate
 aws sts get-caller-identity
 
 # View CloudFormation events for details
-aws cloudformation describe-stack-events --stack-name tour-data-api
+aws cloudformation describe-stack-events --stack-name dev
 
 # Check stack status
-aws cloudformation describe-stacks --stack-name tour-data-api
+aws cloudformation describe-stacks --stack-name dev
 ```
 
 **Common causes**:
@@ -304,18 +304,18 @@ pytest tests/test_lambda_functions.py -v
 aws dynamodb list-tables
 
 # Describe a table
-aws dynamodb describe-table --table-name tour-data-api-RiderProfile
+aws dynamodb describe-table --table-name dev-RiderProfile
 
 # Scan a table (dev only, use carefully)
-aws dynamodb scan --table-name tour-data-api-RiderProfile --limit 10
+aws dynamodb scan --table-name dev-RiderProfile --limit 10
 
 # Get a specific item
 aws dynamodb get-item \
-  --table-name tour-data-api-RiderProfile \
+  --table-name dev-RiderProfile \
   --key '{"PK": {"S": "PROFILE#abc-123-uuid"}}'
 
 # Scan a tour-specific table
-aws dynamodb scan --table-name tour-data-api-Ride-TOT-2026 --limit 10
+aws dynamodb scan --table-name dev-Ride-TOT-2026 --limit 10
 ```
 
 **Common causes**:

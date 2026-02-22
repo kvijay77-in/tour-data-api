@@ -49,7 +49,7 @@ def get_tour_table_name(table_type: str, tour_id: str) -> str:
         tour_id: Tour identifier (e.g., TOT-2026)
     
     Returns:
-        Full table name (e.g., tour-data-api-Ride-TOT-2026)
+        Full table name (e.g., dev-Ride-TOT-2026)
     """
     stack_name = os.environ.get('STACK_NAME')
     if not stack_name:

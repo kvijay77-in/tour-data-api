@@ -90,9 +90,9 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 
 All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables and `{AWS::StackName}-{TableType}-{tourId}` for tour-specific tables.
 
-Examples (stack name: `tour-data-api`, tour ID: `TOT-2026`):
-- Shared: `tour-data-api-RiderProfile`, `tour-data-api-Tour`
-- Tour-specific: `tour-data-api-TourRider-TOT-2026`, `tour-data-api-Ride-TOT-2026`, `tour-data-api-CheckIn-TOT-2026`, `tour-data-api-User-TOT-2026`
+Examples (stack name: `dev`, tour ID: `TOT-2026`):
+- Shared: `dev-RiderProfile`, `dev-Tour`
+- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
 

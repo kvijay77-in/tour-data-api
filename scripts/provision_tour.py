@@ -10,7 +10,7 @@ complementing the API method (POST /v1/tours) used by external apps.
 
 Usage:
     python scripts/provision_tour.py \\
-        --stack-name tour-data-api \\
+        --stack-name dev \\
         --tour-id TOT-2026 \\
         --name "Tour of Tamilnadu 2026" \\
         --start-date 2026-02-10 \\
@@ -213,7 +213,7 @@ def main():
 Examples:
   # Provision a tour for the dev environment
   python scripts/provision_tour.py \\
-    --stack-name tour-data-api \\
+    --stack-name dev \\
     --tour-id TOT-2026 \\
     --name "Tour of Tamilnadu 2026" \\
     --start-date 2026-02-10 \\
@@ -221,7 +221,7 @@ Examples:
 
   # Provision with all options
   python scripts/provision_tour.py \\
-    --stack-name tour-data-api-prod \\
+    --stack-name prod \\
     --tour-id TDF2026 \\
     --name "Tour de France 2026" \\
     --start-date 2026-07-01 \\
@@ -238,7 +238,7 @@ Both methods create the same Tour record and tour-specific tables.
 
     parser.add_argument(
         '--stack-name', required=True,
-        help='CloudFormation stack name (e.g., tour-data-api, tour-data-api-prod)'
+        help='CloudFormation stack name (e.g., dev, test, prod)'
     )
     parser.add_argument(
         '--tour-id', required=True,

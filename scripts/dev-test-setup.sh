@@ -22,7 +22,7 @@ set -uo pipefail
 # -------------------------------------------------------------------------
 # Configuration
 # -------------------------------------------------------------------------
-STACK_NAME="${1:-tour-data-api}"
+STACK_NAME="${1:-dev}"
 TEST_USERNAME="${TEST_USERNAME:-kvijay77@yahoo.co.in}"
 TEST_PASSWORD="${TEST_PASSWORD:-}"
 

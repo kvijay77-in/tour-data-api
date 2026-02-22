@@ -137,9 +137,9 @@ Three independent environments, each with their own AWS resources, databases, an
 
 | Environment | Stack Name | Purpose |
 |---|---|---|
-| **dev** | `tour-data-api` | Development and experimentation |
-| **test** | `tour-data-api-test` | Staging and pre-production verification |
-| **prod** | `tour-data-api-prod` | Live production system used during tours |
+| **dev** | `dev` | Development and experimentation |
+| **test** | `test` | Staging and pre-production verification |
+| **prod** | `prod` | Live production system used during tours |
 
 Each environment gets its own API URL:
 - Dev: `https://<id>.execute-api.<region>.amazonaws.com/dev/`
@@ -214,7 +214,7 @@ make provision-tour \
 
 # Using Python script directly (more options available)
 python scripts/provision_tour.py \
-  --stack-name tour-data-api \
+  --stack-name dev \
   --tour-id TOT-2026 \
   --name "Tour of Tamilnadu 2026" \
   --start-date 2026-02-10 \
@@ -226,7 +226,7 @@ python scripts/provision_tour.py \
 For production environments:
 ```bash
 make provision-tour \
-  STACK_NAME=tour-data-api-prod \
+  STACK_NAME=prod \
   TOUR_ID=TOT-2026 \
   TOUR_NAME="Tour of Tamilnadu 2026" \
   START_DATE=2026-02-10 \
@@ -272,19 +272,19 @@ Both methods produce the same result: a Tour record and 4 tour-specific DynamoDB
 ```bash
 # Dev
 aws cloudformation describe-stacks \
-  --stack-name tour-data-api \
+  --stack-name dev \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
 
 # Test
 aws cloudformation describe-stacks \
-  --stack-name tour-data-api-test \
+  --stack-name test \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
 
 # Prod
 aws cloudformation describe-stacks \
-  --stack-name tour-data-api-prod \
+  --stack-name prod \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
 ```
@@ -334,17 +334,17 @@ Detailed inventory of everything deployment creates in your AWS account.
 
 | Table | Full Table Name | Stores | Persists Across Tours? |
 |---|---|---|---|
-| RiderProfile | `tour-data-api-RiderProfile` | Rider personal info (name, email, emergency contacts) | Yes |
-| Tour | `tour-data-api-Tour` | Tour details (name, dates, status) | Yes |
+| RiderProfile | `dev-RiderProfile` | Rider personal info (name, email, emergency contacts) | Yes |
+| Tour | `dev-Tour` | Tour details (name, dates, status) | Yes |
 
 **Tour-specific tables (created per tour via API):**
 
 | Table Pattern | Stores | Example |
 |---|---|---|
-| TourRider-{tourId} | Rider enrollment | `tour-data-api-TourRider-TOT-2026` |
-| Ride-{tourId} | Ride schedule and routes | `tour-data-api-Ride-TOT-2026` |
-| CheckIn-{tourId} | Check-in records | `tour-data-api-CheckIn-TOT-2026` |
-| User-{tourId} | Staff accounts | `tour-data-api-User-TOT-2026` |
+| TourRider-{tourId} | Rider enrollment | `dev-TourRider-TOT-2026` |
+| Ride-{tourId} | Ride schedule and routes | `dev-Ride-TOT-2026` |
+| CheckIn-{tourId} | Check-in records | `dev-CheckIn-TOT-2026` |
+| User-{tourId} | Staff accounts | `dev-User-TOT-2026` |
 
 ---
 
@@ -421,7 +421,7 @@ This is normal — subsequent deployments update the existing stack. To start co
 
 ```bash
 # WARNING: this deletes ALL resources and data
-sam delete --stack-name tour-data-api
+sam delete --stack-name dev
 ```
 
 ---

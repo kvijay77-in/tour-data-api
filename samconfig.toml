@@ -2,7 +2,7 @@ version = 0.1
 
 [default]
 [default.global.parameters]
-stack_name = "tour-data-api"
+stack_name = "dev"
 
 [default.build.parameters]
 cached = true
@@ -35,7 +35,7 @@ warm_containers = "EAGER"
 # Test environment configuration
 [test]
 [test.global.parameters]
-stack_name = "tour-data-api-test"
+stack_name = "test"
 
 [test.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
@@ -48,7 +48,7 @@ parameter_overrides = "Environment=test"
 # Production environment configuration
 [prod]
 [prod.global.parameters]
-stack_name = "tour-data-api-prod"
+stack_name = "prod"
 
 [prod.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
