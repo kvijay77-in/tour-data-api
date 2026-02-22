@@ -219,7 +219,7 @@ python scripts/provision_tour.py \
   --name "Tour of Tamilnadu 2026" \
   --start-date 2026-02-10 \
   --end-date 2026-02-17 \
-  --description "Annual coastal cycling tour" \
+  --description "Season 2: Chera Nadu II" \
   --environment dev
 ```
 
@@ -249,7 +249,7 @@ curl -X POST https://<api-url>/v1/tours \
     "name": "Tour of Tamilnadu 2026",
     "startDate": "2026-02-10",
     "endDate": "2026-02-17",
-    "description": "Annual coastal cycling tour"
+    "description": "Season 2: Chera Nadu II"
   }'
 ```
 
@@ -420,9 +420,22 @@ The API is working but requires authentication. Get a JWT token from Cognito and
 This is normal — subsequent deployments update the existing stack. To start completely fresh:
 
 ```bash
-# WARNING: this deletes ALL resources and data
+# Recommended: use make delete (cleans up tour tables + deletes stack)
+make delete
+
+# Or manually: first clean tour-specific tables, then delete the stack
+python scripts/cleanup_tour_tables.py --stack-name dev --confirm
 sam delete --stack-name dev
 ```
+
+> **Note:** `sam delete` only removes CloudFormation-managed resources. Tour-specific DynamoDB
+> tables (TourRider, Ride, CheckIn, User) are created at runtime and must be cleaned up
+> separately. The `make delete` target handles both steps automatically.
+>
+> To preview which tour tables exist without deleting them:
+> ```bash
+> python scripts/cleanup_tour_tables.py --stack-name dev
+> ```
 
 ---
 

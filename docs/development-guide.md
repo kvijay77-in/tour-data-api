@@ -216,19 +216,36 @@ make test
 
 | Command | Description |
 |---------|-------------|
+| `make help` | Show all available targets |
+| `make install` | Install AWS SAM CLI and dependencies |
 | `make build` | Build the SAM application |
-| `make deploy` | Build and deploy to dev |
 | `make validate` | Validate SAM template |
+| `make deploy` | Build and deploy to default environment |
+| `make deploy-dev` | Deploy to development environment |
+| `make deploy-test` | Deploy to test environment |
+| `make deploy-prod` | Deploy to production (with confirmation) |
+| `make local-api` | Start API locally |
+| `make sync` | Sync code changes to AWS (fast iteration) |
 | `make test` | Run all unit tests |
 | `make test-coverage` | Run tests with coverage report |
 | `make lint` | Lint Python code |
 | `make format` | Format code with Black |
 | `make logs FUNCTION=X` | View CloudWatch logs |
-| `make logs-tail FUNCTION=X` | Tail logs in real-time |
-| `make sync` | Sync code changes (fast iteration) |
+| `make logs-function FUNCTION=X` | Tail logs for a specific function |
+| `make logs-tail FUNCTION=X` | Alias for logs-function |
+| `make invoke FUNCTION=X EVENT=Y` | Invoke a function locally |
+| `make package` | Package application for deployment |
 | `make clean` | Clean build artifacts |
-| `make delete` | Delete CloudFormation stack |
+| `make delete` | Delete stack and tour-specific DynamoDB tables |
+| `make cleanup-tour-tables` | Dry run — list tour-specific tables |
+| `make cleanup-tour-tables CONFIRM=true` | Delete tour-specific DynamoDB tables |
+| `make provision-tour TOUR_ID=X ...` | Provision a new tour with DynamoDB tables |
 | `make check-config` | Run preflight checks |
+| `make dev-test-setup` | Export env vars for dev API testing |
+| `make setup-github-oidc` | Set up GitHub OIDC for keyless deployments |
+| `make all` | Run full pipeline: validate, build, test, deploy |
+
+> **Note**: Commands that accept `STACK_NAME` (e.g., `delete`, `cleanup-tour-tables`, `provision-tour`) default to `dev`. Override with `STACK_NAME=test`.
 
 > **Note**: For deploying to test or prod environments, see the [Deployment Guide](deployment-guide.md).
 

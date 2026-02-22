@@ -58,34 +58,56 @@ fi
 echo "OK ($STACK_STATUS)"
 
 # -------------------------------------------------------------------------
-# Fetch CloudFormation outputs
+# Fetch CloudFormation outputs (single API call)
 # -------------------------------------------------------------------------
 echo ""
 echo "Fetching stack outputs..."
 
-API_ENDPOINT=$(aws cloudformation describe-stacks \
+if ! STACK_OUTPUTS=$(aws cloudformation describe-stacks \
     --stack-name "$STACK_NAME" \
-    --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
-    --output text 2>/dev/null)
-
-USER_POOL_ID=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --query "Stacks[0].Outputs[?OutputKey=='CognitoUserPoolIdOutput'].OutputValue" \
-    --output text 2>/dev/null)
-
-CLIENT_ID=$(aws cloudformation describe-stacks \
-    --stack-name "$STACK_NAME" \
-    --query "Stacks[0].Outputs[?OutputKey=='CognitoAppClientIdOutput'].OutputValue" \
-    --output text 2>/dev/null)
-
-# Validate outputs
-if [[ -z "$API_ENDPOINT" || "$API_ENDPOINT" == "None" ]]; then
-    echo "  Error: Could not retrieve API endpoint from stack outputs."
+    --query "Stacks[0].Outputs" \
+    --output json); then
+    echo "  Error: Failed to fetch stack outputs (see AWS error above)."
     return 1 2>/dev/null || exit 1
 fi
 
-if [[ -z "$USER_POOL_ID" || "$USER_POOL_ID" == "None" ]]; then
-    echo "  Warning: Cognito User Pool ID not found (using external Cognito?)."
+# Extract individual outputs
+API_ENDPOINT=$(echo "$STACK_OUTPUTS" | python3 -c "
+import sys, json
+outputs = json.load(sys.stdin)
+for o in outputs:
+    if o['OutputKey'] == 'ApiEndpoint':
+        print(o['OutputValue'])
+        break
+" 2>/dev/null)
+
+USER_POOL_ID=$(echo "$STACK_OUTPUTS" | python3 -c "
+import sys, json
+outputs = json.load(sys.stdin)
+for o in outputs:
+    if o['OutputKey'] == 'CognitoUserPoolIdOutput':
+        print(o['OutputValue'])
+        break
+" 2>/dev/null)
+
+CLIENT_ID=$(echo "$STACK_OUTPUTS" | python3 -c "
+import sys, json
+outputs = json.load(sys.stdin)
+for o in outputs:
+    if o['OutputKey'] == 'CognitoAppClientIdOutput':
+        print(o['OutputValue'])
+        break
+" 2>/dev/null)
+
+# Validate outputs
+if [[ -z "$API_ENDPOINT" ]]; then
+    echo "  Error: Could not retrieve API endpoint from stack outputs."
+    echo "  Ensure the stack deployed successfully and has an 'ApiEndpoint' output."
+    return 1 2>/dev/null || exit 1
+fi
+
+if [[ -z "$USER_POOL_ID" ]]; then
+    echo "  Warning: Cognito User Pool ID not found in stack outputs."
     echo "  Set USER_POOL_ID and CLIENT_ID manually if needed."
 fi
 
@@ -100,7 +122,7 @@ export STACK_NAME API_ENDPOINT USER_POOL_ID CLIENT_ID
 # -------------------------------------------------------------------------
 echo ""
 
-if [[ -z "$USER_POOL_ID" || "$USER_POOL_ID" == "None" || -z "$CLIENT_ID" || "$CLIENT_ID" == "None" ]]; then
+if [[ -z "$USER_POOL_ID" || -z "$CLIENT_ID" ]]; then
     echo "Skipping token retrieval (Cognito outputs not available)."
     echo "Set BEARER_TOKEN manually."
     echo ""
@@ -123,16 +145,40 @@ if [[ -z "$TEST_PASSWORD" ]]; then
 fi
 
 printf "%-45s" "Fetching JWT token..."
-AUTH_RESULT=$(aws cognito-idp initiate-auth \
+if ! AUTH_RESULT=$(aws cognito-idp initiate-auth \
     --auth-flow USER_PASSWORD_AUTH \
     --client-id "$CLIENT_ID" \
-    --auth-parameters "USERNAME=$TEST_USERNAME,PASSWORD=$TEST_PASSWORD" \
-    2>/dev/null)
-
-if [[ $? -ne 0 || -z "$AUTH_RESULT" ]]; then
+    --auth-parameters "USERNAME=$TEST_USERNAME,PASSWORD=$TEST_PASSWORD"); then
     echo "FAILED"
-    echo "  Error: Authentication failed. Check username/password."
-    echo "  Ensure user exists: aws cognito-idp admin-create-user --user-pool-id $USER_POOL_ID --username $TEST_USERNAME --user-attributes Name=email,Value=$TEST_USERNAME"
+    echo "  Error: Authentication failed (see AWS error above)."
+    echo ""
+    echo "  Possible causes:"
+    echo "    - User '$TEST_USERNAME' does not exist in the user pool"
+    echo "    - Incorrect password"
+    echo "    - User pool or client ID is invalid"
+    echo ""
+    echo "  To create the test user:"
+    echo "    aws cognito-idp admin-create-user --user-pool-id $USER_POOL_ID --username $TEST_USERNAME --user-attributes Name=email,Value=$TEST_USERNAME"
+    echo ""
+    return 1 2>/dev/null || exit 1
+fi
+
+if [[ -z "$AUTH_RESULT" ]]; then
+    echo "FAILED"
+    echo "  Error: Authentication returned an empty response."
+    return 1 2>/dev/null || exit 1
+fi
+
+# Check for Cognito auth challenges (e.g., NEW_PASSWORD_REQUIRED for first-time login)
+CHALLENGE_NAME=$(echo "$AUTH_RESULT" | python3 -c "import sys, json; r=json.load(sys.stdin); print(r.get('ChallengeName', ''))" 2>/dev/null)
+
+if [[ -n "$CHALLENGE_NAME" ]]; then
+    echo "FAILED"
+    echo "  Error: Cognito returned a challenge: $CHALLENGE_NAME"
+    if [[ "$CHALLENGE_NAME" == "NEW_PASSWORD_REQUIRED" ]]; then
+        echo "  The user must set a permanent password before authenticating."
+        echo "  Run: aws cognito-idp admin-set-user-password --user-pool-id $USER_POOL_ID --username $TEST_USERNAME --password <NEW_PASSWORD> --permanent"
+    fi
     echo ""
     return 1 2>/dev/null || exit 1
 fi
@@ -142,6 +188,8 @@ BEARER_TOKEN=$(echo "$AUTH_RESULT" | python3 -c "import sys, json; print(json.lo
 if [[ -z "$BEARER_TOKEN" ]]; then
     echo "FAILED"
     echo "  Error: Could not extract IdToken from auth response."
+    echo "  Unexpected response structure:"
+    echo "$AUTH_RESULT" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))" 2>/dev/null | head -20
     return 1 2>/dev/null || exit 1
 fi
 

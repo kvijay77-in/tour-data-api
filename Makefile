@@ -1,4 +1,16 @@
-.PHONY: build deploy clean test validate sync logs install help check-config setup-github-oidc
+.PHONY: build deploy clean test validate sync logs install help check-config setup-github-oidc cleanup-tour-tables
+
+# Auto-detect Python: prefer project venv, then system python3/python
+# Project venv has the required dependencies (boto3, pytest, etc.)
+ifneq (,$(wildcard .venv/bin/python))
+  PYTHON := .venv/bin/python
+else
+  PYTHON := $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null)
+  ifeq ($(PYTHON),)
+    $(error No Python found. Create a virtual environment with 'python3 -m venv .venv' or install Python 3.11+)
+  endif
+endif
+PIP := $(PYTHON) -m pip
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -7,7 +19,7 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 install: ## Install AWS SAM CLI and dependencies
-	pip install aws-sam-cli pytest boto3
+	$(PIP) install aws-sam-cli pytest boto3
 
 build: ## Build SAM application
 	sam build
@@ -39,10 +51,10 @@ sync: ## Sync changes to AWS (fast iteration)
 	sam sync --watch
 
 test: ## Run unit tests
-	pytest tests/ -v
+	$(PYTHON) -m pytest tests/ -v
 
 test-coverage: ## Run tests with coverage report
-	pytest tests/ --cov=src --cov-report=html --cov-report=term
+	$(PYTHON) -m pytest tests/ --cov=src --cov-report=html --cov-report=term
 
 logs: ## Tail logs for all functions (or specific: make logs FUNCTION=GetActiveTourFunction)
 ifdef FUNCTION
@@ -60,12 +72,24 @@ logs-tail: ## Alias for logs-function (usage: make logs-tail FUNCTION=CreateChec
 clean: ## Clean build artifacts
 	rm -rf .aws-sam
 
-delete: ## Delete CloudFormation stack
-	@echo "WARNING: This will delete the entire stack!"
+delete: ## Delete CloudFormation stack and tour-specific tables
+	@echo "WARNING: This will delete the entire stack and all tour-specific DynamoDB tables!"
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		echo ""; \
+		echo "--- Cleaning up tour-specific tables ---"; \
+		$(PYTHON) scripts/cleanup_tour_tables.py --stack-name $(or $(STACK_NAME),dev) --confirm; \
+		echo ""; \
+		echo "--- Deleting CloudFormation stack ---"; \
 		sam delete; \
+	fi
+
+cleanup-tour-tables: ## Delete tour-specific DynamoDB tables (dry run by default, use CONFIRM=true to delete)
+	@if [ "$(CONFIRM)" = "true" ]; then \
+		$(PYTHON) scripts/cleanup_tour_tables.py --stack-name $(or $(STACK_NAME),dev) --confirm; \
+	else \
+		$(PYTHON) scripts/cleanup_tour_tables.py --stack-name $(or $(STACK_NAME),dev); \
 	fi
 
 invoke: ## Invoke a function locally (usage: make invoke FUNCTION=GetActiveTourFunction EVENT=events/test.json)
@@ -75,17 +99,17 @@ package: build ## Package application for deployment
 	sam package --output-template-file packaged.yaml
 
 lint: ## Lint Python code
-	find src -name "*.py" -not -path "*/\.*" | xargs pylint
+	find src -name "*.py" -not -path "*/\.*" | xargs $(PYTHON) -m pylint
 
 format: ## Format Python code
-	find src -name "*.py" -not -path "*/\.*" | xargs black
+	find src -name "*.py" -not -path "*/\.*" | xargs $(PYTHON) -m black
 
 provision-tour: ## Provision a new tour (usage: make provision-tour TOUR_ID=TOT-2026 TOUR_NAME="Tour of Tamilnadu 2026" START_DATE=2026-02-10 END_DATE=2026-02-17)
 	@if [ -z "$(TOUR_ID)" ] || [ -z "$(TOUR_NAME)" ] || [ -z "$(START_DATE)" ] || [ -z "$(END_DATE)" ]; then \
 		echo "Usage: make provision-tour TOUR_ID=<id> TOUR_NAME=\"<name>\" START_DATE=YYYY-MM-DD END_DATE=YYYY-MM-DD [STACK_NAME=dev] [ENV=dev] [DESCRIPTION=\"...\"]"; \
 		exit 1; \
 	fi
-	python scripts/provision_tour.py \
+	$(PYTHON) scripts/provision_tour.py \
 		--stack-name $(or $(STACK_NAME),dev) \
 		--tour-id $(TOUR_ID) \
 		--name "$(TOUR_NAME)" \

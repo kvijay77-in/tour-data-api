@@ -86,7 +86,8 @@ tour-data-api/
 └── scripts/                           # Utility scripts
     ├── preflight-check.sh            # Pre-deployment environment validation
     ├── dev-test-setup.sh             # Exports env vars for dev API testing
-    └── provision_tour.py             # CLI script for tour provisioning (deployment method)
+    ├── provision_tour.py             # CLI script for tour provisioning (deployment method)
+    └── cleanup_tour_tables.py        # Deletes tour-specific DynamoDB tables not managed by CloudFormation
 ```
 
 **Key Structure Notes:**
@@ -122,6 +123,7 @@ tour-data-api/
 - **`scripts/preflight-check.sh`**: Pre-deployment checks for AWS CLI, SAM CLI, Python, credentials, and template validity
 - **`scripts/dev-test-setup.sh`**: Exports environment variables (API endpoint, JWT token, etc.) for dev API testing
 - **`scripts/provision_tour.py`**: CLI tool for provisioning tours during deployment. Creates Tour record and 4 tour-specific DynamoDB tables. This is the deployment-time equivalent of the `POST /v1/tours` API endpoint.
+- **`scripts/cleanup_tour_tables.py`**: Deletes tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User) that are created at runtime and not managed by CloudFormation. Runs automatically as part of `make delete` and can also be used standalone.
 
 ### CI/CD (`.github/workflows/`)
 - **`ci-cd.yml`**: GitHub Actions workflow for manual-trigger testing and deployment
