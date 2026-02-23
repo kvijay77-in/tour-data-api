@@ -99,7 +99,7 @@ def lambda_handler(event, context):
         logger.info(f"Checking if tour exists: {tour_id}")
         tour = get_item(
             table_name_env='TOUR_MASTER_TABLE',
-            key={'PK': f'TOUR#{tour_id}'}
+            key={'tourId': tour_id}
         )
         
         if not tour:
@@ -118,7 +118,7 @@ def lambda_handler(event, context):
         existing_ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
-            key={'PK': f'RIDE#{ride_id}'}
+            key={'rideId': ride_id}
         )
         
         if existing_ride:
@@ -127,7 +127,6 @@ def lambda_handler(event, context):
         # Create ride object
         now = datetime.utcnow().isoformat() + 'Z'
         ride = {
-            'PK': f'RIDE#{ride_id}',
             'rideId': ride_id,
             'date': body['date'],
             'rideNo': body['rideNo'],

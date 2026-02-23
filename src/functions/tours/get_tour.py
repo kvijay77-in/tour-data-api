@@ -40,10 +40,10 @@ def lambda_handler(event, context):
         
         logger.info(f"Getting tour: {tour_id}")
         
-        # Get tour from DynamoDB (PK = TOUR#<tourId>)
+        # Get tour from DynamoDB
         tour = get_item(
             table_name_env='TOUR_MASTER_TABLE',
-            key={'PK': f"TOUR#{tour_id}"}
+            key={'tourId': tour_id}
         )
         
         if not tour:

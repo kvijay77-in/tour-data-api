@@ -1,7 +1,7 @@
 """
 Lambda function to update a rider profile
 
-Shared RiderProfile table (PK: PROFILE#<profileId>).
+Shared RiderProfile table (partition key: profileId).
 Route: PUT /v1/riders/profile/{profileId}
 """
 
@@ -49,7 +49,7 @@ def lambda_handler(event, context):
         logger.info(f"Fetching existing rider profile: {profile_id}")
         existing_rider = get_item(
             table_name_env='RIDER_PROFILE_TABLE',
-            key={'PK': f'PROFILE#{profile_id}'}
+            key={'profileId': profile_id}
         )
         
         if not existing_rider:

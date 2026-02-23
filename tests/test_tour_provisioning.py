@@ -75,19 +75,24 @@ class TestTourTableDefinitions:
                 f"{table_type} missing KeySchema"
 
     def test_checkin_table_has_composite_key(self):
-        """CheckIn table has both PK and SK (composite key)"""
+        """CheckIn table has both rideId and checkInId (composite key)"""
         checkin_def = TOUR_TABLE_DEFINITIONS['CheckIn']
         key_attrs = [k['AttributeName'] for k in checkin_def['KeySchema']]
-        assert 'PK' in key_attrs
-        assert 'SK' in key_attrs
+        assert 'rideId' in key_attrs
+        assert 'checkInId' in key_attrs
 
     def test_other_tables_have_simple_key(self):
-        """TourRider, Ride, User tables have PK-only keys"""
-        for table_type in ['TourRider', 'Ride', 'User']:
+        """TourRider, Ride, User tables have single partition keys"""
+        expected_keys = {
+            'TourRider': ['riderId'],
+            'Ride': ['rideId'],
+            'User': ['userId'],
+        }
+        for table_type, expected in expected_keys.items():
             definition = TOUR_TABLE_DEFINITIONS[table_type]
             key_attrs = [k['AttributeName'] for k in definition['KeySchema']]
-            assert key_attrs == ['PK'], \
-                f"{table_type} should have PK-only key"
+            assert key_attrs == expected, \
+                f"{table_type} should have {expected} key"
 
 
 class TestBuildTourTableTags:

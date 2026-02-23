@@ -1,7 +1,7 @@
 """
 Lambda function to get a specific ride by ID
 
-Uses tour-specific Ride-{tourId} table (PK: RIDE#<rideId>).
+Uses tour-specific Ride-{tourId} table (partition key: rideId).
 Route: GET /v1/tours/{tourId}/rides/{rideId}
 """
 
@@ -50,7 +50,7 @@ def lambda_handler(event, context):
         ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
-            key={'PK': f'RIDE#{ride_id}'}
+            key={'rideId': ride_id}
         )
         
         if not ride:

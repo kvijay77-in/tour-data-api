@@ -26,11 +26,11 @@ from models import TOUR_TABLE_TYPES
 TOUR_TABLE_DEFINITIONS = {
     'TourRider': {
         'AttributeDefinitions': [
-            {'AttributeName': 'PK', 'AttributeType': 'S'},
+            {'AttributeName': 'riderId', 'AttributeType': 'S'},
             {'AttributeName': 'profileId', 'AttributeType': 'S'},
         ],
         'KeySchema': [
-            {'AttributeName': 'PK', 'KeyType': 'HASH'},
+            {'AttributeName': 'riderId', 'KeyType': 'HASH'},
         ],
         'GlobalSecondaryIndexes': [
             {
@@ -44,12 +44,12 @@ TOUR_TABLE_DEFINITIONS = {
     },
     'Ride': {
         'AttributeDefinitions': [
-            {'AttributeName': 'PK', 'AttributeType': 'S'},
+            {'AttributeName': 'rideId', 'AttributeType': 'S'},
             {'AttributeName': 'date', 'AttributeType': 'S'},
             {'AttributeName': 'status', 'AttributeType': 'S'},
         ],
         'KeySchema': [
-            {'AttributeName': 'PK', 'KeyType': 'HASH'},
+            {'AttributeName': 'rideId', 'KeyType': 'HASH'},
         ],
         'GlobalSecondaryIndexes': [
             {
@@ -71,14 +71,14 @@ TOUR_TABLE_DEFINITIONS = {
     },
     'CheckIn': {
         'AttributeDefinitions': [
-            {'AttributeName': 'PK', 'AttributeType': 'S'},
-            {'AttributeName': 'SK', 'AttributeType': 'S'},
+            {'AttributeName': 'rideId', 'AttributeType': 'S'},
+            {'AttributeName': 'checkInId', 'AttributeType': 'S'},
             {'AttributeName': 'riderId', 'AttributeType': 'S'},
             {'AttributeName': 'timestamp', 'AttributeType': 'S'},
         ],
         'KeySchema': [
-            {'AttributeName': 'PK', 'KeyType': 'HASH'},
-            {'AttributeName': 'SK', 'KeyType': 'RANGE'},
+            {'AttributeName': 'rideId', 'KeyType': 'HASH'},
+            {'AttributeName': 'checkInId', 'KeyType': 'RANGE'},
         ],
         'GlobalSecondaryIndexes': [
             {
@@ -93,11 +93,11 @@ TOUR_TABLE_DEFINITIONS = {
     },
     'User': {
         'AttributeDefinitions': [
-            {'AttributeName': 'PK', 'AttributeType': 'S'},
+            {'AttributeName': 'userId', 'AttributeType': 'S'},
             {'AttributeName': 'email', 'AttributeType': 'S'},
         ],
         'KeySchema': [
-            {'AttributeName': 'PK', 'KeyType': 'HASH'},
+            {'AttributeName': 'userId', 'KeyType': 'HASH'},
         ],
         'GlobalSecondaryIndexes': [
             {

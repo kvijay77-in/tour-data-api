@@ -1,7 +1,7 @@
 """
 Lambda function to get tour rider details (rider's participation in a tour)
 
-Uses tour-specific TourRider-{tourId} table (PK: RIDER#<riderId>)
+Uses tour-specific TourRider-{tourId} table (partition key: riderId)
 and shared RiderProfile table for profile enrichment.
 Route: GET /v1/tours/{tourId}/riders/{riderId}
 """
@@ -51,7 +51,7 @@ def lambda_handler(event, context):
         tour_rider = get_tour_item(
             table_type='TourRider',
             tour_id=tour_id,
-            key={'PK': f'RIDER#{rider_id}'}
+            key={'riderId': rider_id}
         )
         
         if not tour_rider:
@@ -64,7 +64,7 @@ def lambda_handler(event, context):
             logger.info(f"Fetching rider profile: {profile_id}")
             rider_profile = get_item(
                 table_name_env='RIDER_PROFILE_TABLE',
-                key={'PK': f'PROFILE#{profile_id}'}
+                key={'profileId': profile_id}
             )
             if rider_profile:
                 tour_rider['profile'] = rider_profile

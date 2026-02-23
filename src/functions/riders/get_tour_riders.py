@@ -60,7 +60,7 @@ def lambda_handler(event, context):
             if profile_id:
                 profile = get_item(
                     table_name_env='RIDER_PROFILE_TABLE',
-                    key={'PK': f'PROFILE#{profile_id}'}
+                    key={'profileId': profile_id}
                 )
                 if profile:
                     tour_rider['profile'] = profile

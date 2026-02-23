@@ -74,16 +74,21 @@ clean: ## Clean build artifacts
 
 delete: ## Delete CloudFormation stack and tour-specific tables
 	@echo "WARNING: This will delete the entire stack and all tour-specific DynamoDB tables!"
-	@read -p "Are you sure? [y/N] " -n 1 -r; \
-	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		echo ""; \
-		echo "--- Cleaning up tour-specific tables ---"; \
-		$(PYTHON) scripts/cleanup_tour_tables.py --stack-name $(or $(STACK_NAME),dev) --confirm; \
-		echo ""; \
-		echo "--- Deleting CloudFormation stack ---"; \
-		sam delete; \
-	fi
+	@printf "Are you sure? [y/N] "; \
+	read REPLY; \
+	case "$$REPLY" in \
+		[Yy]*) \
+			echo ""; \
+			echo "--- Cleaning up tour-specific tables ---"; \
+			$(PYTHON) scripts/cleanup_tour_tables.py --stack-name $(or $(STACK_NAME),dev) --confirm; \
+			echo ""; \
+			echo "--- Deleting CloudFormation stack ---"; \
+			sam delete; \
+			;; \
+		*) \
+			echo "Aborted."; \
+			;; \
+	esac
 
 cleanup-tour-tables: ## Delete tour-specific DynamoDB tables (dry run by default, use CONFIRM=true to delete)
 	@if [ "$(CONFIRM)" = "true" ]; then \

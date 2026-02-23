@@ -134,7 +134,7 @@ def provision_tour(args):
 
     # Check if tour already exists
     try:
-        response = tour_table.get_item(Key={'PK': f'TOUR#{tour_id}'})
+        response = tour_table.get_item(Key={'tourId': tour_id})
         if 'Item' in response:
             existing = response['Item']
             print(f"Error: Tour '{tour_id}' already exists (status: {existing.get('status')})")
@@ -146,7 +146,6 @@ def provision_tour(args):
     # Create Tour record with PROVISIONING status
     now = _utc_now_iso()
     tour_item = {
-        'PK': f'TOUR#{tour_id}',
         'tourId': tour_id,
         'name': name,
         'startDate': start_date,

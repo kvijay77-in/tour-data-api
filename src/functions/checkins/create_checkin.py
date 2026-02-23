@@ -109,7 +109,7 @@ def lambda_handler(event, context):
         ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
-            key={'PK': f'RIDE#{ride_id}'}
+            key={'rideId': ride_id}
         )
         
         if not ride:
@@ -140,7 +140,7 @@ def lambda_handler(event, context):
         tour_rider = get_tour_item(
             table_type='TourRider',
             tour_id=tour_id,
-            key={'PK': f'RIDER#{rider_id}'}
+            key={'riderId': rider_id}
         )
         
         if not tour_rider:
@@ -154,10 +154,10 @@ def lambda_handler(event, context):
         existing_checkins = query_tour_items(
             table_type='CheckIn',
             tour_id=tour_id,
-            key_condition_expression='PK = :pk AND begins_with(SK, :sk)',
+            key_condition_expression='rideId = :rid AND begins_with(checkInId, :prefix)',
             expression_values={
-                ':pk': f'RIDE#{ride_id}',
-                ':sk': f'CHECKIN#{rider_id}#'
+                ':rid': ride_id,
+                ':prefix': f'{rider_id}#'
             }
         )
         

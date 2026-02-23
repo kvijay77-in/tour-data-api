@@ -138,7 +138,7 @@ def lambda_handler(event, context):
         # Get tour record
         tour = get_item(
             table_name_env='TOUR_MASTER_TABLE',
-            key={'PK': f'TOUR#{tour_id}'}
+            key={'tourId': tour_id}
         )
         
         if not tour:

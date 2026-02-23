@@ -59,7 +59,7 @@ def lambda_handler(event, context):
         ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
-            key={'PK': f'RIDE#{ride_id}'}
+            key={'rideId': ride_id}
         )
         
         if not ride:
@@ -77,7 +77,7 @@ def lambda_handler(event, context):
         
         # Step 3: Get rider profiles in batch from shared RiderProfile table
         profile_keys = [
-            {'PK': f"PROFILE#{tr['profileId']}"}
+            {'profileId': tr['profileId']}
             for tr in tour_riders
             if tr.get('profileId')
         ]
@@ -108,8 +108,8 @@ def lambda_handler(event, context):
         check_ins = query_tour_items(
             table_type='CheckIn',
             tour_id=tour_id,
-            key_condition_expression='PK = :pk',
-            expression_values={':pk': f'RIDE#{ride_id}'}
+            key_condition_expression='rideId = :rid',
+            expression_values={':rid': ride_id}
         )
         
         logger.info(f"Found {len(check_ins)} check-ins for ride: {ride_id}")

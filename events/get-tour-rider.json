@@ -1,11 +1,11 @@
 {
   "version": "2.0",
   "routeKey": "GET /v1/tours/{tourId}/riders/{riderId}",
-  "rawPath": "/v1/tours/TOUR#001/riders/R001",
+  "rawPath": "/v1/tours/TOT-2026/riders/R1",
   "rawQueryString": "",
   "pathParameters": {
-    "tourId": "TOUR#001",
-    "riderId": "R001"
+    "tourId": "TOT-2026",
+    "riderId": "R1"
   },
   "headers": {
     "accept": "application/json",
@@ -19,7 +19,7 @@
     "domainName": "api.example.com",
     "http": {
       "method": "GET",
-      "path": "/v1/tours/TOUR#001/riders/R001",
+      "path": "/v1/tours/TOT-2026/riders/R1",
       "protocol": "HTTP/1.1",
       "sourceIp": "1.2.3.4"
     },

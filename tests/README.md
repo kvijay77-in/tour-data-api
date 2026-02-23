@@ -86,13 +86,13 @@ def dynamodb_mock(aws_credentials, lambda_environment):
         # Create table
         table = dynamodb.create_table(
             TableName='test-tour-table',
-            KeySchema=[{'AttributeName': 'PK', 'KeyType': 'HASH'}],
-            AttributeDefinitions=[{'AttributeName': 'PK', 'AttributeType': 'S'}],
+            KeySchema=[{'AttributeName': 'tourId', 'KeyType': 'HASH'}],
+            AttributeDefinitions=[{'AttributeName': 'tourId', 'AttributeType': 'S'}],
             BillingMode='PAY_PER_REQUEST'
         )
         
         # Populate with test data
-        table.put_item(Item={'PK': 'TOUR#001', 'tourName': 'Test Tour'})
+        table.put_item(Item={'tourId': 'TOT-2026', 'tourName': 'Test Tour'})
         
         yield dynamodb
 

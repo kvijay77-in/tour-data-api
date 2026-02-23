@@ -329,7 +329,7 @@ aws dynamodb scan --table-name dev-RiderProfile --limit 10
 # Get a specific item
 aws dynamodb get-item \
   --table-name dev-RiderProfile \
-  --key '{"PK": {"S": "PROFILE#abc-123-uuid"}}'
+  --key '{"profileId": {"S": "abc-123-uuid"}}'
 
 # Scan a tour-specific table
 aws dynamodb scan --table-name dev-Ride-TOT-2026 --limit 10
@@ -338,7 +338,7 @@ aws dynamodb scan --table-name dev-Ride-TOT-2026 --limit 10
 **Common causes**:
 - **Table not found**: Shared tables require `sam deploy`; tour-specific tables require creating a tour via `POST /v1/tours`
 - **Access denied**: Check Lambda execution role has DynamoDB permissions
-- **Validation errors**: Verify data matches table schema (PK, GSIs)
+- **Validation errors**: Verify data matches table schema (partition keys, GSIs)
 - **Throttling**: On-demand billing is the default; check if provisioned capacity was mistakenly set
 
 ### API Gateway Issues

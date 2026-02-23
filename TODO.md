@@ -139,7 +139,7 @@ A browser-based admin UI for tour organizers to manage tours, riders, rides, and
 
 ~~`get_dashboard_data.py` queries a `RideIdIndex` GSI on the Ride table, but this index does not exist.~~
 
-**Resolution:** `get_dashboard_data.py` rewritten. Now uses `get_tour_item('Ride', tour_id, {'PK': f'RIDE#{ride_id}'})` — a direct `get_item` on the tour-specific Ride table. No `RideIdIndex` GSI needed.
+**Resolution:** `get_dashboard_data.py` rewritten. Now uses `get_tour_item('Ride', tour_id, {'rideId': ride_id})` — a direct `get_item` on the tour-specific Ride table. No `RideIdIndex` GSI needed.
 
 ---
 
@@ -229,7 +229,7 @@ A browser-based admin UI for tour organizers to manage tours, riders, rides, and
 
 ~~Test fixtures in `tests/fixtures/mock_data.py` use data formats that don't match SolutionDesign or models.py.~~
 
-**Resolution:** `mock_data.py` completely rewritten. Tours use `TOUR#{tourId}` PK with free-form ID (e.g., `TestTour-2026`). RiderProfiles use `PROFILE#` prefix. TourRiders/Rides/CheckIns/Users use simplified PKs without tour prefix. All field names and enum values match the updated models.
+**Resolution:** `mock_data.py` completely rewritten. Tours use `tourId` as partition key with free-form ID (e.g., `TestTour-2026`). RiderProfiles use `profileId` as partition key. TourRiders/Rides/CheckIns/Users use business attribute names as partition keys without prefixes. All field names and enum values match the updated models.
 
 ---
 
@@ -314,7 +314,7 @@ The following items were identified after the SolutionDesign.md was updated with
 **Resolution:** `models.py` updated:
 - `TourStatus` enum includes `PROVISIONING`
 - `TOUR_TABLE_TYPES = ['TourRider', 'Ride', 'CheckIn', 'User']`
-- Tour PK format: `TOUR#<tourId>` with free-form tourId
+- Tour partition key: `tourId` with free-form tourId
 - `provisionedAt` and `archivedAt` fields documented
 - `validation.py` updated: `validate_tour_id()` accepts free-form IDs (3-50 chars, `[a-zA-Z0-9_.-]`)
 
@@ -326,6 +326,6 @@ The following items were identified after the SolutionDesign.md was updated with
 
 **Resolution:** All 16 existing Lambda functions rewritten to use the hybrid table strategy:
 - Tour-specific operations use `get_tour_item()`, `put_tour_item()`, `query_tour_items()`, `scan_tour_items()` with `table_type` and `tour_id` parameters
-- Simplified PK design: `RIDER#<riderId>`, `RIDE#<rideId>`, etc. (no tour prefix)
+- Business attribute names as partition keys: `riderId`, `rideId`, etc. (no prefixes)
 - All routes include `{tourId}` in path for tour-specific operations
 - Test files (`conftest.py`, `mock_data.py`, `test_lambda_functions.py`, `test_validation.py`) updated to match

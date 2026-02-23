@@ -91,7 +91,7 @@ class RiderProfile:
     """
     Rider profile data (master data, tour-agnostic)
     Stored in shared RiderProfile table.
-    PK: PROFILE#<uuid>
+    Partition key: profileId
     """
     profile_id: str
     name: str
@@ -110,7 +110,6 @@ class RiderProfile:
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
-        item['PK'] = f"PROFILE#{self.profile_id}"
         item['profileId'] = self.profile_id
         return item
 
@@ -119,7 +118,7 @@ class RiderProfile:
 class Tour:
     """
     Tour definition (shared TourMaster table).
-    PK: TOUR#<tourId>
+    Partition key: tourId
     tourId is free-form (e.g., TOT-2026, TDF2026)
     """
     tour_id: str
@@ -142,7 +141,6 @@ class Tour:
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
-        item['PK'] = f"TOUR#{self.tour_id}"
         item['tourId'] = self.tour_id
         return item
 
@@ -152,7 +150,7 @@ class TourRider:
     """
     Rider registration for a specific tour.
     Stored in tour-specific TourRider-{tourId} table.
-    PK: RIDER#<riderId> (no SK - table is tour-scoped)
+    Partition key: riderId
     """
     rider_id: str
     profile_id: str
@@ -171,7 +169,6 @@ class TourRider:
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
-        item['PK'] = f"RIDER#{self.rider_id}"
         item['riderId'] = self.rider_id
         item['profileId'] = self.profile_id
         return item
@@ -200,7 +197,7 @@ class Ride:
     """
     Daily ride configuration.
     Stored in tour-specific Ride-{tourId} table.
-    PK: RIDE#<rideId> (no SK - table is tour-scoped)
+    Partition key: rideId
     """
     ride_id: str
     date: str
@@ -229,7 +226,6 @@ class Ride:
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
-        item['PK'] = f"RIDE#{self.ride_id}"
         item['rideId'] = self.ride_id
         return item
 
@@ -239,7 +235,7 @@ class CheckIn:
     """
     Check-in record for a rider at a stage.
     Stored in tour-specific CheckIn-{tourId} table.
-    PK: RIDE#<rideId>, SK: CHECKIN#<riderId>#<stageNumber>#<timestamp>
+    Partition key: rideId, Sort key: checkInId (<riderId>#<stageNumber>#<timestamp>)
     """
     check_in_id: str
     rider_id: str
@@ -275,11 +271,9 @@ class CheckIn:
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
-        item['PK'] = f"RIDE#{self.ride_id}"
-        item['SK'] = f"CHECKIN#{self.rider_id}#{self.stage_number:03d}#{self.timestamp}"
-        item['checkInId'] = self.check_in_id
-        item['riderId'] = self.rider_id
         item['rideId'] = self.ride_id
+        item['checkInId'] = f"{self.rider_id}#{self.stage_number:03d}#{self.timestamp}"
+        item['riderId'] = self.rider_id
         return item
 
 
@@ -288,7 +282,7 @@ class User:
     """
     User profile for Check-In App.
     Stored in tour-specific User-{tourId} table.
-    PK: USER#<userId> (no SK - table is tour-scoped)
+    Partition key: userId
     """
     user_id: str
     username: str
@@ -309,7 +303,6 @@ class User:
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
-        item['PK'] = f"USER#{self.user_id}"
         item['userId'] = self.user_id
         return item
 

@@ -123,8 +123,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| PK | String | `PROFILE#<uuid>` |
-| profileId | String | UUID |
+| profileId | String | UUID (partition key) |
 | name | String | Rider's full name |
 | email | String | Email address |
 | phone | String | Contact number |
@@ -135,8 +134,8 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | updatedAt | String | ISO 8601 timestamp |
 
 **Indexes:**
-- Primary Key: `PK` (partition key only)
-- GSI1: `email` (PK), `profileId` (SK) - For email lookup
+- Primary Key: `profileId` (partition key only)
+- GSI1: `email` (partition key) - For email lookup
 
 **Notes:**
 - Small table (~200-500 profiles over time)
@@ -149,8 +148,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| PK | String | `TOUR#<tourId>` |
-| tourId | String | Free-form unique identifier (e.g., `TOT-2026`, `TDF2026`, `charity-ride-01`) |
+| tourId | String | Free-form unique identifier (e.g., `TOT-2026`, `TDF2026`, `charity-ride-01`) (partition key) |
 | name | String | Tour name |
 | startDate | String | ISO 8601 date |
 | endDate | String | ISO 8601 date |
@@ -162,8 +160,8 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | updatedAt | String | ISO 8601 timestamp |
 
 **Indexes:**
-- Primary Key: `PK` (partition key only)
-- GSI1: `status` (PK) - For querying tours by status (e.g., find active tour)
+- Primary Key: `tourId` (partition key only)
+- GSI1: `status` (partition key) - For querying tours by status (e.g., find active tour)
 
 **Notes:**
 - Small table — grows by number of tours created over the deployment's lifetime
@@ -179,8 +177,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| PK | String | `RIDER#<riderId>` |
-| riderId | String | Tour-specific rider ID (R1, R2, etc.) |
+| riderId | String | Tour-specific rider ID (R1, R2, etc.) (partition key) |
 | profileId | String | Reference to RiderProfile |
 | registeredAt | String | ISO 8601 timestamp |
 | qrCodeData | String | Encoded QR code data (currently just riderId) |
@@ -189,14 +186,14 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | updatedAt | String | ISO 8601 timestamp |
 
 **Indexes:**
-- Primary Key: `PK` (partition key only)
-- GSI1: `profileId` (PK) - For profile-based lookup
+- Primary Key: `riderId` (partition key only)
+- GSI1: `profileId` (partition key) - For profile-based lookup
 
 **Notes:**
 - Table is tour-scoped — no need for tourId in keys
 - Max ~100 items per table (one tour's riders)
 - GSI1 for looking up rider enrollment by profile ID
-- `riderId` lookup is a direct get_item on PK
+- `riderId` lookup is a direct get_item on partition key
 
 ## Tour-Specific Table 2: Ride-{tourId}
 
@@ -204,8 +201,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| PK | String | `RIDE#<rideId>` |
-| rideId | String | Unique ride identifier (e.g., RIDE001) |
+| rideId | String | Unique ride identifier (e.g., RIDE001) (partition key) |
 | date | String | ISO 8601 date (YYYY-MM-DD) |
 | rideNo | Number | Sequence number for the day |
 | name | String | Short name (e.g., Day1, Day2) |
@@ -236,9 +232,9 @@ Both provisioning methods create the same resources: a Tour record in the shared
 ```
 
 **Indexes:**
-- Primary Key: `PK` (partition key only)
-- GSI1: `date` (PK) - For date-based lookup (today's ride)
-- GSI2: `status` (PK), `date` (SK) - For querying active/completed rides
+- Primary Key: `rideId` (partition key only)
+- GSI1: `date` (partition key) - For date-based lookup (today's ride)
+- GSI2: `status` (partition key), `date` (sort key) - For querying active/completed rides
 
 **Notes:**
 - Table is tour-scoped — no need for tourId in keys
@@ -252,11 +248,9 @@ Both provisioning methods create the same resources: a Tour record in the shared
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| PK | String | `RIDE#<rideId>` |
-| SK | String | `CHECKIN#<riderId>#<stageNumber>#<timestamp>` |
-| checkInId | String | Unique check-in ID (UUID) |
+| rideId | String | Ride ID (partition key) |
+| checkInId | String | `<riderId>#<stageNumber>#<timestamp>` (sort key) |
 | riderId | String | Rider ID |
-| rideId | String | Ride ID |
 | stageNumber | Number | Stage number (1-based) |
 | stageId | String | Stage ID reference |
 | timestamp | String | ISO 8601 timestamp of check-in |
@@ -270,14 +264,14 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | createdAt | String | ISO 8601 timestamp |
 
 **Indexes:**
-- Primary Key: `PK` (partition), `SK` (sort)
-- GSI1: `riderId` (PK), `timestamp` (SK) - For rider history within the tour
+- Primary Key: `rideId` (partition key), `checkInId` (sort key)
+- GSI1: `riderId` (partition key), `timestamp` (sort key) - For rider history within the tour
 
 **Notes:**
 - Table is tour-scoped — no need for tourId in keys or GSIs
 - Partition by ride for efficient dashboard queries
 - All check-ins for a ride retrieved in single query
-- SK design allows sorting by rider, then stage, then time
+- Sort key design allows sorting by rider, then stage, then time
 - Max ~600 items per partition (100 riders × 6 stages)
 - GSI1 for rider-specific check-in history within this tour
 
@@ -287,8 +281,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| PK | String | `USER#<userId>` |
-| userId | String | Cognito user sub |
+| userId | String | Cognito user sub (partition key) |
 | username | String | Username |
 | email | String | Email |
 | name | String | Full name |
@@ -299,8 +292,8 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | updatedAt | String | ISO 8601 timestamp |
 
 **Indexes:**
-- Primary Key: `PK` (partition key only)
-- GSI1: `email` (PK) - For email lookup
+- Primary Key: `userId` (partition key only)
+- GSI1: `email` (partition key) - For email lookup
 
 **Notes:**
 - Table is tour-scoped — no need for tourId in keys

@@ -54,7 +54,7 @@ def lambda_handler(event, context):
         ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
-            key={'PK': f'RIDE#{ride_id}'}
+            key={'rideId': ride_id}
         )
         
         if not ride:

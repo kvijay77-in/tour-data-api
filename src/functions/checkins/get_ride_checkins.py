@@ -50,7 +50,7 @@ def lambda_handler(event, context):
         ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
-            key={'PK': f'RIDE#{ride_id}'}
+            key={'rideId': ride_id}
         )
         
         if not ride:
@@ -61,8 +61,8 @@ def lambda_handler(event, context):
         checkins = query_tour_items(
             table_type='CheckIn',
             tour_id=tour_id,
-            key_condition_expression='PK = :pk',
-            expression_values={':pk': f'RIDE#{ride_id}'}
+            key_condition_expression='rideId = :rid',
+            expression_values={':rid': ride_id}
         )
         
         # Sort check-ins by timestamp

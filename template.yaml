@@ -714,22 +714,18 @@ Resources:
       SSESpecification:
         SSEEnabled: true
       AttributeDefinitions:
-        - AttributeName: PK
+        - AttributeName: profileId
           AttributeType: S
         - AttributeName: email
           AttributeType: S
-        - AttributeName: profileId
-          AttributeType: S
       KeySchema:
-        - AttributeName: PK
+        - AttributeName: profileId
           KeyType: HASH
       GlobalSecondaryIndexes:
         - IndexName: EmailIndex
           KeySchema:
             - AttributeName: email
               KeyType: HASH
-            - AttributeName: profileId
-              KeyType: RANGE
           Projection:
             ProjectionType: ALL
       Tags:
@@ -754,12 +750,12 @@ Resources:
       SSESpecification:
         SSEEnabled: true
       AttributeDefinitions:
-        - AttributeName: PK
+        - AttributeName: tourId
           AttributeType: S
         - AttributeName: status
           AttributeType: S
       KeySchema:
-        - AttributeName: PK
+        - AttributeName: tourId
           KeyType: HASH
       GlobalSecondaryIndexes:
         - IndexName: StatusIndex

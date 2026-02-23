@@ -1,7 +1,7 @@
 """
 Lambda function to get a rider profile by profile ID
 
-Shared RiderProfile table (PK: PROFILE#<profileId>).
+Shared RiderProfile table (partition key: profileId).
 Route: GET /v1/riders/profile/{profileId}
 """
 
@@ -38,7 +38,7 @@ def lambda_handler(event, context):
         logger.info(f"Fetching rider profile: {profile_id}")
         rider = get_item(
             table_name_env='RIDER_PROFILE_TABLE',
-            key={'PK': f'PROFILE#{profile_id}'}
+            key={'profileId': profile_id}
         )
         
         if not rider:

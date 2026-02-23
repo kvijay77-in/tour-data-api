@@ -78,7 +78,7 @@ def lambda_handler(event, context):
         # Check tourId uniqueness
         existing = get_item(
             table_name_env='TOUR_MASTER_TABLE',
-            key={'PK': f'TOUR#{tour_id}'}
+            key={'tourId': tour_id}
         )
         
         if existing:
@@ -87,7 +87,6 @@ def lambda_handler(event, context):
         # Create Tour record with PROVISIONING status
         now = datetime.utcnow().isoformat() + 'Z'
         tour_item = {
-            'PK': f'TOUR#{tour_id}',
             'tourId': tour_id,
             'name': body['name'],
             'startDate': body['startDate'],

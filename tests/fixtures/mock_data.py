@@ -18,7 +18,6 @@ MOCK_TOUR_ID = 'TestTour-2026'
 # Shared TourMaster table data
 MOCK_TOURS = [
     {
-        'PK': f'TOUR#{MOCK_TOUR_ID}',
         'tourId': MOCK_TOUR_ID,
         'name': 'Test Cycling Tour 2026',
         'status': TourStatus.ACTIVE.value,
@@ -34,7 +33,6 @@ MOCK_TOURS = [
 # Shared RiderProfile table data
 MOCK_RIDER_PROFILES = [
     {
-        'PK': 'PROFILE#P001',
         'profileId': 'P001',
         'name': 'John Doe',
         'email': 'john.doe@example.com',
@@ -45,7 +43,6 @@ MOCK_RIDER_PROFILES = [
         'updatedAt': '2026-01-01T00:00:00Z'
     },
     {
-        'PK': 'PROFILE#P002',
         'profileId': 'P002',
         'name': 'Jane Smith',
         'email': 'jane.smith@example.com',
@@ -57,10 +54,9 @@ MOCK_RIDER_PROFILES = [
     }
 ]
 
-# Tour-specific TourRider-{tourId} table data (PK only, no SK)
+# Tour-specific TourRider-{tourId} table data
 MOCK_TOUR_RIDERS = [
     {
-        'PK': 'RIDER#R1',
         'riderId': 'R1',
         'profileId': 'P001',
         'status': TourRiderStatus.ACTIVE.value,
@@ -69,7 +65,6 @@ MOCK_TOUR_RIDERS = [
         'updatedAt': '2026-01-15T00:00:00Z'
     },
     {
-        'PK': 'RIDER#R2',
         'riderId': 'R2',
         'profileId': 'P002',
         'status': TourRiderStatus.ACTIVE.value,
@@ -79,10 +74,9 @@ MOCK_TOUR_RIDERS = [
     }
 ]
 
-# Tour-specific Ride-{tourId} table data (PK only, no SK)
+# Tour-specific Ride-{tourId} table data
 MOCK_RIDES = [
     {
-        'PK': 'RIDE#RIDE001',
         'rideId': 'RIDE001',
         'rideNo': 1,
         'date': '2026-02-11',
@@ -117,13 +111,11 @@ MOCK_RIDES = [
     }
 ]
 
-# Tour-specific CheckIn-{tourId} table data (PK + SK)
+# Tour-specific CheckIn-{tourId} table data (rideId + checkInId)
 MOCK_CHECKINS = [
     {
-        'PK': 'RIDE#RIDE001',
-        'SK': 'CHECKIN#R1#001#2026-02-11T10:30:00Z',
-        'checkInId': 'chk-001',
         'rideId': 'RIDE001',
+        'checkInId': 'R1#001#2026-02-11T10:30:00Z',
         'riderId': 'R1',
         'stageNumber': 1,
         'stageId': 'S001',
@@ -138,10 +130,9 @@ MOCK_CHECKINS = [
     }
 ]
 
-# Tour-specific User-{tourId} table data (PK only, no SK)
+# Tour-specific User-{tourId} table data
 MOCK_USERS = [
     {
-        'PK': 'USER#admin-001',
         'userId': 'admin-001',
         'username': 'admin',
         'email': 'admin@example.com',
