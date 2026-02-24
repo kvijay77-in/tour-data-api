@@ -138,21 +138,19 @@ generate-test-data: ## Generate test data from scenario template (usage: make ge
 
 cleanup-test-data: ## Clean up test data from tour-specific tables (usage: make cleanup-test-data TOUR_ID=TOT-2026 [CONFIRM=true])
 	@if [ -z "$(TOUR_ID)" ]; then \
-		echo "Usage: make cleanup-test-data TOUR_ID=<id> [STACK_NAME=dev] [CONFIRM=true] [INCLUDE_PROFILES=true]"; \
+		echo "Usage: make cleanup-test-data TOUR_ID=<id> [STACK_NAME=dev] [CONFIRM=true]"; \
 		exit 1; \
 	fi
 	@if [ "$(CONFIRM)" = "true" ]; then \
 		$(PYTHON) scripts/cleanup_test_data.py \
 			--stack-name $(or $(STACK_NAME),dev) \
 			--tour-id $(TOUR_ID) \
-			$(if $(filter true,$(INCLUDE_PROFILES)),--include-profiles,) \
 			$(if $(REGION),--region $(REGION),) \
 			--confirm; \
 	else \
 		$(PYTHON) scripts/cleanup_test_data.py \
 			--stack-name $(or $(STACK_NAME),dev) \
 			--tour-id $(TOUR_ID) \
-			$(if $(filter true,$(INCLUDE_PROFILES)),--include-profiles,) \
 			$(if $(REGION),--region $(REGION),); \
 	fi
 

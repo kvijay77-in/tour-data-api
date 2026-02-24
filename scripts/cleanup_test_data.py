@@ -11,18 +11,12 @@ Tour-specific tables affected:
     {stack_name}-CheckIn-{tourId}
     {stack_name}-User-{tourId}
 
-Optionally cleans up generated rider profiles from the shared RiderProfile table.
-
 Usage:
     # Dry run (default) — show what would be deleted
     python scripts/cleanup_test_data.py --stack-name dev --tour-id TOT-2026
 
     # Actually delete data
     python scripts/cleanup_test_data.py --stack-name dev --tour-id TOT-2026 --confirm
-
-    # Also clean up rider profiles from shared table
-    python scripts/cleanup_test_data.py --stack-name dev --tour-id TOT-2026 \\
-        --include-profiles --confirm
 
     # Specify region
     python scripts/cleanup_test_data.py --stack-name dev --tour-id TOT-2026 \\
@@ -162,67 +156,6 @@ def cleanup_tour_table(dynamodb, table_name, key_attrs, confirm):
     return item_count, deleted, failed
 
 
-def cleanup_rider_profiles(dynamodb, stack_name, tour_id, confirm):
-    """
-    Clean up rider profiles linked to tour riders.
-
-    Finds all profileIds from TourRider table, then deletes matching
-    profiles from the shared RiderProfile table.
-
-    Args:
-        dynamodb: boto3 DynamoDB resource
-        stack_name: Stack name prefix
-        tour_id: Tour identifier
-        confirm: If True, actually delete
-
-    Returns:
-        tuple: (item_count, deleted_count, failed_count)
-    """
-    # Get profileIds from TourRider table
-    rider_tbl_name = f"{stack_name}-TourRider-{tour_id}"
-    rider_table = _get_table(dynamodb, rider_tbl_name)
-    if not rider_table:
-        print(f"  Cannot find TourRider table — skipping profile cleanup")
-        return 0, 0, 0
-
-    # Scan for profileIds
-    profile_ids = set()
-    response = rider_table.scan(ProjectionExpression='profileId')
-    for item in response.get('Items', []):
-        if 'profileId' in item:
-            profile_ids.add(item['profileId'])
-    while 'LastEvaluatedKey' in response:
-        response = rider_table.scan(
-            ProjectionExpression='profileId',
-            ExclusiveStartKey=response['LastEvaluatedKey'],
-        )
-        for item in response.get('Items', []):
-            if 'profileId' in item:
-                profile_ids.add(item['profileId'])
-
-    if not profile_ids:
-        print(f"  RiderProfile: no linked profiles found")
-        return 0, 0, 0
-
-    profile_tbl_name = f"{stack_name}-RiderProfile"
-    profile_table = _get_table(dynamodb, profile_tbl_name)
-    if not profile_table:
-        print(f"  RiderProfile table '{profile_tbl_name}' not found — skipping")
-        return 0, 0, 0
-
-    keys = [{'profileId': pid} for pid in sorted(profile_ids)]
-
-    if not confirm:
-        print(f"  {profile_tbl_name}: {len(keys)} profiles linked to tour riders "
-              f"(would be deleted)")
-        return len(keys), 0, 0
-
-    print(f"  {profile_tbl_name}: deleting {len(keys)} profiles...")
-    deleted, failed = delete_items(profile_table, keys, profile_tbl_name)
-    print(f"    Deleted: {deleted}, Failed: {failed}")
-    return len(keys), deleted, failed
-
-
 def main():
     parser = argparse.ArgumentParser(
         description='Clean up test data from tour-specific DynamoDB tables '
@@ -235,10 +168,6 @@ Examples:
 
   # Delete all test data from tour-specific tables
   python scripts/cleanup_test_data.py --stack-name dev --tour-id TOT-2026 --confirm
-
-  # Also remove generated rider profiles from shared RiderProfile table
-  python scripts/cleanup_test_data.py --stack-name dev --tour-id TOT-2026 \\
-      --include-profiles --confirm
 
   # Specify AWS region
   python scripts/cleanup_test_data.py --stack-name dev --tour-id TOT-2026 \\
@@ -257,11 +186,6 @@ Examples:
     parser.add_argument(
         '--region', default=None,
         help='AWS region (default: from AWS config)'
-    )
-    parser.add_argument(
-        '--include-profiles', action='store_true',
-        help='Also delete rider profiles linked to this tour from the shared '
-             'RiderProfile table'
     )
     parser.add_argument(
         '--confirm', action='store_true',
@@ -286,25 +210,6 @@ Examples:
     total_deleted = 0
     total_failed = 0
 
-    # Collect profile IDs BEFORE cleaning TourRider table (needed for
-    # --include-profiles since TourRider data is used to find linked profiles)
-    profile_keys = []
-    if args.include_profiles:
-        rider_tbl_name = f"{args.stack_name}-TourRider-{args.tour_id}"
-        rider_table = _get_table(dynamodb, rider_tbl_name)
-        if rider_table:
-            response = rider_table.scan(ProjectionExpression='profileId')
-            pids = {item['profileId'] for item in response.get('Items', [])
-                    if 'profileId' in item}
-            while 'LastEvaluatedKey' in response:
-                response = rider_table.scan(
-                    ProjectionExpression='profileId',
-                    ExclusiveStartKey=response['LastEvaluatedKey'],
-                )
-                pids.update(item['profileId'] for item in response.get('Items', [])
-                            if 'profileId' in item)
-            profile_keys = [{'profileId': pid} for pid in sorted(pids)]
-
     # Clean tour-specific tables
     for table_type, key_attrs in TOUR_TABLE_KEYS.items():
         table_name = f"{args.stack_name}-{table_type}-{args.tour_id}"
@@ -314,31 +219,6 @@ Examples:
         total_items += items
         total_deleted += deleted
         total_failed += failed
-
-    # Clean rider profiles using pre-collected profile IDs
-    if args.include_profiles and profile_keys:
-        print("")
-        profile_tbl_name = f"{args.stack_name}-RiderProfile"
-        profile_table = _get_table(dynamodb, profile_tbl_name)
-        if profile_table:
-            if not args.confirm:
-                print(f"  {profile_tbl_name}: {len(profile_keys)} profiles linked "
-                      f"to tour riders (would be deleted)")
-                total_items += len(profile_keys)
-            else:
-                print(f"  {profile_tbl_name}: deleting {len(profile_keys)} profiles...")
-                deleted, failed = delete_items(
-                    profile_table, profile_keys, profile_tbl_name
-                )
-                print(f"    Deleted: {deleted}, Failed: {failed}")
-                total_items += len(profile_keys)
-                total_deleted += deleted
-                total_failed += failed
-        else:
-            print(f"  {profile_tbl_name}: NOT FOUND (skipped)")
-    elif args.include_profiles:
-        print("")
-        print("  No linked rider profiles found to clean up.")
 
     # Summary
     print("")
