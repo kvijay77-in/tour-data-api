@@ -87,7 +87,12 @@ tour-data-api/
     ├── preflight-check.sh            # Pre-deployment environment validation
     ├── dev-test-setup.sh             # Exports env vars for dev API testing
     ├── provision_tour.py             # CLI script for tour provisioning (deployment method)
-    └── cleanup_tour_tables.py        # Deletes tour-specific DynamoDB tables not managed by CloudFormation
+    ├── cleanup_tour_tables.py        # Deletes tour-specific DynamoDB tables not managed by CloudFormation
+    ├── generate_test_data.py         # Generates test data from YAML scenario template
+    ├── cleanup_test_data.py          # Removes test data items from tour-specific tables
+    ├── load_test_data.py             # Batch loads JSON items into DynamoDB tables
+    └── test_data/                    # YAML scenario templates for test data generation
+        └── scenario_tot_2026.yaml    # TOT-2026 scenario (70 riders, 7 days)
 ```
 
 **Key Structure Notes:**
@@ -124,6 +129,10 @@ tour-data-api/
 - **`scripts/dev-test-setup.sh`**: Exports environment variables (API endpoint, JWT token, etc.) for dev API testing
 - **`scripts/provision_tour.py`**: CLI tool for provisioning tours during deployment. Creates Tour record and 4 tour-specific DynamoDB tables. This is the deployment-time equivalent of the `POST /v1/tours` API endpoint.
 - **`scripts/cleanup_tour_tables.py`**: Deletes tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User) that are created at runtime and not managed by CloudFormation. Runs automatically as part of `make delete` and can also be used standalone.
+- **`scripts/generate_test_data.py`**: Generates and loads test data into DynamoDB tables from a YAML scenario template. Creates rider profiles, tour riders, rides, and check-in records with configurable demographics and check-in distributions.
+- **`scripts/cleanup_test_data.py`**: Removes all test data items from tour-specific tables without deleting the tables. Optionally cleans rider profiles from the shared RiderProfile table.
+- **`scripts/test_data/`**: Directory for YAML scenario templates that define test data sets.
+- **`scripts/test_data/scenario_tot_2026.yaml`**: Sample scenario template for the TOT-2026 tour with 70 riders, 7 days, and mixed ride completion states.
 
 ### CI/CD (`.github/workflows/`)
 - **`ci-cd.yml`**: GitHub Actions workflow for manual-trigger testing and deployment
