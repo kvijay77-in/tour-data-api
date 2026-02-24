@@ -237,7 +237,8 @@ def generate_profiles(config, rng):
     return profiles, categories
 
 
-def _fill_category(rng, count, first_names, last_names, is_indian, category, make_fn):
+def _fill_category(rng, count, first_names, last_names, is_indian, category,
+                   make_profile_fn):
     """Generate profiles for a specific category."""
     generated = 0
     attempts = 0
@@ -245,7 +246,7 @@ def _fill_category(rng, count, first_names, last_names, is_indian, category, mak
     while generated < count and attempts < max_attempts:
         first = rng.choice(first_names)
         last = rng.choice(last_names)
-        if make_fn(first, last, is_indian, category):
+        if make_profile_fn(first, last, is_indian, category):
             generated += 1
         attempts += 1
     if generated < count:
