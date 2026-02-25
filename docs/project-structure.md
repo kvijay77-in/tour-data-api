@@ -91,7 +91,6 @@ tour-data-api/
     ├── load_test_data.py             # Load JSON data into a DynamoDB table
     └── simulate/                     # Test data simulation utility
         ├── README.md                 # Simulation utility documentation
-        ├── requirements.txt          # Python dependencies (pyyaml, boto3)
         ├── generate_data.py          # Main data generation script
         ├── scenarios/                # Scenario configuration files
         │   └── tot_2026.yaml         # TOT-2026 tour scenario template

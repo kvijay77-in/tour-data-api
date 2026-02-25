@@ -15,7 +15,7 @@ Generate and load tour-specific test data into DynamoDB tables for development a
 Install dependencies:
 
 ```bash
-pip install -r scripts/simulate/requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 ## Quick Start
@@ -216,7 +216,6 @@ If `options.update_tour_status` is true and `tour.target_status` is set, the scr
 ```
 scripts/simulate/
 ├── README.md                   # This file
-├── requirements.txt            # Python dependencies
 ├── generate_data.py            # Main data generation script
 ├── scenarios/                  # Scenario configuration files
 │   └── tot_2026.yaml           # TOT-2026 tour scenario
