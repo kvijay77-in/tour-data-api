@@ -230,3 +230,6 @@ Thumbs.db
 
 # Project specific ignores
 temp/
+
+# Test data simulation output
+scripts/simulate/output/

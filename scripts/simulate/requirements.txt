@@ -1,0 +1,3 @@
+# Dependencies for test data simulation utility
+pyyaml>=6.0
+boto3>=1.34.0

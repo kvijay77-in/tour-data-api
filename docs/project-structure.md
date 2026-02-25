@@ -87,7 +87,15 @@ tour-data-api/
     ├── preflight-check.sh            # Pre-deployment environment validation
     ├── dev-test-setup.sh             # Exports env vars for dev API testing
     ├── provision_tour.py             # CLI script for tour provisioning (deployment method)
-    └── cleanup_tour_tables.py        # Deletes tour-specific DynamoDB tables not managed by CloudFormation
+    ├── cleanup_tour_tables.py        # Deletes tour-specific DynamoDB tables not managed by CloudFormation
+    ├── load_test_data.py             # Load JSON data into a DynamoDB table
+    └── simulate/                     # Test data simulation utility
+        ├── README.md                 # Simulation utility documentation
+        ├── requirements.txt          # Python dependencies (pyyaml, boto3)
+        ├── generate_data.py          # Main data generation script
+        ├── scenarios/                # Scenario configuration files
+        │   └── tot_2026.yaml         # TOT-2026 tour scenario template
+        └── output/                   # Dry-run JSON output (git-ignored)
 ```
 
 **Key Structure Notes:**
@@ -124,6 +132,7 @@ tour-data-api/
 - **`scripts/dev-test-setup.sh`**: Exports environment variables (API endpoint, JWT token, etc.) for dev API testing
 - **`scripts/provision_tour.py`**: CLI tool for provisioning tours during deployment. Creates Tour record and 4 tour-specific DynamoDB tables. This is the deployment-time equivalent of the `POST /v1/tours` API endpoint.
 - **`scripts/cleanup_tour_tables.py`**: Deletes tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User) that are created at runtime and not managed by CloudFormation. Runs automatically as part of `make delete` and can also be used standalone.
+- **`scripts/simulate/`**: Test data simulation utility. Uses YAML scenario configs to generate and load realistic test data (rider profiles, tour riders, rides, check-ins) into DynamoDB. See `scripts/simulate/README.md` for full documentation.
 
 ### CI/CD (`.github/workflows/`)
 - **`ci-cd.yml`**: GitHub Actions workflow for manual-trigger testing and deployment
