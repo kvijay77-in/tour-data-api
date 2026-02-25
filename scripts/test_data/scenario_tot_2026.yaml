@@ -1,0 +1,185 @@
+# =============================================================================
+# Test Data Scenario Template: TOT-2026
+# =============================================================================
+#
+# This template defines the test data set to be generated for a tour.
+# Modify values below to create different test scenarios.
+#
+# Usage:
+#   python scripts/generate_test_data.py \
+#       --scenario scripts/test_data/scenario_tot_2026.yaml \
+#       --stack-name dev
+#
+# To create a new scenario, copy this file and modify values as needed.
+# =============================================================================
+
+# Scenario metadata
+scenario:
+  name: "TOT-2026 Standard Test Data"
+  description: "70 riders, 7 days, mixed ride completion states"
+  seed: 42                    # Random seed for reproducible data generation
+
+# Tour identification
+tour:
+  tour_id: "TOT-2026"
+  start_date: "2026-02-10"   # First ride date is start_date + 1 day
+
+# ---------------------------------------------------------------------------
+# Rider Profile Pool
+# ---------------------------------------------------------------------------
+# Profiles are created in the shared RiderProfile table.
+# Tour riders are then selected from this pool.
+rider_profiles:
+  total_pool: 200             # Total rider profiles to generate
+  non_indian_count: 8         # Number of non-Indian profiles in the pool
+  male_percentage: 75         # Percentage of male profiles (rest are female)
+
+# ---------------------------------------------------------------------------
+# Tour Riders
+# ---------------------------------------------------------------------------
+# Riders selected from the profile pool and registered in TourRider-{tourId}.
+tour_riders:
+  total: 70                   # Total riders registered for this tour
+  non_indian_count: 8         # Non-Indian riders to include
+
+# ---------------------------------------------------------------------------
+# Default Stage Configuration
+# ---------------------------------------------------------------------------
+# Applied to all rides. Override per ride if needed.
+# Types: START, PIT_STOP, FINISH
+default_stages:
+  - stage_number: 1
+    type: "START"
+    name: "Start Point"
+  - stage_number: 2
+    type: "PIT_STOP"
+    name: "Pit Stop 1"
+  - stage_number: 3
+    type: "PIT_STOP"
+    name: "Pit Stop 2"
+  - stage_number: 4
+    type: "FINISH"
+    name: "Finish"
+
+# ---------------------------------------------------------------------------
+# Rides and Check-In Scenarios
+# ---------------------------------------------------------------------------
+# Each entry defines a day's ride(s) and the check-in distribution.
+#
+# Ride status: PLANNED, ACTIVE, COMPLETED, CLOSED
+#
+# Check-in scenario fields:
+#   not_riding     - Count of riders marked "Not Riding" for the ride
+#   quit_groups    - List of quit groups:
+#                      after_stage: Stage number after which rider quit
+#                      count: Number of riders in this group
+#   finished       - Count of riders who completed all stages ("rest" = remaining)
+#   in_progress    - List of in-progress groups (for ACTIVE rides only):
+#                      at_stage: Last stage the rider checked in at
+#                      count: Number of riders at this stage
+#
+# Rider counts in a check-in scenario MUST add up to tour_riders.total.
+# ---------------------------------------------------------------------------
+
+rides:
+  # ---- Day 1: COMPLETED ----
+  # 0 not riding, 25 quit, 45 finished = 70
+  - day: 1
+    rides_per_day: 1
+    status: "COMPLETED"
+    flag_off_time: "07:00"
+    start_location: "Chennai"
+    finish_location: "Mahabalipuram"
+    total_distance: 65.0
+    checkin_scenario:
+      not_riding: 0
+      quit_groups:
+        - after_stage: 1        # 5 riders quit after START
+          count: 5
+        - after_stage: 2        # 5 riders quit after PS1
+          count: 5
+        - after_stage: 3        # 15 riders quit after PS2
+          count: 15
+      finished: "rest"          # Remaining 45 riders finished
+
+  # ---- Day 2: COMPLETED ----
+  # 5 not riding, 23 quit, 42 finished = 70
+  - day: 2
+    rides_per_day: 1
+    status: "COMPLETED"
+    flag_off_time: "07:00"
+    start_location: "Mahabalipuram"
+    finish_location: "Pondicherry"
+    total_distance: 100.0
+    checkin_scenario:
+      not_riding: 5
+      quit_groups:
+        - after_stage: 1        # 6 riders quit after START
+          count: 6
+        - after_stage: 2        # 6 riders quit after PS1
+          count: 6
+        - after_stage: 3        # 11 riders quit after PS2
+          count: 11
+      finished: "rest"          # Remaining 42 riders finished
+
+  # ---- Day 3: ACTIVE (in-progress) ----
+  # 4 not riding, 9 quit, 10 finished, 47 in-progress = 70
+  # In-progress riders weighted towards later stages (more at PS2, fewer at START)
+  - day: 3
+    rides_per_day: 1
+    status: "ACTIVE"
+    flag_off_time: "07:00"
+    start_location: "Pondicherry"
+    finish_location: "Chidambaram"
+    total_distance: 80.0
+    checkin_scenario:
+      not_riding: 4
+      quit_groups:
+        - after_stage: 2        # 4 riders quit after PS1
+          count: 4
+        - after_stage: 3        # 5 riders quit after PS2
+          count: 5
+      finished: 10
+      in_progress:
+        - at_stage: 1           # 10 riders checked in only at START
+          count: 10
+        - at_stage: 2           # 14 riders checked in up to PS1
+          count: 14
+        - at_stage: 3           # 23 riders checked in up to PS2
+          count: 23
+
+  # ---- Day 4: PLANNED ----
+  - day: 4
+    rides_per_day: 1
+    status: "PLANNED"
+    flag_off_time: "07:00"
+    start_location: "Chidambaram"
+    finish_location: "Kumbakonam"
+    total_distance: 95.0
+
+  # ---- Day 5: PLANNED ----
+  - day: 5
+    rides_per_day: 1
+    status: "PLANNED"
+    flag_off_time: "07:00"
+    start_location: "Kumbakonam"
+    finish_location: "Thanjavur"
+    total_distance: 45.0
+
+  # ---- Day 6: PLANNED (2 rides) ----
+  - day: 6
+    rides_per_day: 2
+    status: "PLANNED"
+    flag_off_time: "07:00"
+    start_location: "Thanjavur"
+    finish_location: "Trichy"
+    total_distance: 60.0
+
+  # ---- Day 7: PLANNED ----
+  - day: 7
+    rides_per_day: 1
+    status: "PLANNED"
+    flag_off_time: "07:00"
+    start_location: "Trichy"
+    finish_location: "Madurai"
+    total_distance: 140.0

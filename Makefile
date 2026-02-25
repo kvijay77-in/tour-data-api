@@ -124,6 +124,36 @@ provision-tour: ## Provision a new tour (usage: make provision-tour TOUR_ID=TOT-
 		$(if $(DESCRIPTION),--description "$(DESCRIPTION)",) \
 		$(if $(SUBSCRIPTION_ID),--subscription-id $(SUBSCRIPTION_ID),)
 
+generate-test-data: ## Generate test data from scenario template (usage: make generate-test-data SCENARIO=scripts/test_data/scenario_tot_2026.yaml [STACK_NAME=dev] [SEED=42])
+	@if [ -z "$(SCENARIO)" ]; then \
+		echo "Usage: make generate-test-data SCENARIO=<path-to-yaml> [STACK_NAME=dev] [SEED=42] [DRY_RUN=true]"; \
+		exit 1; \
+	fi
+	$(PYTHON) scripts/generate_test_data.py \
+		--scenario $(SCENARIO) \
+		--stack-name $(or $(STACK_NAME),dev) \
+		$(if $(SEED),--seed $(SEED),) \
+		$(if $(filter true,$(DRY_RUN)),--dry-run,) \
+		$(if $(REGION),--region $(REGION),)
+
+cleanup-test-data: ## Clean up test data from tour-specific tables (usage: make cleanup-test-data TOUR_ID=TOT-2026 [CONFIRM=true])
+	@if [ -z "$(TOUR_ID)" ]; then \
+		echo "Usage: make cleanup-test-data TOUR_ID=<id> [STACK_NAME=dev] [CONFIRM=true]"; \
+		exit 1; \
+	fi
+	@if [ "$(CONFIRM)" = "true" ]; then \
+		$(PYTHON) scripts/cleanup_test_data.py \
+			--stack-name $(or $(STACK_NAME),dev) \
+			--tour-id $(TOUR_ID) \
+			$(if $(REGION),--region $(REGION),) \
+			--confirm; \
+	else \
+		$(PYTHON) scripts/cleanup_test_data.py \
+			--stack-name $(or $(STACK_NAME),dev) \
+			--tour-id $(TOUR_ID) \
+			$(if $(REGION),--region $(REGION),); \
+	fi
+
 all: validate build test deploy ## Run full pipeline: validate, build, test, deploy
 
 check-config: ## Run preflight checks before deployment
