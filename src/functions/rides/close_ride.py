@@ -6,7 +6,6 @@ Route: POST /v1/tours/{tourId}/rides/{rideId}/close
 """
 
 import sys
-from datetime import datetime
 
 sys.path.insert(0, '/opt/python')
 
@@ -14,7 +13,7 @@ from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from dynamodb_utils import get_tour_item, put_tour_item
-from models import RideStatus
+from models import RideStatus, utc_now_iso
 
 logger = get_logger(__name__)
 
@@ -65,7 +64,7 @@ def lambda_handler(event, context):
             return bad_request_response("Ride is already closed")
         
         # Close the ride
-        now = datetime.utcnow().isoformat() + 'Z'
+        now = utc_now_iso()
         ride['status'] = RideStatus.CLOSED.value
         ride['closedAt'] = now
         ride['updatedAt'] = now

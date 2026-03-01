@@ -11,7 +11,6 @@ sys.path.insert(0, '/opt/python')
 import json
 import os
 import time
-from datetime import datetime
 
 import boto3
 from botocore.exceptions import ClientError
@@ -23,7 +22,7 @@ from response import (
 )
 from dynamodb_utils import get_item, put_item, get_tour_table_name
 from validation import validate_tour_id, ValidationError
-from models import TourStatus, TOUR_TABLE_TYPES
+from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 
 logger = get_logger(__name__)
 
@@ -178,7 +177,7 @@ def lambda_handler(event, context):
                 _wait_for_table_deletion(deleted_tables)
         
         # Update tour status to ARCHIVED
-        now = datetime.utcnow().isoformat() + 'Z'
+        now = utc_now_iso()
         tour['status'] = TourStatus.ARCHIVED.value
         tour['archivedAt'] = now
         tour['updatedAt'] = now

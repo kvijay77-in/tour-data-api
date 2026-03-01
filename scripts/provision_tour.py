@@ -27,7 +27,6 @@ Prerequisites:
 import argparse
 import os
 import sys
-from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
@@ -42,7 +41,7 @@ if not os.environ.get('AWS_DEFAULT_REGION') and not boto3.Session().region_name:
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
 
 from validation import validate_tour_id, validate_iso_date, ValidationError
-from models import TourStatus, TOUR_TABLE_TYPES
+from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from tour_provisioning import provision_tour_tables
 
 
@@ -69,11 +68,6 @@ def get_tour_table_name_from_stack(stack_name):
 
     # Fallback to naming convention
     return f"{stack_name}-TourMaster"
-
-
-def _utc_now_iso():
-    """Get current UTC time in ISO 8601 format"""
-    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S') + 'Z'
 
 
 def provision_tour(args):
@@ -144,7 +138,7 @@ def provision_tour(args):
         sys.exit(1)
 
     # Create Tour record with PROVISIONING status
-    now = _utc_now_iso()
+    now = utc_now_iso()
     tour_item = {
         'tourId': tour_id,
         'name': name,
@@ -178,7 +172,7 @@ def provision_tour(args):
         # Update tour record with error (put_item is safe here since we
         # control the full item in this single-user CLI operation)
         tour_item['status'] = TourStatus.PLANNING.value
-        tour_item['updatedAt'] = _utc_now_iso()
+        tour_item['updatedAt'] = utc_now_iso()
         tour_item['provisioningError'] = str(e)
         tour_table.put_item(Item=tour_item)
         print("Tour status updated to PLANNING with provisioning error")
@@ -186,7 +180,7 @@ def provision_tour(args):
 
     # Update tour status to PLANNING (put_item is safe here since we
     # control the full item in this single-user CLI operation)
-    now = _utc_now_iso()
+    now = utc_now_iso()
     tour_item['status'] = TourStatus.PLANNING.value
     tour_item['provisionedAt'] = now
     tour_item['updatedAt'] = now

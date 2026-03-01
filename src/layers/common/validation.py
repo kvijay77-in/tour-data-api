@@ -130,21 +130,49 @@ def validate_iso_date(date_str: str, field_name: str = "date") -> None:
 
 def validate_iso_datetime(datetime_str: str, field_name: str = "timestamp") -> None:
     """
-    Validate ISO 8601 datetime format
+    Validate ISO 8601 datetime format in UTC with Z suffix.
+    
+    Accepts: YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS.ffffffZ
+    Rejects non-UTC offsets (e.g., +05:30) to enforce project convention.
     
     Args:
         datetime_str: Datetime string to validate
         field_name: Name of the field being validated
     
     Raises:
-        ValidationError: If format is invalid
+        ValidationError: If format is invalid or not UTC with Z suffix
     """
+    if not datetime_str or not datetime_str.endswith('Z'):
+        raise ValidationError(
+            f"Invalid datetime format: {datetime_str}. "
+            "Expected ISO 8601 UTC format with Z suffix (e.g., 2026-02-11T10:30:00Z)",
+            {"field": field_name, "value": datetime_str}
+        )
     try:
         datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
     except ValueError:
         raise ValidationError(
-            f"Invalid datetime format: {datetime_str}. Expected ISO 8601 format",
+            f"Invalid datetime format: {datetime_str}. "
+            "Expected ISO 8601 UTC format with Z suffix (e.g., 2026-02-11T10:30:00Z)",
             {"field": field_name, "value": datetime_str}
+        )
+
+
+def validate_time_hhmm(time_str: str, field_name: str = "time") -> None:
+    """
+    Validate time format (HH:MM, 24-hour)
+    
+    Args:
+        time_str: Time string to validate
+        field_name: Name of the field being validated
+    
+    Raises:
+        ValidationError: If format is invalid
+    """
+    if not re.match(r'^([01]\d|2[0-3]):[0-5]\d$', time_str):
+        raise ValidationError(
+            f"Invalid time format: {time_str}. Expected HH:MM in 24-hour format (e.g., 08:00, 14:30)",
+            {"field": field_name, "value": time_str}
         )
 
 

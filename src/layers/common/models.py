@@ -12,8 +12,32 @@ Table Strategy (Hybrid):
 
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
+
+
+def utc_now_iso() -> str:
+    """Return current UTC time as ISO 8601 string with Z suffix.
+    
+    Uses timezone-aware datetime.now(timezone.utc) instead of the
+    deprecated datetime.utcnow().
+    
+    Returns:
+        Whole-second UTC timestamp, e.g. '2026-03-01T17:00:00Z'
+    """
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def utc_today_iso() -> str:
+    """Return current UTC date as ISO 8601 string (YYYY-MM-DD).
+    
+    Uses timezone-aware datetime to guarantee UTC date regardless of
+    server locale.
+    
+    Returns:
+        UTC date string, e.g. '2026-03-01'
+    """
+    return datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
 
 # ============================================================================
@@ -100,8 +124,8 @@ class RiderProfile:
     emergency_contact_name: str
     emergency_contact_phone: str
     photo_s3_key: Optional[str] = None
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -129,8 +153,8 @@ class Tour:
     description: Optional[str] = None
     provisioned_at: Optional[str] = None
     archived_at: Optional[str] = None
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -156,9 +180,9 @@ class TourRider:
     profile_id: str
     status: TourRiderStatus
     qr_code_data: Optional[str] = None
-    registered_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    registered_at: str = field(default_factory=utc_now_iso)
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -210,8 +234,8 @@ class Ride:
     status: RideStatus
     stages: List[Stage]
     description: Optional[str] = None
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     closed_at: Optional[str] = None
@@ -250,7 +274,7 @@ class CheckIn:
     is_manual_entry: bool = False
     notes: Optional[str] = None
     location: Optional[Dict[str, float]] = None
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=utc_now_iso)
     
     def get_status(self) -> CheckInStatus:
         """Derive check-in status from flags"""
@@ -291,8 +315,8 @@ class User:
     role: UserRole
     status: str = "ACTIVE"
     assigned_stage: Optional[int] = None
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""

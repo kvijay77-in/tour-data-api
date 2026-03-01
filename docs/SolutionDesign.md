@@ -348,12 +348,18 @@ Status is derived from flags, not stored directly:
    - Can have multiple check-ins (normal check-ins + final quit)
    - Latest check-in with `isQuitRiding = true` indicates quit status
    - Previous check-ins remain as normal (CHECKED_IN)
+   - **Offline sync:** If client provides a `timestamp` that predates the quit-riding record, the check-in is accepted (captured before rider quit)
 
 3. **Ride Status:**
    - PLANNED: Ride created but not started
    - ACTIVE: Ride in progress
    - COMPLETED: All riders finished
    - CLOSED: Locked, no more check-ins allowed
+   - **Late-sync for closed rides:** If client provides a `timestamp` that predates the `closedAt` value, the check-in is accepted (captured before ride was closed)
+
+4. **Duplicate Check-In Detection:**
+   - Same rider + same stage (normal check-ins only) returns 409 with `DUPLICATE_CHECKIN`
+   - Not Riding and Quit Riding check-ins are exempt from this check
 
 4. **Stage Numbering:**
    - Start: stageNumber = 1
@@ -609,10 +615,18 @@ Body: {
   "method": "QR_SCAN",
   "isNotRiding": false,
   "isQuitRiding": false,
+  "timestamp": "2026-02-11T10:30:00Z",  // Optional: client-captured timestamp for offline sync
   "notes": ""
 }
 Response: Created CheckIn object
 Permissions: All except GUEST
+
+Error Codes (409 Conflict):
+- DUPLICATE_CHECKIN: Same rider already checked in at this stage
+- DUPLICATE_NOT_RIDING: Rider already marked Not Riding for this ride
+- RIDER_NOT_RIDING: Rider is marked Not Riding, cannot check in
+- RIDER_QUIT_RIDING: Rider has quit riding, no further check-ins
+- RIDE_CLOSED: Ride is closed, no further check-ins
 ```
 
 #### Get Check-Ins for Ride
@@ -630,6 +644,9 @@ Response: Array of CheckIn objects
 #### Get Dashboard Data
 ```
 GET /rides/{rideId}/dashboard
+Headers (optional):
+  If-None-Match: "<etag-value>"   // ETag from a previous response
+
 Response: {
   "ride": Ride object,
   "riders": Array of TourRider with profiles,
@@ -641,6 +658,11 @@ Response: {
     "quitRiding": 2
   }
 }
+Response Headers:
+  ETag: "<md5-hash>"              // Hash of the response data
+
+Conditional Response:
+  304 Not Modified (empty body) when If-None-Match matches current ETag
 ```
 
 ### Users
@@ -698,9 +720,13 @@ All requests will be validated for:
 Example validations:
 - Rider ID format: `R[1-999]`
 - Tour ID format: Free-form, 3-50 chars, `[a-zA-Z0-9_.-]`, starts with letter or number
-- Date format: ISO 8601 (YYYY-MM-DD)
-- Check-in not allowed if ride is CLOSED
+- Date format: ISO 8601 (`YYYY-MM-DD`)
+- Datetime format: ISO 8601 with UTC Z-suffix (`YYYY-MM-DDTHH:MM:SSZ`); non-UTC offsets rejected
+- Time format: 24-hour `HH:MM` (e.g., `06:30` for flagOffTime)
+- Check-in not allowed if ride is CLOSED (unless client `timestamp` predates `closedAt`)
 - No duplicate Not Riding check-ins
+- No duplicate normal check-ins (same rider + same stage)
+- Quit Riding blocks further check-ins (unless client `timestamp` predates quit record)
 - Stage number must exist in ride
 
 ## Rate Limiting

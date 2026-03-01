@@ -6,7 +6,6 @@ Route: GET /v1/tours/{tourId}/rides/today
 """
 
 import sys
-from datetime import date
 
 sys.path.insert(0, '/opt/python')
 
@@ -14,6 +13,7 @@ from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, ValidationError
 from dynamodb_utils import query_tour_items
+from models import utc_today_iso
 
 logger = get_logger(__name__)
 
@@ -43,8 +43,8 @@ def lambda_handler(event, context):
         except ValidationError as e:
             return bad_request_response(str(e))
         
-        # Get today's date in ISO format
-        today = date.today().isoformat()
+        # Get today's date in ISO format (UTC-aware)
+        today = utc_today_iso()
         
         # Query rides for today using DateIndex GSI
         logger.info(f"Querying rides for tour {tour_id} on {today}")

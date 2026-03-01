@@ -6,6 +6,7 @@ Retrieves all data needed for the Check-In App dashboard:
 - All tour riders with profile data
 - All check-ins for the ride
 - Summary statistics
+- ETag support for conditional requests (304 Not Modified)
 
 Uses tour-specific tables: Ride-{tourId}, TourRider-{tourId}, CheckIn-{tourId}
 and shared RiderProfile table.
@@ -15,10 +16,13 @@ Route: GET /v1/tours/{tourId}/rides/{rideId}/dashboard
 import sys
 sys.path.insert(0, '/opt/python')
 
+import hashlib
+import json
+
 from logger import get_logger, log_event
 from response import (
     success_response, not_found_response, bad_request_response,
-    internal_error_response
+    internal_error_response, not_modified_response, DecimalEncoder
 )
 from dynamodb_utils import (
     get_tour_item, query_tour_items, scan_tour_items, batch_get_items
@@ -145,8 +149,24 @@ def lambda_handler(event, context):
             'summary': summary
         }
         
+        # ETag support: compute hash of response data for conditional requests
+        data_json = json.dumps(dashboard_data, sort_keys=True, cls=DecimalEncoder)
+        etag = f'"{hashlib.md5(data_json.encode()).hexdigest()}"'
+        
+        # Check If-None-Match header for conditional request
+        request_headers = event.get('headers', {})
+        if_none_match = request_headers.get('if-none-match') or request_headers.get('If-None-Match')
+        
+        if if_none_match and if_none_match == etag:
+            logger.info(f"ETag match — returning 304 Not Modified for ride: {ride_id}")
+            response = not_modified_response()
+            response['headers']['ETag'] = etag
+            return response
+        
         logger.info(f"Dashboard data prepared successfully for ride: {ride_id}")
-        return success_response(dashboard_data)
+        response = success_response(dashboard_data)
+        response['headers']['ETag'] = etag
+        return response
     
     except Exception as e:
         logger.error(f"Error getting dashboard data: {str(e)}", exc_info=True)

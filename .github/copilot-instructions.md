@@ -54,7 +54,13 @@ These instructions are general for our interaction and MUST BE STRICTLY FOLLOWED
 - Do not use any obscure or less known libraries without prior approval.
 - Always prefer libraries that are actively maintained and have good community support.
 - Keep the number of external dependencies to a minimum to reduce potential security vulnerabilities.
-
+- Check and avoid using any deprecated libraries or packages.
+- Always check for security vulnerabilities in any third-party libraries before using them.
+- Ensure that all libraries and packages used are compatible with the project's Python version (3.11+).
+- Follow best practices for managing dependencies, such as using a `requirements.txt` file and virtual environments for development.
+- Regularly review and update dependencies to ensure security and compatibility.
+- Avoid using libraries that have known security issues or vulnerabilities.
+- Always check the license of any third-party library to ensure it is compatible with the project's use case and does not impose any restrictions on usage or distribution. 
 
 ## Coding Standards and Best Practices
 - Strictly follow security best practices for mobile and web applications.
@@ -62,6 +68,7 @@ These instructions are general for our interaction and MUST BE STRICTLY FOLLOWED
 - Optimize code for performance and efficiency.
 - Use environment variables for sensitive information and configuration settings.
 - No hardcoding of any credentials, URLs, or configuration values directly in the codebase.
+- Use standard and widely practiced data types. For example, use ISO 8601 format for date and time representation.
 - Ensure proper error handling and logging should be implemented.
 - Follow consistent coding style and conventions throughout the codebase.
 - Use proper linting for code formatting and linting.

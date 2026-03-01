@@ -210,6 +210,53 @@ make format
 make test
 ```
 
+### Coding Conventions
+
+#### Date and Time Standards
+
+All date/time values in the project follow **ISO 8601** format. Use these shared helpers from `src/layers/common/models.py`:
+
+| Helper | Format | Example |
+|--------|--------|---------|
+| `utc_now_iso()` | `YYYY-MM-DDTHH:MM:SSZ` | `2026-03-01T17:00:00Z` |
+| `utc_today_iso()` | `YYYY-MM-DD` | `2026-03-01` |
+
+```python
+from models import utc_now_iso, utc_today_iso
+
+now = utc_now_iso()    # '2026-03-01T17:00:00Z'
+today = utc_today_iso()  # '2026-03-01'
+```
+
+**Do NOT use** the deprecated `datetime.utcnow()` or naive `date.today()`:
+
+```python
+# WRONG — deprecated in Python 3.12+, scheduled for removal
+from datetime import datetime
+now = datetime.utcnow().isoformat() + 'Z'
+
+# WRONG — uses local timezone, not UTC
+from datetime import date
+today = date.today().isoformat()
+
+# CORRECT — timezone-aware, uses datetime.now(timezone.utc) internally
+from models import utc_now_iso, utc_today_iso
+now = utc_now_iso()
+today = utc_today_iso()
+```
+
+Timestamps use whole-second precision (no microseconds) for consistency across all API responses, DynamoDB records, and dataclass defaults. All datetime values must include the `Z` (UTC) suffix — non-UTC offsets are rejected by `validate_iso_datetime()`.
+
+#### Input Validation for Date/Time Fields
+
+| Validator | Accepts | Example |
+|-----------|---------|---------|
+| `validate_iso_date(value)` | `YYYY-MM-DD` | `2026-03-01` |
+| `validate_iso_datetime(value)` | ISO 8601 with `Z` suffix | `2026-03-01T17:00:00Z` |
+| `validate_time_hhmm(value)` | `HH:MM` (24-hour) | `06:30` |
+
+All validators are in `src/layers/common/validation.py` and raise `ValidationError` on invalid input.
+
 ---
 
 ## Useful Commands

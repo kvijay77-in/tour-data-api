@@ -7,7 +7,6 @@ Route: PUT /v1/riders/profile/{profileId}
 
 import json
 import sys
-from datetime import datetime
 
 sys.path.insert(0, '/opt/python')
 
@@ -15,6 +14,7 @@ from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_email, validate_required_fields, ValidationError
 from dynamodb_utils import get_item, put_item
+from models import utc_now_iso
 
 logger = get_logger(__name__)
 
@@ -72,7 +72,7 @@ def lambda_handler(event, context):
         
         # Update rider profile
         updated_rider = {**existing_rider, **updates}
-        updated_rider['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
+        updated_rider['updatedAt'] = utc_now_iso()
         
         logger.info(f"Updating rider profile: {profile_id}")
         put_item(table_name_env='RIDER_PROFILE_TABLE', item=updated_rider)

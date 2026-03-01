@@ -3,9 +3,10 @@ Response utilities for consistent API responses
 """
 
 import json
-from datetime import datetime
 from typing import Any, Dict, Optional
 from decimal import Decimal
+
+from models import utc_now_iso
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -30,7 +31,7 @@ def success_response(data: Any, status_code: int = 200) -> Dict[str, Any]:
     body = {
         "success": True,
         "data": data,
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": utc_now_iso()
     }
     
     return {
@@ -69,7 +70,7 @@ def error_response(
             "code": error_code,
             "message": message
         },
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": utc_now_iso()
     }
     
     if details:
@@ -136,13 +137,38 @@ def forbidden_response(message: str = "Forbidden") -> Dict[str, Any]:
     )
 
 
-def conflict_response(message: str) -> Dict[str, Any]:
-    """Create a 409 conflict response"""
+def conflict_response(
+    message: str,
+    error_code: str = "CONFLICT",
+    details: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Create a 409 conflict response
+    
+    Args:
+        message: Human-readable error message
+        error_code: Specific error code (default: CONFLICT)
+        details: Additional error details (optional)
+    """
     return error_response(
-        error_code="CONFLICT",
+        error_code=error_code,
         message=message,
-        status_code=409
+        status_code=409,
+        details=details
     )
+
+
+def not_modified_response() -> Dict[str, Any]:
+    """Create a 304 Not Modified response (no body)"""
+    return {
+        "statusCode": 304,
+        "headers": {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type,Authorization,If-None-Match",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS"
+        },
+        "body": ""
+    }
 
 
 def internal_error_response(message: str = "Internal server error") -> Dict[str, Any]:

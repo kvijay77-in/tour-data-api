@@ -10,7 +10,6 @@ sys.path.insert(0, '/opt/python')
 
 import json
 import os
-from datetime import datetime
 
 import boto3
 
@@ -21,7 +20,7 @@ from response import (
 )
 from dynamodb_utils import get_item, put_item
 from validation import validate_tour_id, validate_iso_date, validate_required_fields, ValidationError
-from models import TourStatus, TOUR_TABLE_TYPES
+from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from tour_provisioning import provision_tour_tables
 
 logger = get_logger(__name__)
@@ -85,7 +84,7 @@ def lambda_handler(event, context):
             return conflict_response(f"Tour '{tour_id}' already exists")
         
         # Create Tour record with PROVISIONING status
-        now = datetime.utcnow().isoformat() + 'Z'
+        now = utc_now_iso()
         tour_item = {
             'tourId': tour_id,
             'name': body['name'],
@@ -111,15 +110,15 @@ def lambda_handler(event, context):
             logger.error(f"Error provisioning tables for tour {tour_id}: {str(e)}")
             # Update tour status to indicate failure
             tour_item['status'] = TourStatus.PLANNING.value
-            tour_item['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
+            tour_item['updatedAt'] = utc_now_iso()
             tour_item['provisioningError'] = str(e)
             put_item('TOUR_MASTER_TABLE', tour_item)
             return internal_error_response(f"Tour created but table provisioning failed: {str(e)}")
         
         # Update tour status to PLANNING
         tour_item['status'] = TourStatus.PLANNING.value
-        tour_item['provisionedAt'] = datetime.utcnow().isoformat() + 'Z'
-        tour_item['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
+        tour_item['provisionedAt'] = utc_now_iso()
+        tour_item['updatedAt'] = utc_now_iso()
         put_item('TOUR_MASTER_TABLE', tour_item)
         
         logger.info(f"Tour {tour_id} provisioned successfully with {len(created_tables)} tables")

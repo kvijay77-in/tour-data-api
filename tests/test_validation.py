@@ -15,6 +15,8 @@ from validation import (
     validate_ride_id,
     validate_stage_id,
     validate_iso_date,
+    validate_iso_datetime,
+    validate_time_hhmm,
     validate_email,
     ValidationError
 )
@@ -149,3 +151,69 @@ class TestEmailValidation:
         for email in invalid_emails:
             with pytest.raises(ValidationError):
                 validate_email(email)
+
+
+class TestDatetimeValidation:
+    """Test ISO 8601 datetime validation with UTC Z-suffix enforcement"""
+    
+    def test_valid_utc_datetimes(self):
+        """Test valid UTC datetime strings with Z suffix"""
+        valid = [
+            '2026-02-11T10:30:00Z',
+            '2026-02-11T10:30:00.123456Z',
+            '2026-01-01T00:00:00Z',
+            '2026-12-31T23:59:59Z'
+        ]
+        for dt in valid:
+            validate_iso_datetime(dt)  # Should not raise
+    
+    def test_reject_non_utc_offsets(self):
+        """Datetime with non-UTC offset should be rejected"""
+        non_utc = [
+            '2026-02-11T10:30:00+05:30',
+            '2026-02-11T10:30:00+00:00',
+            '2026-02-11T10:30:00-04:00'
+        ]
+        for dt in non_utc:
+            with pytest.raises(ValidationError):
+                validate_iso_datetime(dt)
+    
+    def test_reject_invalid_datetimes(self):
+        """Invalid datetime strings should be rejected"""
+        invalid = [
+            'not-a-datetime',
+            '2026-02-11',
+            '10:30:00Z',
+            '',
+            '2026-13-01T00:00:00Z'
+        ]
+        for dt in invalid:
+            with pytest.raises(ValidationError):
+                validate_iso_datetime(dt)
+
+
+class TestTimeValidation:
+    """Test HH:MM time validation"""
+    
+    def test_valid_times(self):
+        """Test valid HH:MM time strings"""
+        valid = ['00:00', '06:30', '08:00', '12:00', '14:30', '23:59']
+        for t in valid:
+            validate_time_hhmm(t)  # Should not raise
+    
+    def test_invalid_times(self):
+        """Test invalid time strings"""
+        invalid = [
+            '24:00',    # Hour too large
+            '25:00',    # Hour out of range
+            '12:60',    # Minute too large
+            '99:99',    # Both out of range
+            '8:00',     # Missing leading zero
+            '08:0',     # Missing trailing digit
+            'abc',      # Not a time
+            '08:00:00', # Seconds not allowed
+            '',         # Empty
+        ]
+        for t in invalid:
+            with pytest.raises(ValidationError):
+                validate_time_hhmm(t)

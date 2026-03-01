@@ -7,15 +7,14 @@ Route: PUT /v1/tours/{tourId}/rides/{rideId}
 
 import json
 import sys
-from datetime import datetime
 
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
-from validation import validate_tour_id, validate_ride_id, validate_iso_date, ValidationError
+from validation import validate_tour_id, validate_ride_id, validate_iso_date, validate_time_hhmm, ValidationError
 from dynamodb_utils import get_tour_item, put_tour_item
-from models import RideStatus
+from models import RideStatus, utc_now_iso
 
 logger = get_logger(__name__)
 
@@ -90,6 +89,13 @@ def lambda_handler(event, context):
             if not isinstance(updates['totalDistance'], (int, float)) or updates['totalDistance'] <= 0:
                 return bad_request_response("totalDistance must be a positive number")
         
+        # Validate flagOffTime if provided
+        if 'flagOffTime' in updates:
+            try:
+                validate_time_hhmm(updates['flagOffTime'], 'flagOffTime')
+            except ValidationError as e:
+                return bad_request_response(str(e))
+        
         # Validate status if provided
         if 'status' in updates:
             valid_statuses = [s.value for s in RideStatus]
@@ -100,7 +106,7 @@ def lambda_handler(event, context):
         
         # Update ride
         updated_ride = {**existing_ride, **updates}
-        updated_ride['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
+        updated_ride['updatedAt'] = utc_now_iso()
         
         logger.info(f"Updating ride: {ride_id}")
         put_tour_item(table_type='Ride', tour_id=tour_id, item=updated_ride)

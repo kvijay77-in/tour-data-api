@@ -7,7 +7,6 @@ Route: POST /v1/tours/{tourId}/rides
 
 import json
 import sys
-from datetime import datetime
 
 sys.path.insert(0, '/opt/python')
 
@@ -18,10 +17,10 @@ from response import (
 )
 from validation import (
     validate_tour_id, validate_required_fields, validate_iso_date,
-    ValidationError
+    validate_time_hhmm, ValidationError
 )
 from dynamodb_utils import get_item, get_tour_item, put_tour_item
-from models import RideStatus, TourStatus
+from models import RideStatus, TourStatus, utc_now_iso
 
 logger = get_logger(__name__)
 
@@ -84,6 +83,12 @@ def lambda_handler(event, context):
         except ValidationError as e:
             return bad_request_response(str(e))
         
+        # Validate flagOffTime (HH:MM 24-hour format)
+        try:
+            validate_time_hhmm(body['flagOffTime'], 'flagOffTime')
+        except ValidationError as e:
+            return bad_request_response(str(e))
+        
         # Validate numeric fields
         if not isinstance(body['totalDistance'], (int, float)) or body['totalDistance'] <= 0:
             return bad_request_response("totalDistance must be a positive number")
@@ -125,7 +130,7 @@ def lambda_handler(event, context):
             return conflict_response(f"Ride '{ride_id}' already exists in tour '{tour_id}'")
         
         # Create ride object
-        now = datetime.utcnow().isoformat() + 'Z'
+        now = utc_now_iso()
         ride = {
             'rideId': ride_id,
             'date': body['date'],

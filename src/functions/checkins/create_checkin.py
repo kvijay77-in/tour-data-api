@@ -6,6 +6,9 @@ Handles creating new check-in records including:
 - Not Riding (NR) status
 - Quit Riding (QR) status
 - Manual entry support
+- Timestamp-based validation for offline-synced check-ins
+- Late-sync support for closed rides
+- Duplicate check-in detection
 
 Uses tour-specific tables: CheckIn-{tourId}, Ride-{tourId}, TourRider-{tourId}.
 Route: POST /v1/tours/{tourId}/checkins
@@ -16,7 +19,6 @@ sys.path.insert(0, '/opt/python')
 
 import json
 import uuid
-from datetime import datetime
 
 from logger import get_logger, log_event
 from response import (
@@ -30,9 +32,10 @@ from validation import (
     validate_required_fields,
     validate_tour_id,
     validate_stage_number,
+    validate_iso_datetime,
     ValidationError
 )
-from models import CheckIn, CheckInMethod, RideStatus
+from models import CheckIn, CheckInMethod, RideStatus, utc_now_iso
 
 logger = get_logger(__name__)
 
@@ -51,6 +54,7 @@ def lambda_handler(event, context):
         method: Check-in method (QR_SCAN, MANUAL, FALLBACK)
         isNotRiding: Not Riding flag (default: false)
         isQuitRiding: Quit Riding flag (default: false)
+        timestamp: Optional ISO 8601 timestamp for offline-synced check-ins
         notes: Optional notes
     """
     try:
@@ -86,6 +90,14 @@ def lambda_handler(event, context):
         is_not_riding = body.get('isNotRiding', False)
         is_quit_riding = body.get('isQuitRiding', False)
         notes = body.get('notes')
+        client_timestamp = body.get('timestamp')  # Optional: for offline-synced check-ins
+        
+        # Validate client-supplied timestamp if provided
+        if client_timestamp:
+            try:
+                validate_iso_datetime(client_timestamp, 'timestamp')
+            except ValidationError as e:
+                return bad_request_response(str(e))
         
         # Validate inputs
         try:
@@ -117,11 +129,19 @@ def lambda_handler(event, context):
         
         # Check if ride is closed
         if ride.get('status') == RideStatus.CLOSED.value:
-            return error_response(
-                error_code="RIDE_CLOSED",
-                message=f"Ride {ride_id} is closed. No further check-ins allowed.",
-                status_code=409
-            )
+            closed_at = ride.get('closedAt')
+            # Allow late-sync: accept check-ins captured before ride was closed
+            if client_timestamp and closed_at and client_timestamp < closed_at:
+                logger.info(
+                    f"Late-sync accepted: check-in timestamp {client_timestamp} "
+                    f"predates ride closure {closed_at}"
+                )
+            else:
+                return error_response(
+                    error_code="RIDE_CLOSED",
+                    message=f"Ride {ride_id} is closed. No further check-ins allowed.",
+                    status_code=409
+                )
         
         # Validate stage number against ride stages
         stages = ride.get('stages', [])
@@ -166,7 +186,8 @@ def lambda_handler(event, context):
             nr_checkins = [c for c in existing_checkins if c.get('isNotRiding')]
             if nr_checkins:
                 return conflict_response(
-                    f"Rider {rider_id} already marked as Not Riding for this ride"
+                    f"Rider {rider_id} already marked as Not Riding for this ride",
+                    error_code="DUPLICATE_NOT_RIDING"
                 )
         
         # Check if rider already marked as Not Riding (can't check in normally)
@@ -174,7 +195,8 @@ def lambda_handler(event, context):
             nr_checkins = [c for c in existing_checkins if c.get('isNotRiding')]
             if nr_checkins:
                 return conflict_response(
-                    f"Rider {rider_id} is marked as Not Riding. Cannot check in."
+                    f"Rider {rider_id} is marked as Not Riding. Cannot check in.",
+                    error_code="RIDER_NOT_RIDING"
                 )
         
         # Check if rider already quit (latest check-in has isQuitRiding=true)
@@ -184,13 +206,43 @@ def lambda_handler(event, context):
                 key=lambda x: x.get('timestamp', ''),
                 reverse=True
             )
-            if sorted_checkins[0].get('isQuitRiding'):
+            latest_qr = next(
+                (c for c in sorted_checkins if c.get('isQuitRiding')),
+                None
+            )
+            if latest_qr:
+                qr_timestamp = latest_qr.get('timestamp', '')
+                # Timestamp-based validation: accept if check-in was captured
+                # before the rider quit (supports offline-synced check-ins)
+                if client_timestamp and client_timestamp < qr_timestamp:
+                    logger.info(
+                        f"Timestamp-based acceptance: check-in at {client_timestamp} "
+                        f"predates quit-riding at {qr_timestamp} for rider {rider_id}"
+                    )
+                else:
+                    return conflict_response(
+                        f"Rider {rider_id} has quit riding. No further check-ins allowed.",
+                        error_code="RIDER_QUIT_RIDING"
+                    )
+        
+        # Check for duplicate check-in (same rider + same stage, normal check-ins only)
+        if not is_not_riding and not is_quit_riding:
+            duplicate = next(
+                (c for c in existing_checkins
+                 if c.get('stageNumber') == stage_number
+                 and not c.get('isNotRiding')
+                 and not c.get('isQuitRiding')),
+                None
+            )
+            if duplicate:
                 return conflict_response(
-                    f"Rider {rider_id} has quit riding. No further check-ins allowed."
+                    f"Rider {rider_id} already checked in at stage {stage_number}",
+                    error_code="DUPLICATE_CHECKIN"
                 )
         
         # Step 4: Create check-in record
-        timestamp = datetime.utcnow().isoformat() + 'Z'
+        # Use client-supplied timestamp for offline-synced check-ins, otherwise server time
+        timestamp = client_timestamp if client_timestamp else utc_now_iso()
         check_in_id = str(uuid.uuid4())
         
         # Get checked-in-by from request context (JWT authorizer)
