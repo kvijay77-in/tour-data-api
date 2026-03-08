@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, not_found_response, bad_request_response, internal_error_response
+from response import success_response, not_found_response, error_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, ValidationError
 from dynamodb_utils import query_tour_items
 from models import utc_today_iso
@@ -59,7 +59,11 @@ def lambda_handler(event, context):
         
         if not rides:
             logger.info(f"No ride found for tour {tour_id} on {today}")
-            return not_found_response("Ride", today)
+            return error_response(
+                error_code="NO_ACTIVE_RIDE",
+                message="No active ride found for today",
+                status_code=404
+            )
         
         # Return first ride for today
         todays_ride = rides[0]
