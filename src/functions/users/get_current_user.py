@@ -10,6 +10,7 @@ sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, unauthorized_response, internal_error_response
+from rbac import get_user_groups
 
 logger = get_logger(__name__)
 
@@ -21,7 +22,7 @@ def lambda_handler(event, context):
     Authorization: Bearer <JWT token>
     
     Returns:
-    - 200: Current user details
+    - 200: Current user details including Cognito group membership
     - 401: Unauthorized (no valid token)
     - 500: Server error
     """
@@ -50,7 +51,8 @@ def lambda_handler(event, context):
             'userId': user_id,
             'email': email,
             'username': username,
-            'emailVerified': jwt_claims.get('email_verified', False)
+            'emailVerified': jwt_claims.get('email_verified', False),
+            'groups': get_user_groups(event)
         }
         
         logger.info(f"Successfully retrieved current user: {user_id}")

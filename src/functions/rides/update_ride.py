@@ -15,6 +15,7 @@ from response import success_response, not_found_response, bad_request_response,
 from validation import validate_tour_id, validate_ride_id, validate_iso_date, validate_time_hhmm, ValidationError
 from dynamodb_utils import get_tour_item, put_tour_item
 from models import RideStatus, utc_now_iso
+from rbac import require_groups, ADMINISTRATOR
 
 logger = get_logger(__name__)
 
@@ -36,6 +37,11 @@ def lambda_handler(event, context):
     - 500: Server error
     """
     try:
+        # Enforce RBAC — only ADMINISTRATOR may update rides
+        deny = require_groups(event, [ADMINISTRATOR])
+        if deny:
+            return deny
+
         # Extract path parameters
         tour_id = event.get('pathParameters', {}).get('tourId')
         ride_id = event.get('pathParameters', {}).get('rideId')

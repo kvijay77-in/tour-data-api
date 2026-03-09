@@ -156,7 +156,12 @@ def _make_checkin_event(tour_id, body):
         'requestContext': {
             'http': {'method': 'POST'},
             'authorizer': {
-                'jwt': {'claims': {'sub': 'test-user-001'}}
+                'jwt': {
+                    'claims': {
+                        'sub': 'test-user-001',
+                        'cognito:groups': 'ADMINISTRATOR'
+                    }
+                }
             }
         },
         'body': json.dumps(body)
@@ -172,7 +177,15 @@ def _make_dashboard_event(tour_id, ride_id, headers=None):
         'pathParameters': {'tourId': tour_id, 'rideId': ride_id},
         'headers': headers or {},
         'requestContext': {
-            'http': {'method': 'GET'}
+            'http': {'method': 'GET'},
+            'authorizer': {
+                'jwt': {
+                    'claims': {
+                        'sub': 'test-user-001',
+                        'cognito:groups': 'ADMINISTRATOR'
+                    }
+                }
+            }
         }
     }
     return event

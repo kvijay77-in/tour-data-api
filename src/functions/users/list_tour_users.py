@@ -13,6 +13,7 @@ from response import success_response, bad_request_response, internal_error_resp
 from validation import validate_tour_id, ValidationError
 from dynamodb_utils import scan_tour_items
 from models import UserRole
+from rbac import require_groups, ADMINISTRATOR, SUPER_USER
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,11 @@ def lambda_handler(event, context):
     - 500: Server error
     """
     try:
+        # Enforce RBAC — only ADMINISTRATOR and SUPER_USER may list tour users
+        deny = require_groups(event, [ADMINISTRATOR, SUPER_USER])
+        if deny:
+            return deny
+
         # Extract tour ID from path parameters
         tour_id = event.get('pathParameters', {}).get('tourId')
         
