@@ -7,6 +7,10 @@ This guide covers AWS CLI configuration, credential setup, and Cognito authentic
 ## Table of Contents
 - [Verify AWS Configuration](#verify-aws-configuration)
 - [Setting up Cognito](#setting-up-cognito)
+  - [1. Get Your User Pool ID](#1-get-your-user-pool-id)
+  - [2. Create Test Users](#2-create-test-users)
+  - [3. Assign Users to Cognito Groups](#3-assign-users-to-cognito-groups)
+  - [4. Get JWT Token for Testing](#4-get-jwt-token-for-testing)
 
 ---
 
@@ -143,7 +147,30 @@ aws cognito-idp admin-set-user-password \
   --permanent
 ```
 
-### 3. Get JWT Token for Testing
+### 3. Assign Users to Cognito Groups
+
+The API enforces server-side RBAC using Cognito groups. Available groups are: `ADMINISTRATOR`, `SUPER_USER`, `PIT_STOP_CREW`, `HOTEL_STAFF`, `GUEST`. These groups are created automatically when the Cognito User Pool is managed by this stack.
+
+Assign a user to a group:
+
+```bash
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id <pool-id> \
+  --username admin@example.com \
+  --group-name ADMINISTRATOR
+```
+
+Verify group membership:
+
+```bash
+aws cognito-idp admin-list-groups-for-user \
+  --user-pool-id <pool-id> \
+  --username admin@example.com
+```
+
+> **Note**: A user without any group assignment will have no permissions beyond the basic READ access returned to authenticated users by un-gated GET endpoints. Assign the appropriate group before testing write or management operations.
+
+### 4. Get JWT Token for Testing
 
 Retrieve a JWT token for API testing:
 

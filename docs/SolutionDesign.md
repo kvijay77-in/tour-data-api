@@ -521,7 +521,7 @@ Body: {
   "description": "Annual coastal cycling tour"
 }
 Response: Created Tour object (status: PROVISIONING)
-Permissions: ADMINISTRATOR
+Permission: TOUR_MANAGE
 ```
 This endpoint creates the Tour record and provisions 4 tour-specific DynamoDB tables.
 
@@ -529,7 +529,7 @@ This endpoint creates the Tour record and provisions 4 tour-specific DynamoDB ta
 ```
 POST /tours/{tourId}/archive
 Response: Updated Tour object (status: ARCHIVED)
-Permissions: ADMINISTRATOR
+Permission: TOUR_MANAGE
 ```
 This endpoint exports tour data to S3 (optional) and deletes tour-specific tables.
 
@@ -585,7 +585,7 @@ Response: Array of Ride objects
 POST /tours/{tourId}/rides
 Body: Ride details with stages
 Response: Created Ride object
-Permissions: ADMINISTRATOR
+Permission: RIDE_MANAGE
 ```
 
 #### Update Ride
@@ -593,14 +593,14 @@ Permissions: ADMINISTRATOR
 PUT /rides/{rideId}
 Body: Ride fields to update
 Response: Updated Ride object
-Permissions: ADMINISTRATOR
+Permission: RIDE_MANAGE
 ```
 
 #### Close Ride
 ```
 POST /rides/{rideId}/close
 Response: Updated Ride object with CLOSED status
-Permissions: ADMINISTRATOR
+Permission: RIDE_MANAGE
 ```
 
 ### Check-Ins
@@ -619,7 +619,7 @@ Body: {
   "notes": ""
 }
 Response: Created CheckIn object
-Permissions: All except GUEST
+Permission: CHECKIN (all methods); CHECKIN_MANUAL additionally required for method=MANUAL
 
 Error Codes (409 Conflict):
 - DUPLICATE_CHECKIN: Same rider already checked in at this stage
@@ -663,6 +663,7 @@ Response Headers:
 
 Conditional Response:
   304 Not Modified (empty body) when If-None-Match matches current ETag
+Permission: DASHBOARD
 ```
 
 ### Users
@@ -670,14 +671,20 @@ Conditional Response:
 #### Get Current User Profile
 ```
 GET /users/me
-Response: User object
+Response: {
+  "userId": "<sub>",
+  "email": "<email>",
+  "username": "<cognito:username>",
+  "emailVerified": true,
+  "groups": ["ADMINISTRATOR"]   // Cognito group membership from JWT
+}
 ```
 
 #### List Tour Users
 ```
 GET /tours/{tourId}/users
 Response: Array of User objects
-Permissions: ADMINISTRATOR, SUPER_USER
+Permission: USER_LIST
 ```
 
 ## HTTP Status Codes
@@ -780,12 +787,13 @@ tour-data-api/
 ### Managed by SAM (template.yaml)
 1. **Shared DynamoDB Tables:** RiderProfile, TourMaster (with GSIs)
 2. **Lambda Functions:** One per API endpoint
-3. **Lambda Layer:** Common utilities shared across all functions
+3. **Lambda Layer:** Common utilities shared across all functions (`dynamodb_utils`, `logger`, `models`, `rbac`, `response`, `tour_provisioning`, `validation`)
 4. **API Gateway:** HTTP API with JWT authorizer
 5. **Cognito User Pool:** User authentication
-6. **S3 Bucket:** Rider photos
-7. **IAM Roles:** Lambda execution roles with least privilege
-8. **CloudWatch Logs:** For monitoring and debugging
+6. **Cognito User Pool Groups:** `ADMINISTRATOR`, `SUPER_USER`, `PIT_STOP_CREW`, `HOTEL_STAFF`, `GUEST` (auto-created when the pool is managed by this stack; externally-supplied pools must manage groups independently)
+7. **S3 Bucket:** Rider photos
+8. **IAM Roles:** Lambda execution roles with least privilege
+9. **CloudWatch Logs:** For monitoring and debugging
 
 ### Managed at Runtime (Tour Provisioning)
 1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId} (with GSIs)
@@ -855,7 +863,25 @@ Runtime-provisioned tour tables must also be tagged with the same `SubscriptionI
 1. **JWT Validation:** All API requests validated via Cognito authorizer
 2. **Token Expiration:** Access tokens expire in 1 hour
 3. **Refresh Tokens:** Valid for 30 days
-4. **Role-Based Access:** Enforced in Lambda functions
+4. **Permission-Based RBAC:** Enforced in Lambda functions via `src/layers/common/rbac.py`
+
+### RBAC Design
+
+Lambda handlers check API-level **permissions** (what action is being performed) rather than Cognito group names (who the caller is). The `GROUP_PERMISSIONS` mapping in `rbac.py` is the single configuration point connecting Cognito groups to API permissions — adding a new group or changing what a group can do requires only updating this mapping, with no Lambda handler changes.
+
+**Permissions and group mapping:**
+
+| Permission | ADMINISTRATOR | SUPER_USER | PIT_STOP_CREW | HOTEL_STAFF | GUEST |
+|---|:---:|:---:|:---:|:---:|:---:|
+| READ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| CHECKIN | ✅ | ✅ | ✅ | ✅ | ❌ |
+| CHECKIN_MANUAL | ✅ | ✅ | ❌ | ❌ | ❌ |
+| RIDE_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ |
+| TOUR_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ |
+| USER_LIST | ✅ | ✅ | ❌ | ❌ | ❌ |
+| DASHBOARD | ✅ | ✅ | ✅ | ❌ | ✅ |
+
+API Gateway HTTP API serialises the `cognito:groups` claim as a comma-separated string when forwarding it to Lambda — this is handled transparently by `rbac.get_user_groups()`.
 
 ## Data Protection
 

@@ -43,6 +43,7 @@ This page provides a guide to all project documentation.
 ### For Infrastructure
 - **AWS credentials**: [AWS Setup Guide](aws-setup-guide.md)
 - **Cognito & JWT tokens**: [AWS Setup Guide → Setting up Cognito](aws-setup-guide.md#setting-up-cognito)
+- **RBAC group assignment**: [AWS Setup Guide → Assign Users to Cognito Groups](aws-setup-guide.md#3-assign-users-to-cognito-groups)
 - **Resource tagging**: [Infrastructure Guide → Resource Tagging Strategy](infrastructure-guide.md#resource-tagging-strategy)
 - **Monitoring**: [Infrastructure Guide → Monitoring](infrastructure-guide.md#monitoring)
 - **Cost tracking**: [Infrastructure Guide → Cost Estimation](infrastructure-guide.md#cost-estimation)
