@@ -23,7 +23,7 @@ from response import (
 from dynamodb_utils import get_item, put_item, get_tour_table_name
 from validation import validate_tour_id, ValidationError
 from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
-from rbac import require_groups, ADMINISTRATOR
+from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
 
@@ -119,8 +119,8 @@ def lambda_handler(event, context):
     try:
         log_event(logger, event)
         
-        # Enforce RBAC — only ADMINISTRATOR may archive tours
-        deny = require_groups(event, [ADMINISTRATOR])
+        # Enforce RBAC — only TOUR_MANAGE permission may archive tours
+        deny = require_permission(event, Permission.TOUR_MANAGE)
         if deny:
             return deny
         

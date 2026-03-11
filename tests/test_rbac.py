@@ -156,37 +156,137 @@ class TestHasAnyGroup:
         assert has_any_group(['ADMINISTRATOR'], []) is False
 
 
-class TestRequireGroups:
-    def test_allowed_group_returns_none(self):
-        from rbac import require_groups
-        event = _make_event(groups=['ADMINISTRATOR'])
-        assert require_groups(event, ['ADMINISTRATOR']) is None
+class TestGroupPermissionsMapping:
+    """Verify the GROUP_PERMISSIONS mapping is internally consistent."""
 
-    def test_denied_group_returns_403(self):
-        from rbac import require_groups
+    def test_administrator_has_all_permissions(self):
+        from rbac import GROUP_PERMISSIONS, Permission
+        admin_perms = set(GROUP_PERMISSIONS['ADMINISTRATOR'])
+        assert admin_perms == set(Permission)
+
+    def test_guest_only_read_and_dashboard(self):
+        from rbac import GROUP_PERMISSIONS, Permission
+        guest_perms = set(GROUP_PERMISSIONS['GUEST'])
+        assert guest_perms == {Permission.READ, Permission.DASHBOARD}
+
+    def test_hotel_staff_has_no_dashboard(self):
+        from rbac import GROUP_PERMISSIONS, Permission
+        hotel_perms = set(GROUP_PERMISSIONS['HOTEL_STAFF'])
+        assert Permission.DASHBOARD not in hotel_perms
+
+    def test_pit_stop_crew_has_no_manual_checkin(self):
+        from rbac import GROUP_PERMISSIONS, Permission
+        pit_perms = set(GROUP_PERMISSIONS['PIT_STOP_CREW'])
+        assert Permission.CHECKIN_MANUAL not in pit_perms
+
+    def test_super_user_has_no_tour_or_ride_manage(self):
+        from rbac import GROUP_PERMISSIONS, Permission
+        su_perms = set(GROUP_PERMISSIONS['SUPER_USER'])
+        assert Permission.TOUR_MANAGE not in su_perms
+        assert Permission.RIDE_MANAGE not in su_perms
+
+    def test_all_groups_present(self):
+        from rbac import GROUP_PERMISSIONS
+        expected = {'ADMINISTRATOR', 'SUPER_USER', 'PIT_STOP_CREW', 'HOTEL_STAFF', 'GUEST'}
+        assert expected == set(GROUP_PERMISSIONS.keys())
+
+    def test_unknown_group_not_in_mapping(self):
+        from rbac import GROUP_PERMISSIONS
+        assert 'UNKNOWN_GROUP' not in GROUP_PERMISSIONS
+
+
+class TestGetUserPermissions:
+    def test_administrator_gets_all_permissions(self):
+        from rbac import get_user_permissions, Permission
+        event = _make_event(groups=['ADMINISTRATOR'])
+        perms = get_user_permissions(event)
+        assert perms == set(Permission)
+
+    def test_guest_gets_read_and_dashboard_only(self):
+        from rbac import get_user_permissions, Permission
         event = _make_event(groups=['GUEST'])
-        result = require_groups(event, ['ADMINISTRATOR'])
+        perms = get_user_permissions(event)
+        assert perms == {Permission.READ, Permission.DASHBOARD}
+
+    def test_hotel_staff_has_no_dashboard(self):
+        from rbac import get_user_permissions, Permission
+        event = _make_event(groups=['HOTEL_STAFF'])
+        perms = get_user_permissions(event)
+        assert Permission.DASHBOARD not in perms
+
+    def test_no_groups_gives_empty_permissions(self):
+        from rbac import get_user_permissions
+        event = _make_event(groups=None)
+        assert get_user_permissions(event) == set()
+
+    def test_unknown_group_gives_empty_permissions(self):
+        from rbac import get_user_permissions
+        event = _make_event(groups=['UNKNOWN_GROUP'])
+        assert get_user_permissions(event) == set()
+
+    def test_multiple_groups_union_permissions(self):
+        """User in multiple groups receives union of all their permissions."""
+        from rbac import get_user_permissions, Permission
+        # PIT_STOP_CREW = [READ, CHECKIN, DASHBOARD]
+        # HOTEL_STAFF   = [READ, CHECKIN]
+        # Union         = [READ, CHECKIN, DASHBOARD]
+        event = _make_event(groups=['PIT_STOP_CREW', 'HOTEL_STAFF'])
+        perms = get_user_permissions(event)
+        assert Permission.READ in perms
+        assert Permission.CHECKIN in perms
+        assert Permission.DASHBOARD in perms
+
+
+class TestRequirePermission:
+    def test_has_permission_returns_none(self):
+        from rbac import require_permission, Permission
+        event = _make_event(groups=['ADMINISTRATOR'])
+        assert require_permission(event, Permission.TOUR_MANAGE) is None
+
+    def test_lacks_permission_returns_403(self):
+        from rbac import require_permission, Permission
+        event = _make_event(groups=['GUEST'])
+        result = require_permission(event, Permission.TOUR_MANAGE)
         assert result is not None
         assert result['statusCode'] == 403
 
-    def test_no_groups_claim_returns_403(self):
-        from rbac import require_groups
+    def test_no_groups_returns_403(self):
+        from rbac import require_permission, Permission
         event = _make_event(groups=None)
-        result = require_groups(event, ['ADMINISTRATOR'])
+        result = require_permission(event, Permission.CHECKIN)
         assert result is not None
         assert result['statusCode'] == 403
 
     def test_custom_message_in_403(self):
-        from rbac import require_groups
+        from rbac import require_permission, Permission
         event = _make_event(groups=['GUEST'])
-        result = require_groups(event, ['ADMINISTRATOR'], message='Custom denied')
+        result = require_permission(event, Permission.TOUR_MANAGE, message='Custom denied')
         body = json.loads(result['body'])
         assert 'Custom denied' in body['error']['message']
 
-    def test_one_of_multiple_allowed_groups(self):
-        from rbac import require_groups
-        event = _make_event(groups=['SUPER_USER'])
-        assert require_groups(event, ['ADMINISTRATOR', 'SUPER_USER']) is None
+    def test_permission_name_in_default_message(self):
+        from rbac import require_permission, Permission
+        event = _make_event(groups=['GUEST'])
+        result = require_permission(event, Permission.RIDE_MANAGE)
+        body = json.loads(result['body'])
+        assert 'RIDE_MANAGE' in body['error']['message']
+
+    def test_hotel_staff_denied_dashboard(self):
+        from rbac import require_permission, Permission
+        event = _make_event(groups=['HOTEL_STAFF'])
+        result = require_permission(event, Permission.DASHBOARD)
+        assert result['statusCode'] == 403
+
+    def test_pit_stop_crew_allowed_checkin(self):
+        from rbac import require_permission, Permission
+        event = _make_event(groups=['PIT_STOP_CREW'])
+        assert require_permission(event, Permission.CHECKIN) is None
+
+    def test_pit_stop_crew_denied_checkin_manual(self):
+        from rbac import require_permission, Permission
+        event = _make_event(groups=['PIT_STOP_CREW'])
+        result = require_permission(event, Permission.CHECKIN_MANUAL)
+        assert result['statusCode'] == 403
 
 
 # ---------------------------------------------------------------------------

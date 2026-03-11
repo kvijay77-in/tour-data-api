@@ -36,7 +36,7 @@ from validation import (
     ValidationError
 )
 from models import CheckIn, CheckInMethod, RideStatus, utc_now_iso
-from rbac import require_groups, ADMINISTRATOR, SUPER_USER, PIT_STOP_CREW, HOTEL_STAFF
+from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
 
@@ -61,8 +61,8 @@ def lambda_handler(event, context):
     try:
         log_event(logger, event)
         
-        # Enforce RBAC — GUEST may not create check-ins
-        deny = require_groups(event, [ADMINISTRATOR, SUPER_USER, PIT_STOP_CREW, HOTEL_STAFF])
+        # Enforce RBAC — CHECKIN permission required; GUEST may not create check-ins
+        deny = require_permission(event, Permission.CHECKIN)
         if deny:
             return deny
         
@@ -121,12 +121,12 @@ def lambda_handler(event, context):
                 f"Invalid method. Must be one of: {', '.join(valid_methods)}"
             )
         
-        # MANUAL check-ins require elevated privileges (ADMINISTRATOR or SUPER_USER)
+        # MANUAL check-ins require CHECKIN_MANUAL permission (elevated privilege)
         if method == CheckInMethod.MANUAL.value:
-            deny = require_groups(
+            deny = require_permission(
                 event,
-                [ADMINISTRATOR, SUPER_USER],
-                "Manual check-ins require ADMINISTRATOR or SUPER_USER role"
+                Permission.CHECKIN_MANUAL,
+                "Manual check-ins require elevated permissions"
             )
             if deny:
                 return deny
