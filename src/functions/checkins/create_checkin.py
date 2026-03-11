@@ -36,6 +36,7 @@ from validation import (
     ValidationError
 )
 from models import CheckIn, CheckInMethod, RideStatus, utc_now_iso
+from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
 
@@ -59,6 +60,11 @@ def lambda_handler(event, context):
     """
     try:
         log_event(logger, event)
+        
+        # Enforce RBAC — CHECKIN permission required; GUEST may not create check-ins
+        deny = require_permission(event, Permission.CHECKIN)
+        if deny:
+            return deny
         
         # Extract tour ID from path parameters
         tour_id = event.get('pathParameters', {}).get('tourId')
@@ -114,6 +120,16 @@ def lambda_handler(event, context):
             return bad_request_response(
                 f"Invalid method. Must be one of: {', '.join(valid_methods)}"
             )
+        
+        # MANUAL check-ins require CHECKIN_MANUAL permission (elevated privilege)
+        if method == CheckInMethod.MANUAL.value:
+            deny = require_permission(
+                event,
+                Permission.CHECKIN_MANUAL,
+                "Manual check-ins require elevated permissions"
+            )
+            if deny:
+                return deny
         
         logger.info(f"Creating check-in: rider={rider_id}, ride={ride_id}, stage={stage_number}")
         

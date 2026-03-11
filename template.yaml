@@ -129,6 +129,64 @@ Resources:
       GenerateSecret: false
 
   # ============================================================================
+  # COGNITO USER POOL GROUPS (RBAC)
+  # Mirrors the UserRole enum in models.py.  Groups are only created when the
+  # User Pool is auto-created (CreateCognito condition is true).
+  # When an existing pool is supplied via CognitoUserPoolArn the groups must
+  # be managed outside this template.
+  # ============================================================================
+
+  CognitoGroupAdministrator:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: CreateCognito
+    Properties:
+      GroupName: ADMINISTRATOR
+      Description: >
+        Full administrative access: create/archive tours, manage rides,
+        all check-ins (including manual), view all data.
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoGroupSuperUser:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: CreateCognito
+    Properties:
+      GroupName: SUPER_USER
+      Description: >
+        Elevated access: all check-ins (including manual),
+        view all data except user management.
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoGroupPitStopCrew:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: CreateCognito
+    Properties:
+      GroupName: PIT_STOP_CREW
+      Description: >
+        Operational access: QR-scan check-ins and read operations.
+        Cannot create manual check-ins or perform admin actions.
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoGroupHotelStaff:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: CreateCognito
+    Properties:
+      GroupName: HOTEL_STAFF
+      Description: >
+        Limited operational access: QR-scan check-ins and read operations.
+        Cannot view dashboard or perform admin actions.
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoGroupGuest:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: CreateCognito
+    Properties:
+      GroupName: GUEST
+      Description: >
+        Read-only access: view tours, riders, and ride data.
+        Cannot create check-ins or perform any write operations.
+      UserPoolId: !Ref CognitoUserPool
+
+  # ============================================================================
   # API GATEWAY HTTP API
   # ============================================================================
   

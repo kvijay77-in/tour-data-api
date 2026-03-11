@@ -28,6 +28,7 @@ from dynamodb_utils import (
     get_tour_item, query_tour_items, scan_tour_items, batch_get_items
 )
 from validation import validate_tour_id, validate_ride_id, ValidationError
+from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
 
@@ -42,6 +43,11 @@ def lambda_handler(event, context):
     """
     try:
         log_event(logger, event)
+        
+        # Enforce RBAC — DASHBOARD permission required; HOTEL_STAFF may not access
+        deny = require_permission(event, Permission.DASHBOARD)
+        if deny:
+            return deny
         
         # Extract path parameters
         tour_id = event.get('pathParameters', {}).get('tourId')

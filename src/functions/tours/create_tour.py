@@ -22,6 +22,7 @@ from dynamodb_utils import get_item, put_item
 from validation import validate_tour_id, validate_iso_date, validate_required_fields, ValidationError
 from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from tour_provisioning import provision_tour_tables
+from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
 
@@ -46,6 +47,11 @@ def lambda_handler(event, context):
     """
     try:
         log_event(logger, event)
+        
+        # Enforce RBAC — only TOUR_MANAGE permission may create tours
+        deny = require_permission(event, Permission.TOUR_MANAGE)
+        if deny:
+            return deny
         
         # Parse request body
         body = json.loads(event.get('body', '{}'))
