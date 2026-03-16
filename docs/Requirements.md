@@ -24,8 +24,8 @@ Apart from these following Admin features will also be available.
 1. Close Ride
 
 To understand how the data is used refer to the following document from Check-In App project.
- - [App Requirements](https://github.com/kvijay77-in/poc-app/blob/main/docs/Requirements.md)
- - [Dashboard Feature](https://github.com/kvijay77-in/poc-app/blob/main/docs/Dashboard-Feature.md)
+ - [App Requirements](https://github.com/kvijay77-in/tour-mgmt-app/blob/main/docs/Requirements.md)
+ - [Dashboard Feature](https://github.com/kvijay77-in/tour-mgmt-app/blob/main/docs/Dashboard-Feature.md)
 
 ## Rider App
 This is a future roadmap item. This App is for riders to use for pre-registration, registration and during the actual tour with a small part for rider tracking as a self-service. It's only in ideation stage and no design or development has been taken up yet.
