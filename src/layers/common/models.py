@@ -94,16 +94,27 @@ class UserRole(str, Enum):
 
 class TourRiderStatus(str, Enum):
     """Tour rider registration status"""
+    PENDING = "PENDING"
     REGISTERED = "REGISTERED"
     ACTIVE = "ACTIVE"
     WITHDRAWN = "WITHDRAWN"
+
+
+class NotificationType(str, Enum):
+    """Notification type values"""
+    TOUR_ANNOUNCEMENT = "TOUR_ANNOUNCEMENT"
+    RIDE_UPDATE = "RIDE_UPDATE"
+    SAFETY_ALERT = "SAFETY_ALERT"
+    PERSONAL_MESSAGE = "PERSONAL_MESSAGE"
+    CHECKIN_REMINDER = "CHECKIN_REMINDER"
+    REGISTRATION_STATUS = "REGISTRATION_STATUS"
 
 
 # ============================================================================
 # TOUR-SPECIFIC TABLE TYPES (for dynamic table name resolution)
 # ============================================================================
 
-TOUR_TABLE_TYPES = ['TourRider', 'Ride', 'CheckIn', 'User']
+TOUR_TABLE_TYPES = ['TourRider', 'Ride', 'CheckIn', 'User', 'Notification']
 
 
 # ============================================================================
@@ -328,6 +339,36 @@ class User:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
         item['userId'] = self.user_id
+        return item
+
+
+@dataclass
+class Notification:
+    """
+    Notification record for tour riders.
+    Stored in tour-specific Notification-{tourId} table.
+    Partition key: notificationId
+    """
+    notification_id: str
+    type: NotificationType
+    title: str
+    message: str
+    created_by: str
+    target_rider_id: Optional[str] = None
+    read_by: Optional[List[str]] = field(default_factory=list)
+    created_at: str = field(default_factory=utc_now_iso)
+    expires_at: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        data = asdict(self)
+        data['type'] = self.type.value
+        return {k: v for k, v in data.items() if v is not None}
+
+    def to_dynamodb_item(self) -> Dict[str, Any]:
+        """Convert to DynamoDB item format"""
+        item = self.to_dict()
+        item['notificationId'] = self.notification_id
         return item
 
 

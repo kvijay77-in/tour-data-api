@@ -109,6 +109,26 @@ TOUR_TABLE_DEFINITIONS = {
             },
         ],
     },
+    'Notification': {
+        'AttributeDefinitions': [
+            {'AttributeName': 'notificationId', 'AttributeType': 'S'},
+            {'AttributeName': 'type', 'AttributeType': 'S'},
+            {'AttributeName': 'createdAt', 'AttributeType': 'S'},
+        ],
+        'KeySchema': [
+            {'AttributeName': 'notificationId', 'KeyType': 'HASH'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'TypeCreatedAtIndex',
+                'KeySchema': [
+                    {'AttributeName': 'type', 'KeyType': 'HASH'},
+                    {'AttributeName': 'createdAt', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
 }
 
 

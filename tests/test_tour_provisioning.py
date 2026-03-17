@@ -132,9 +132,9 @@ class TestProvisionTourTables:
     """Test end-to-end tour table provisioning"""
 
     def test_provision_creates_all_four_tables(self, dynamodb_client_mock):
-        """Provisioning creates all 4 tour-specific tables"""
+        """Provisioning creates all 5 tour-specific tables"""
         created = provision_tour_tables(dynamodb_client_mock, MOCK_TOUR_ID)
-        assert len(created) == 4
+        assert len(created) == 5
 
         # Verify table names
         expected_prefix = f"{MOCK_STACK_NAME}-"
@@ -150,6 +150,7 @@ class TestProvisionTourTables:
             f"{MOCK_STACK_NAME}-Ride-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-CheckIn-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-User-{MOCK_TOUR_ID}",
+            f"{MOCK_STACK_NAME}-Notification-{MOCK_TOUR_ID}",
         ]
         assert sorted(created) == sorted(expected_names)
 
