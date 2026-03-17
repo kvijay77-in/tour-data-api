@@ -9,7 +9,7 @@ Description: >
   Table Strategy: Hybrid (Shared + Tour-Specific)
   - Shared tables (SAM-managed): RiderProfile, TourMaster
   - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
-    CheckIn-{tourId}, User-{tourId}
+    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}
 
 Metadata:
   cfn-lint:
@@ -1014,7 +1014,7 @@ Resources:
           Value: SAM
 
   # ============================================================================
-  # Tour-specific tables (TourRider, Ride, CheckIn, User) are NOT defined here.
+  # Tour-specific tables (TourRider, Ride, CheckIn, User, Notification) are NOT defined here.
   # They are provisioned at runtime by CreateTourFunction when a tour is created.
   # Table naming: {StackName}-{TableType}-{tourId}
   # ============================================================================

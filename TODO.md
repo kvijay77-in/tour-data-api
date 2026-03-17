@@ -11,6 +11,32 @@ This document lists all gaps found between project documentation and actual deve
 
 > **Update (2026-02-17):** Items #31–#33 added for deployment experience improvements. #31 and #33 RESOLVED. #32 is a future TODO.
 
+> **Update (2026-03-17):** Item #34 added for Tour Rider App API requirements. 7 new Lambda functions, Notification table, updated RBAC, comprehensive tests added. #34 RESOLVED.
+
+---
+
+## 34. ✅ RESOLVED: Tour Rider App API Requirements (Issue #12)
+
+New API endpoints required by the Tour Rider App (tour-rider-app repository):
+
+| Endpoint | Lambda Function | Status |
+|---|---|---|
+| `POST /v1/riders/profile` | `create_rider_profile.py` | ✅ Implemented |
+| `POST /v1/tours/{tourId}/riders` | `register_tour_rider.py` | ✅ Implemented |
+| `GET /v1/tours/{tourId}/riders/{riderId}/statistics` | `get_rider_statistics.py` | ✅ Implemented |
+| `POST /v1/riders/profile/{profileId}/picture` | `upload_profile_picture.py` | ✅ Implemented |
+| `GET /v1/tours/{tourId}/notifications` | `list_notifications.py` | ✅ Implemented |
+| `POST /v1/tours/{tourId}/notifications` | `create_notification.py` | ✅ Implemented |
+| `PUT /v1/tours/{tourId}/notifications/{notificationId}` | `update_notification.py` | ✅ Implemented |
+
+**Additional Changes:**
+- Added `Notification` tour-specific table (provisioned with tour)
+- Added `NotificationType` enum and `Notification` dataclass to models
+- Added `PENDING` status to `TourRiderStatus` for rider-initiated registration
+- Added `NOTIFICATION_MANAGE` permission to RBAC (ADMINISTRATOR, SUPER_USER)
+- 27 new unit tests covering all new endpoints
+- Updated SolutionDesign.md and project-structure.md with new endpoints and tables
+
 ---
 
 ## 31. ✅ RESOLVED: Auto-Create Cognito User Pool During Deployment
