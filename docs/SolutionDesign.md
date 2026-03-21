@@ -914,12 +914,13 @@ tour-data-api/
 1. **Shared DynamoDB Tables:** RiderProfile, TourMaster (with GSIs)
 2. **Lambda Functions:** One per API endpoint
 3. **Lambda Layer:** Common utilities shared across all functions (`dynamodb_utils`, `logger`, `models`, `rbac`, `response`, `tour_provisioning`, `validation`)
-4. **API Gateway:** HTTP API with JWT authorizer
-5. **Cognito User Pool:** User authentication
-6. **Cognito User Pool Groups:** `ADMINISTRATOR`, `SUPER_USER`, `PIT_STOP_CREW`, `HOTEL_STAFF`, `GUEST` (auto-created when the pool is managed by this stack; externally-supplied pools must manage groups independently)
-7. **S3 Bucket:** Rider photos
-8. **IAM Roles:** Lambda execution roles with least privilege
-9. **CloudWatch Logs:** For monitoring and debugging
+4. **API Gateway (tour-mgmt-app):** HTTP API (`TourDataApi`) with JWT authorizer for the management User Pool
+5. **API Gateway (tour-rider-app):** HTTP API (`RiderApi`) with JWT authorizer for the rider User Pool — exposes rider-facing endpoints
+6. **Cognito User Pool (tour-mgmt-app):** `{stack}-users` — for tour organizers, pit stop crew, hotel staff, guests. Groups: `ADMINISTRATOR`, `SUPER_USER`, `PIT_STOP_CREW`, `HOTEL_STAFF`, `GUEST`
+7. **Cognito User Pool (tour-rider-app):** `{stack}-rider-users` — dedicated pool for riders, isolated from management users. Groups: `RIDER`. A person can exist in both pools with separate identities.
+8. **S3 Bucket:** Rider photos
+9. **IAM Roles:** Lambda execution roles with least privilege
+10. **CloudWatch Logs:** For monitoring and debugging
 
 ### Managed at Runtime (Tour Provisioning)
 1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId}, Notification-{tourId} (with GSIs)
@@ -997,15 +998,15 @@ Lambda handlers check API-level **permissions** (what action is being performed)
 
 **Permissions and group mapping:**
 
-| Permission | ADMINISTRATOR | SUPER_USER | PIT_STOP_CREW | HOTEL_STAFF | GUEST |
-|---|:---:|:---:|:---:|:---:|:---:|
-| READ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| CHECKIN | ✅ | ✅ | ✅ | ✅ | ❌ |
-| CHECKIN_MANUAL | ✅ | ✅ | ❌ | ❌ | ❌ |
-| RIDE_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ |
-| TOUR_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ |
-| USER_LIST | ✅ | ✅ | ❌ | ❌ | ❌ |
-| DASHBOARD | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Permission | ADMINISTRATOR | SUPER_USER | PIT_STOP_CREW | HOTEL_STAFF | GUEST | RIDER |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| READ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| CHECKIN | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| CHECKIN_MANUAL | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| RIDE_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| TOUR_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| USER_LIST | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| DASHBOARD | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
 
 API Gateway HTTP API serialises the `cognito:groups` claim as a comma-separated string when forwarding it to Lambda — this is handled transparently by `rbac.get_user_groups()`.
 

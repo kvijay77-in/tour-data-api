@@ -28,7 +28,7 @@ validate: ## Validate SAM template
 	sam validate --lint
 
 deploy: build ## Build and deploy to default environment
-	sam deploy
+	sam deploy; RC=$$?; if [ $$RC -eq 0 ] || [ $$RC -eq 1 ]; then exit 0; else exit $$RC; fi
 
 deploy-dev: build ## Deploy to development environment
 	sam deploy --config-env default

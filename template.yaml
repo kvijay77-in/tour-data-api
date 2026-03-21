@@ -95,7 +95,7 @@ Resources:
     Type: AWS::Cognito::UserPool
     Condition: CreateCognito
     Properties:
-      UserPoolName: !Sub '${AWS::StackName}-users'
+      UserPoolName: !Sub '${AWS::StackName}-mgmt-users'
       AutoVerifiedAttributes:
         - email
       UsernameAttributes:
@@ -187,7 +187,58 @@ Resources:
       UserPoolId: !Ref CognitoUserPool
 
   # ============================================================================
-  # API GATEWAY HTTP API
+  # COGNITO USER POOL - RIDER APP (dedicated, separate from tour-mgmt-app pool)
+  # Provides proper isolation between management and rider user bases.
+  # A person can be both a rider and a tour organizer with separate identities.
+  # ============================================================================
+
+  CognitoRiderUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-rider-users'
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+      UserPoolTags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourRiderApp
+        ManagedBy: SAM
+
+  CognitoRiderUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub '${AWS::StackName}-rider-app-client'
+      UserPoolId: !Ref CognitoRiderUserPool
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      GenerateSecret: false
+
+  CognitoRiderGroupRider:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: RIDER
+      Description: >
+        Rider self-service access: manage own profile, register for tours,
+        view ride info, notifications, and personal statistics.
+      UserPoolId: !Ref CognitoRiderUserPool
+
+  # ============================================================================
+  # API GATEWAY HTTP API - TOUR MANAGEMENT APP
   # ============================================================================
   
   TourDataApi:
@@ -229,6 +280,43 @@ Resources:
         Project: tour-data-api
         Environment: !Ref Environment
         Application: TourManagement
+        ManagedBy: SAM
+
+  # ============================================================================
+  # API GATEWAY HTTP API - RIDER APP (dedicated, authenticated via rider pool)
+  # Rider app has its own API Gateway and User Pool for proper isolation.
+  # Always created — independent of the management Cognito pool.
+  # ============================================================================
+
+  RiderApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Auth:
+        DefaultAuthorizer: RiderCognitoAuthorizer
+        Authorizers:
+          RiderCognitoAuthorizer:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoRiderUserPool}'
+              audience:
+                - !Ref CognitoRiderUserPoolClient
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'  # TODO: Restrict to specific domains in production
+        AllowHeaders:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - OPTIONS
+        MaxAge: 600
+      Tags:
+        Name: !Sub '${AWS::StackName}-rider-api'
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourRiderApp
         ManagedBy: SAM
 
   # ============================================================================
@@ -278,6 +366,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/active
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/active
+            Method: GET
 
   GetTourFunction:
     Type: AWS::Serverless::Function
@@ -295,6 +389,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}
             Method: GET
 
@@ -407,6 +507,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/riders/profile/{profileId}
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/riders/profile/{profileId}
+            Method: GET
 
   UpdateRiderProfileFunction:
     Type: AWS::Serverless::Function
@@ -424,6 +530,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}
+            Method: PUT
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/riders/profile/{profileId}
             Method: PUT
 
@@ -480,6 +592,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/riders/{riderId}
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/riders/{riderId}
+            Method: GET
 
   CreateRiderProfileFunction:
     Type: AWS::Serverless::Function
@@ -503,6 +621,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile
+            Method: POST
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/riders/profile
             Method: POST
 
@@ -534,6 +658,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/riders
             Method: POST
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/riders
+            Method: POST
 
   GetRiderStatisticsFunction:
     Type: AWS::Serverless::Function
@@ -559,6 +689,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/riders/{riderId}/statistics
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/statistics
+            Method: GET
 
   UploadProfilePictureFunction:
     Type: AWS::Serverless::Function
@@ -582,6 +718,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}/picture
+            Method: POST
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/riders/profile/{profileId}/picture
             Method: POST
 
@@ -612,6 +754,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/rides/today
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/rides/today
+            Method: GET
 
   GetRideFunction:
     Type: AWS::Serverless::Function
@@ -633,6 +781,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides/{rideId}
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/rides/{rideId}
             Method: GET
 
@@ -787,6 +941,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/rides/{rideId}/checkins
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/checkins
+            Method: GET
 
   GetDashboardDataFunction:
     Type: AWS::Serverless::Function
@@ -889,6 +1049,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/notifications
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/notifications
+            Method: GET
 
   CreateNotificationFunction:
     Type: AWS::Serverless::Function
@@ -934,6 +1100,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/notifications/{notificationId}
+            Method: PUT
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/notifications/{notificationId}
             Method: PUT
 
@@ -1126,5 +1298,25 @@ Outputs:
 
   CognitoAppClientIdOutput:
     Condition: CreateCognito
-    Description: Auto-created Cognito App Client ID
+    Description: Auto-created Cognito App Client ID (tour-mgmt-app)
     Value: !Ref CognitoUserPoolClient
+
+  RiderApiEndpoint:
+    Description: Rider App HTTP API endpoint URL
+    Value: !Sub 'https://${RiderApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+
+  RiderApiId:
+    Description: Rider App API Gateway HTTP API ID
+    Value: !Ref RiderApi
+
+  CognitoRiderUserPoolIdOutput:
+    Description: Cognito User Pool ID (tour-rider-app)
+    Value: !Ref CognitoRiderUserPool
+
+  CognitoRiderUserPoolArnOutput:
+    Description: Cognito User Pool ARN (tour-rider-app)
+    Value: !GetAtt CognitoRiderUserPool.Arn
+
+  CognitoRiderAppClientIdOutput:
+    Description: Cognito App Client ID (tour-rider-app)
+    Value: !Ref CognitoRiderUserPoolClient

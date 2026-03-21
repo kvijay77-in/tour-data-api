@@ -103,3 +103,7 @@ Some specific or explicit instructions that must be followed. Same will be updat
 - Never add testing or debugging code in the production codebase.
 
 
+## Miscellaneous
+- Activate Python virtual environment for development and testing to manage dependencies effectively.
+  - Use `source .venv/bin/activate` to activate the virtual environment.
+  - If the virtual environment is not set up, ask user for guidance on how to proceed with dependency management and development environment setup.

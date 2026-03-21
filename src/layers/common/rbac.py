@@ -21,15 +21,15 @@ Flow:
 
 Permission → Group mapping (current default):
 
-  Permission        | ADMINISTRATOR | SUPER_USER | PIT_STOP_CREW | HOTEL_STAFF | GUEST
-  ------------------|:-------------:|:----------:|:-------------:|:-----------:|:-----:
-  READ              |      ✅       |     ✅     |      ✅       |     ✅      |   ✅
-  CHECKIN           |      ✅       |     ✅     |      ✅       |     ✅      |   ❌
-  CHECKIN_MANUAL    |      ✅       |     ✅     |      ❌       |     ❌      |   ❌
-  RIDE_MANAGE       |      ✅       |     ❌     |      ❌       |     ❌      |   ❌
-  TOUR_MANAGE       |      ✅       |     ❌     |      ❌       |     ❌      |   ❌
-  USER_LIST         |      ✅       |     ✅     |      ❌       |     ❌      |   ❌
-  DASHBOARD         |      ✅       |     ✅     |      ✅       |     ❌      |   ✅
+  Permission        | ADMINISTRATOR | SUPER_USER | PIT_STOP_CREW | HOTEL_STAFF | GUEST | RIDER
+  ------------------|:-------------:|:----------:|:-------------:|:-----------:|:-----:|:-----:
+  READ              |      ✅       |     ✅     |      ✅       |     ✅      |   ✅  |   ✅
+  CHECKIN           |      ✅       |     ✅     |      ✅       |     ✅      |   ❌  |   ❌
+  CHECKIN_MANUAL    |      ✅       |     ✅     |      ❌       |     ❌      |   ❌  |   ❌
+  RIDE_MANAGE       |      ✅       |     ❌     |      ❌       |     ❌      |   ❌  |   ❌
+  TOUR_MANAGE       |      ✅       |     ❌     |      ❌       |     ❌      |   ❌  |   ❌
+  USER_LIST         |      ✅       |     ✅     |      ❌       |     ❌      |   ❌  |   ❌
+  DASHBOARD         |      ✅       |     ✅     |      ✅       |     ❌      |   ✅  |   ❌
 """
 
 from enum import Enum
@@ -110,6 +110,9 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
     "GUEST": [
         Permission.READ,
         Permission.DASHBOARD,
+    ],
+    "RIDER": [
+        Permission.READ,
     ],
 }
 

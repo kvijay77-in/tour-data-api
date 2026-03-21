@@ -90,6 +90,7 @@ class UserRole(str, Enum):
     PIT_STOP_CREW = "PIT_STOP_CREW"
     HOTEL_STAFF = "HOTEL_STAFF"
     GUEST = "GUEST"
+    RIDER = "RIDER"
 
 
 class TourRiderStatus(str, Enum):
