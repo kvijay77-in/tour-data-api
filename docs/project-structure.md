@@ -26,10 +26,14 @@ tour-data-api/
 │   │   │   └── get_ride_checkins.py   # GET /v1/tours/{tourId}/rides/{rideId}/checkins
 │   │   ├── riders/
 │   │   │   ├── __init__.py
+│   │   │   ├── create_rider_profile.py # POST /v1/riders/profile
 │   │   │   ├── get_rider_profile.py   # GET /v1/riders/profile/{profileId}
+│   │   │   ├── get_rider_statistics.py # GET /v1/tours/{tourId}/riders/{riderId}/statistics
 │   │   │   ├── get_tour_rider.py      # GET /v1/tours/{tourId}/riders/{riderId}
 │   │   │   ├── get_tour_riders.py     # GET /v1/tours/{tourId}/riders
-│   │   │   └── update_rider_profile.py # PUT /v1/riders/profile/{profileId}
+│   │   │   ├── register_tour_rider.py # POST /v1/tours/{tourId}/riders
+│   │   │   ├── update_rider_profile.py # PUT /v1/riders/profile/{profileId}
+│   │   │   └── upload_profile_picture.py # POST /v1/riders/profile/{profileId}/picture
 │   │   ├── rides/
 │   │   │   ├── __init__.py
 │   │   │   ├── close_ride.py          # POST /v1/tours/{tourId}/rides/{rideId}/close
@@ -49,6 +53,11 @@ tour-data-api/
 │   │       ├── __init__.py
 │   │       ├── get_current_user.py    # GET /v1/users/me
 │   │       └── list_tour_users.py     # GET /v1/tours/{tourId}/users
+│   │   └── notifications/
+│   │       ├── __init__.py
+│   │       ├── create_notification.py # POST /v1/tours/{tourId}/notifications
+│   │       ├── list_notifications.py  # GET /v1/tours/{tourId}/notifications
+│   │       └── update_notification.py # PUT /v1/tours/{tourId}/notifications/{notificationId}
 │   └── layers/
 │       └── common/                    # Shared utilities layer
 │           ├── __init__.py
@@ -67,6 +76,7 @@ tour-data-api/
 │   ├── test_lambda_functions.py       # Lambda function tests
 │   ├── test_checkin_enhancements.py  # Check-in business logic tests (QR, manual, fallback)
 │   ├── test_rbac.py                   # RBAC utility and handler enforcement tests
+│   ├── test_rider_app_apis.py        # Rider-app API Lambda function tests
 │   ├── test_tour_provisioning.py     # Tour provisioning utility tests
 │   ├── test_validation.py            # Validation utility tests
 │   └── fixtures/
@@ -103,7 +113,7 @@ tour-data-api/
 **Key Structure Notes:**
 
 ### Source Code (`src/`)
-- **`functions/`**: Contains all Lambda function handlers organized by feature domain (checkins, riders, rides, tours, users). Each domain has an `__init__.py` for package initialization.
+- **`functions/`**: Contains all Lambda function handlers organized by feature domain (checkins, riders, rides, tours, users, notifications). Each domain has an `__init__.py` for package initialization.
 - **`layers/common/`**: Shared utilities and dependencies used across all Lambda functions. Python modules (models, validation, database operations, logging, response formatting, RBAC) and `requirements.txt` are at the layer root for correct SAM build packaging.
   - **`rbac.py`**: Server-side RBAC utilities. Defines the `Permission` enum (API-level actions), the `GROUP_PERMISSIONS` mapping (Cognito groups → permissions), and helper functions (`get_user_groups`, `get_user_permissions`, `require_permission`) used by Lambda handlers to enforce access control without coupling to Cognito group names.
 
@@ -127,7 +137,7 @@ tour-data-api/
 - Sample JSON payloads for testing Lambda functions locally with `sam local invoke`
 
 ### Infrastructure as Code
-- **`template.yaml`**: AWS SAM template defining all AWS resources (Lambda functions, API Gateway HTTP API, Cognito User Pool + Groups, shared DynamoDB tables, S3 bucket, IAM roles). Cognito is auto-created by default, including the 5 standard groups (`ADMINISTRATOR`, `SUPER_USER`, `PIT_STOP_CREW`, `HOTEL_STAFF`, `GUEST`). Tour-specific tables are provisioned at runtime by `create_tour.py`.
+- **`template.yaml`**: AWS SAM template defining all AWS resources (Lambda functions, API Gateway HTTP API, Cognito User Pool + Groups, shared DynamoDB tables, S3 bucket, IAM roles). Cognito is auto-created by default, including the 5 standard groups (`ADMINISTRATOR`, `SUPER_USER`, `PIT_STOP_CREW`, `HOTEL_STAFF`, `GUEST`). Tour-specific tables (TourRider, Ride, CheckIn, User, Notification) are provisioned at runtime by `create_tour.py`.
 - **`samconfig.toml`**: SAM CLI configuration for different environments (dev, test, prod)
 - **`Makefile`**: Automation scripts for common tasks (build, deploy, test, logs, preflight check, OIDC setup)
 - **`cloudformation/github-oidc.yaml`**: Bootstrap template for GitHub OIDC authentication (deployed once per AWS account)

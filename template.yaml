@@ -9,7 +9,7 @@ Description: >
   Table Strategy: Hybrid (Shared + Tour-Specific)
   - Shared tables (SAM-managed): RiderProfile, TourMaster
   - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
-    CheckIn-{tourId}, User-{tourId}
+    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}
 
 Metadata:
   cfn-lint:
@@ -481,6 +481,110 @@ Resources:
             Path: /v1/tours/{tourId}/riders/{riderId}
             Method: GET
 
+  CreateRiderProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: create_rider_profile.lambda_handler
+      Description: Create a new rider profile during sign-up
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiderProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !Sub '${RiderProfileTable.Arn}/index/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile
+            Method: POST
+
+  RegisterTourRiderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: register_tour_rider.lambda_handler
+      Description: Register a rider for a tour (rider-initiated)
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourMasterTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders
+            Method: POST
+
+  GetRiderStatisticsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: get_rider_statistics.lambda_handler
+      Description: Get aggregated statistics for a rider in a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Scan
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/statistics
+            Method: GET
+
+  UploadProfilePictureFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: upload_profile_picture.lambda_handler
+      Description: Generate presigned URL for profile picture upload
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                - !Sub '${PhotosBucket.Arn}/profiles/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}/picture
+            Method: POST
+
   # ============================================================================
   # LAMBDA FUNCTIONS - RIDES
   # ============================================================================
@@ -759,6 +863,81 @@ Resources:
             Method: GET
 
   # ============================================================================
+  # LAMBDA FUNCTIONS - NOTIFICATIONS
+  # ============================================================================
+
+  ListNotificationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: list_notifications.lambda_handler
+      Description: List notifications for a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/notifications
+            Method: GET
+
+  CreateNotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: create_notification.lambda_handler
+      Description: Create a notification for a tour (admin only)
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/notifications
+            Method: POST
+
+  UpdateNotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: update_notification.lambda_handler
+      Description: Update a notification (mark as read)
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/notifications/{notificationId}
+            Method: PUT
+
+  # ============================================================================
   # DYNAMODB TABLES (Shared - SAM-managed)
   # ============================================================================
   
@@ -835,7 +1014,7 @@ Resources:
           Value: SAM
 
   # ============================================================================
-  # Tour-specific tables (TourRider, Ride, CheckIn, User) are NOT defined here.
+  # Tour-specific tables (TourRider, Ride, CheckIn, User, Notification) are NOT defined here.
   # They are provisioned at runtime by CreateTourFunction when a tour is created.
   # Table naming: {StackName}-{TableType}-{tourId}
   # ============================================================================

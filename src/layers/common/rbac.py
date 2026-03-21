@@ -68,6 +68,9 @@ class Permission(str, Enum):
     DASHBOARD = "DASHBOARD"
     """Access the ride dashboard with aggregated check-in data."""
 
+    NOTIFICATION_MANAGE = "NOTIFICATION_MANAGE"
+    """Create notifications for tour riders (admin/organizer action)."""
+
 
 # ============================================================================
 # GROUP → PERMISSION MAPPING
@@ -85,6 +88,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.TOUR_MANAGE,
         Permission.USER_LIST,
         Permission.DASHBOARD,
+        Permission.NOTIFICATION_MANAGE,
     ],
     "SUPER_USER": [
         Permission.READ,
@@ -92,6 +96,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.CHECKIN_MANUAL,
         Permission.USER_LIST,
         Permission.DASHBOARD,
+        Permission.NOTIFICATION_MANAGE,
     ],
     "PIT_STOP_CREW": [
         Permission.READ,

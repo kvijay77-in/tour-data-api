@@ -85,6 +85,7 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 | **Ride-{tourId}** | Daily ride configurations for the specific tour |
 | **CheckIn-{tourId}** | Check-in records for the specific tour |
 | **User-{tourId}** | Admin/staff user assignments for the specific tour |
+| **Notification-{tourId}** | Notifications for tour riders (announcements, alerts, personal messages) |
 
 ### Table Naming Convention
 
@@ -92,7 +93,7 @@ All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables 
 
 Examples (stack name: `dev`, tour ID: `TOT-2026`):
 - Shared: `dev-RiderProfile`, `dev-TourMaster`
-- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`
+- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
 
@@ -105,7 +106,7 @@ Lambda functions resolve shared table names via environment variables (set by SA
 3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
 4. **De-provisioning:** For one-off usage, the operator can delete tour tables or the entire stack
 
-Both provisioning methods create the same resources: a Tour record in the shared TourMaster table and 4 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User) with identical schemas and configurations. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
+Both provisioning methods create the same resources: a Tour record in the shared TourMaster table and 5 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification) with identical schemas and configurations. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
 
 ### Key Design Benefits
 
@@ -300,6 +301,26 @@ Both provisioning methods create the same resources: a Tour record in the shared
 - Small table (~15 users per tour)
 - Each tour has its own user assignments (team composition can change between tours)
 
+## Tour-Specific Table 5: Notification-{tourId}
+
+**Purpose:** Notifications sent to tour riders by organizers. Includes announcements, ride updates, safety alerts, and personal messages. One table per tour, created at provisioning time.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| notificationId | String | UUID (partition key) |
+| type | String | TOUR_ANNOUNCEMENT, RIDE_UPDATE, SAFETY_ALERT, PERSONAL_MESSAGE, CHECKIN_REMINDER, REGISTRATION_STATUS |
+| title | String | Notification title |
+| message | String | Notification content |
+| createdBy | String | Cognito user sub of creator |
+| targetRiderId | String | Optional: rider ID for personal notifications. Omitted for broadcast notifications |
+| readBy | List | List of profileIds who have read the notification |
+| createdAt | String | ISO 8601 timestamp |
+| expiresAt | String | Optional: ISO 8601 expiry timestamp |
+
+**Indexes:**
+- Primary Key: `notificationId` (partition key only)
+- GSI1: `type` (partition key) + `createdAt` (sort key) - For type-filtered queries sorted by date
+
 # Data Model Details
 
 ## Identifier Formats
@@ -312,6 +333,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | Ride ID | RIDE + 3-digit padded | `RIDE001`, `RIDE008` |
 | Stage ID | S + 3-digit padded | `S001`, `S002` |
 | Check-In ID | UUID | `660e8400-e29b-41d4-a716-446655440000` |
+| Notification ID | UUID | `770e8400-e29b-41d4-a716-446655440000` |
 
 ### Tour ID Rules
 
@@ -560,6 +582,67 @@ GET /tours/{tourId}/riders/{riderId}
 Response: TourRider object with embedded profile data
 ```
 
+#### Create Rider Profile
+```
+POST /riders/profile
+Body: {
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+1234567890",
+  "emergencyContactName": "Jane Doe",
+  "emergencyContactPhone": "+0987654321",
+  "dateOfBirth": "1990-01-15",
+  "gender": "Male",
+  "address": "123 Main St"
+}
+Response: Created RiderProfile object with generated profileId
+```
+
+#### Register Tour Rider
+```
+POST /tours/{tourId}/riders
+Body: {
+  "profileId": "<uuid>",
+  "riderId": "R57",
+  "experienceLevel": "Intermediate",
+  "medicalConditions": "None",
+  "specialRequirements": "Vegetarian"
+}
+Response: Created TourRider object (status: PENDING)
+Note: Rider-initiated registration. Starts in PENDING status, requires organizer approval.
+```
+
+#### Get Rider Statistics
+```
+GET /tours/{tourId}/riders/{riderId}/statistics
+Response: {
+  "riderId": "R1",
+  "tourId": "TOT-2026",
+  "totalRides": 7,
+  "ridesCompleted": 5,
+  "ridesNotCompleted": 1,
+  "currentStreak": 3,
+  "totalDistance": 580.5,
+  "totalCheckins": 15,
+  "quitRiding": false
+}
+Note: Computed on-demand from check-in and ride data
+```
+
+#### Upload Profile Picture
+```
+POST /riders/profile/{profileId}/picture
+Body: { "contentType": "image/jpeg" }
+Response: {
+  "uploadUrl": "<presigned-s3-url>",
+  "photoS3Key": "profiles/<profileId>/<uuid>.jpg",
+  "contentType": "image/jpeg",
+  "expiresIn": 300,
+  "profileId": "<profileId>"
+}
+Note: Returns presigned S3 URL. Client uploads directly to S3, then updates profile with photoS3Key via PUT /riders/profile/{profileId}.
+```
+
 ### Rides
 
 #### Get Today's Ride
@@ -687,6 +770,42 @@ Response: Array of User objects
 Permission: USER_LIST
 ```
 
+### Notifications
+
+#### List Notifications
+```
+GET /tours/{tourId}/notifications?type={type}&riderId={riderId}
+Response: {
+  "notifications": Array of Notification objects,
+  "count": 5,
+  "tourId": "TOT-2026"
+}
+Note: Returns broadcast notifications by default. Pass riderId to include personal notifications for that rider. Optional type filter.
+```
+
+#### Create Notification
+```
+POST /tours/{tourId}/notifications
+Body: {
+  "type": "TOUR_ANNOUNCEMENT",
+  "title": "Route Change",
+  "message": "Tomorrow's ride route has been updated due to road construction.",
+  "targetRiderId": "R57",
+  "expiresAt": "2026-02-20T00:00:00Z"
+}
+Response: Created Notification object
+Permission: NOTIFICATION_MANAGE
+Note: targetRiderId is optional. If omitted, notification is broadcast to all riders.
+```
+
+#### Update Notification (Mark as Read)
+```
+PUT /tours/{tourId}/notifications/{notificationId}
+Body: { "profileId": "<profileId>" }
+Response: Updated Notification object with profileId added to readBy list
+Note: Idempotent - marking as read twice doesn't duplicate the profileId.
+```
+
 ## HTTP Status Codes
 
 | Code | Usage |
@@ -715,6 +834,13 @@ Permission: USER_LIST
 | POST/PUT rides | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST close ride | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Manual check-in | ✅ | ✅ | ❌ | ❌ | ❌ |
+| POST notification (create) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| POST riders/profile (create) | Any authenticated user | | | | |
+| POST tours/{tourId}/riders (register) | Any authenticated user | | | | |
+| GET rider statistics | Any authenticated user | | | | |
+| POST profile picture | Any authenticated user | | | | |
+| GET notifications | Any authenticated user | | | | |
+| PUT notification (mark read) | Any authenticated user | | | | |
 
 ## Request Validation
 
@@ -796,7 +922,7 @@ tour-data-api/
 9. **CloudWatch Logs:** For monitoring and debugging
 
 ### Managed at Runtime (Tour Provisioning)
-1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId} (with GSIs)
+1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId}, Notification-{tourId} (with GSIs)
 2. Created by the shared tour provisioning utility (`src/layers/common/tour_provisioning.py`) via boto3
 3. Follow the same naming convention, tagging, and billing mode as SAM-managed tables
 
@@ -810,7 +936,7 @@ For use during initial setup, CI/CD pipelines, or by operators:
 1. Run `make provision-tour` or `python scripts/provision_tour.py` with tour parameters
 2. Script resolves the TourMaster table name from CloudFormation stack outputs
 3. Creates a Tour record in the shared TourMaster table (status: PROVISIONING)
-4. Creates 4 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`
+4. Creates 5 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`, `{STACK_NAME}-Notification-{tourId}`
 5. Tables are created with on-demand billing, encryption, and standard tags
 6. Once all tables are active, Tour status is updated to PLANNING
 
