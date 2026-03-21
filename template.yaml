@@ -224,6 +224,7 @@ Resources:
       ClientName: !Sub '${AWS::StackName}-rider-app-client'
       UserPoolId: !Ref CognitoRiderUserPool
       ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
       GenerateSecret: false
