@@ -137,6 +137,19 @@ class TestGetUserGroups:
         }
         assert get_user_groups(event) == []
 
+    def test_bracketed_group_string(self):
+        from rbac import get_user_groups
+        event = {
+            'requestContext': {
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'cognito:groups': '[SUPER_USER]'}
+                    }
+                }
+            }
+        }
+        assert get_user_groups(event) == ['SUPER_USER']
+
 
 class TestHasAnyGroup:
     def test_has_matching_group(self):

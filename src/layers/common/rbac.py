@@ -35,7 +35,11 @@ Permission → Group mapping (current default):
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
+from logger import get_logger
 from response import forbidden_response
+
+
+logger = get_logger(__name__)
 
 
 # ============================================================================
@@ -152,8 +156,19 @@ def get_user_groups(event: Dict[str, Any]) -> List[str]:
     if not groups_raw:
         return []
 
-    # API Gateway serialises Cognito array claims as comma-separated strings
-    return [g.strip() for g in groups_raw.split(',') if g.strip()]
+    # API Gateway and some local/test paths can serialise Cognito array claims
+    # as either comma-separated strings or bracketed list-like strings.
+    raw_groups = groups_raw.strip()
+    if raw_groups.startswith('[') and raw_groups.endswith(']'):
+        raw_groups = raw_groups[1:-1]
+
+    groups: List[str] = []
+    for group in raw_groups.split(','):
+        cleaned = group.strip().strip("'\"")
+        if cleaned:
+            groups.append(cleaned)
+
+    return groups
 
 
 def has_any_group(user_groups: List[str], required_groups: List[str]) -> bool:
@@ -226,11 +241,28 @@ def require_permission(
         if deny:
             return deny
     """
+    route = event.get('rawPath') or event.get('routeKey') or 'unknown-route'
+    user_groups = get_user_groups(event)
     user_permissions = get_user_permissions(event)
+
+    logger.info(
+        "RBAC access check: route=%s groups=%s permissions=%s required=%s",
+        route,
+        user_groups,
+        [granted.value for granted in user_permissions],
+        permission.value,
+    )
 
     if permission not in user_permissions:
         deny_message = message or (
             f"Access denied. Required permission: {permission.value}"
+        )
+        logger.warning(
+            "RBAC access denied: route=%s groups=%s permissions=%s required=%s",
+            route,
+            user_groups,
+            [granted.value for granted in user_permissions],
+            permission.value,
         )
         return forbidden_response(deny_message)
 

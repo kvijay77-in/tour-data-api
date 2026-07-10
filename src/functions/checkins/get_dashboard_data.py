@@ -43,15 +43,15 @@ def lambda_handler(event, context):
     """
     try:
         log_event(logger, event)
+
+        # Extract path parameters early so denied requests can be tied to a specific route.
+        tour_id = event.get('pathParameters', {}).get('tourId')
+        ride_id = event.get('pathParameters', {}).get('rideId')
         
         # Enforce RBAC — DASHBOARD permission required; HOTEL_STAFF may not access
         deny = require_permission(event, Permission.DASHBOARD)
         if deny:
             return deny
-        
-        # Extract path parameters
-        tour_id = event.get('pathParameters', {}).get('tourId')
-        ride_id = event.get('pathParameters', {}).get('rideId')
         
         if not tour_id or not ride_id:
             return bad_request_response("tourId and rideId are required in path")
