@@ -47,7 +47,7 @@ rides:
     # Remaining 45 finished
     # -------------------------------------------------------------------------
     - day: 1
-      date: "2026-07-08"
+      date: "2026-07-10"
       name: "Day 1"
       start_location: "Chennai"
       finish_location: "Mahabalipuram"
@@ -69,7 +69,7 @@ rides:
     # Remaining 42 finished
     # -------------------------------------------------------------------------
     - day: 2
-      date: "2026-07-09"
+      date: "2026-07-11"
       name: "Day 2"
       start_location: "Mahabalipuram"
       finish_location: "Pondicherry"
@@ -91,7 +91,7 @@ rides:
     # Remaining 47 in-progress distributed across stages
     # -------------------------------------------------------------------------
     - day: 3
-      date: "2026-07-10"
+      date: "2026-07-12"
       name: "Day 3"
       start_location: "Pondicherry"
       finish_location: "Chidambaram"
@@ -116,7 +116,7 @@ rides:
     # Days 4-7 - PLANNED (no check-ins)
     # -------------------------------------------------------------------------
     - day: 4
-      date: "2026-07-11"
+      date: "2026-07-13"
       name: "Day 4"
       start_location: "Chidambaram"
       finish_location: "Thanjavur"
@@ -126,7 +126,7 @@ rides:
       status: PLANNED
 
     - day: 5
-      date: "2026-07-12"
+      date: "2026-07-14"
       name: "Day 5"
       start_location: "Thanjavur"
       finish_location: "Trichy"
@@ -137,7 +137,7 @@ rides:
 
     # Day 6 has 2 rides
     - day: 6
-      date: "2026-07-13"
+      date: "2026-07-15"
       name: "Day 6"
       start_location: "Trichy"
       finish_location: "Madurai"
@@ -147,7 +147,7 @@ rides:
       status: PLANNED
 
     - day: 7
-      date: "2026-07-14"
+      date: "2026-07-16"
       name: "Day 7"
       start_location: "Madurai"
       finish_location: "Kanyakumari"

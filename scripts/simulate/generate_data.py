@@ -229,12 +229,19 @@ def _make_quit_timestamp(base_date, stage_index, rng, flag_h=6, flag_m=0):
 
 def _checkin_record(ride_id, rider_id, stage, timestamp, **overrides):
     """Build a single check-in record dict."""
+    if stage:
+        stage_token = f"{stage['stageNumber']:03d}"
+        stage_number = stage['stageNumber']
+        stage_id = stage['stageId']
+    else:
+        stage_token = 'QUIT'
+        stage_number = None
+        stage_id = None
+
     record = {
         'rideId': ride_id,
-        'checkInId': f"{rider_id}#{stage['stageNumber']:03d}#{timestamp}",
+        'checkInId': f"{rider_id}#{stage_token}#{timestamp}",
         'riderId': rider_id,
-        'stageNumber': stage['stageNumber'],
-        'stageId': stage['stageId'],
         'timestamp': timestamp,
         'checkedInBy': 'system',
         'method': 'QR_SCAN',
@@ -244,6 +251,11 @@ def _checkin_record(ride_id, rider_id, stage, timestamp, **overrides):
         'status': 'CHECKED_IN',
         'createdAt': timestamp,
     }
+    if stage_number is not None:
+        record['stageNumber'] = stage_number
+    if stage_id is not None:
+        record['stageId'] = stage_id
+
     record.update(overrides)
     return record
 
@@ -314,7 +326,7 @@ def generate_checkins(rides_data, tour_riders, rng):
                     base_date, quit_stage_idx, rng, flag_h, flag_m
                 )
                 all_checkins.append(_checkin_record(
-                    ride_id, rid, stages[quit_stage_idx], quit_ts,
+                    ride_id, rid, None, quit_ts,
                     method='MANUAL',
                     isQuitRiding=True,
                     isManualEntry=True,
