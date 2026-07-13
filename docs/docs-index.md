@@ -12,8 +12,9 @@ This page provides a guide to all project documentation.
 | [Development Guide](development-guide.md) | Environment setup, deploy to dev, local testing, unit tests, code quality, troubleshooting |
 | [Deployment Guide](deployment-guide.md) | CI/CD via GitHub Actions, multi-environment deployment (dev/test/prod), AWS resources reference |
 | [Infrastructure Guide](infrastructure-guide.md) | Resource tagging strategy, CloudWatch monitoring, cost estimation, project statistics |
+| [API Guide](api-guide.md) | API endpoints, mandatory attributes, validation rules, status codes, and authorization matrix |
 | [Requirements](Requirements.md) | Detailed functional and non-functional requirements, use cases, and business rules |
-| [Solution Design](SolutionDesign.md) | Architecture documentation, data model specifications, API specifications, technical design |
+| [Solution Design](SolutionDesign.md) | Architecture documentation, data model specifications, and technical design |
 | [Project Structure](project-structure.md) | Project folder organization, file structure, and code organization |
 
 ## Quick Navigation
@@ -26,6 +27,7 @@ This page provides a guide to all project documentation.
 
 ### For Developers
 - **Environment setup**: [Development Guide → Initial Setup](development-guide.md#initial-setup)
+- **API contracts and validations**: [API Guide](api-guide.md)
 - **Deploy to dev**: [Development Guide → Deploy to Dev Environment](development-guide.md#deploy-to-dev-environment)
 - **Local API testing**: [Development Guide → Local Development](development-guide.md#local-development)
 - **Unit tests**: [Development Guide → Unit Testing](development-guide.md#unit-testing)

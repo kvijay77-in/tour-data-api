@@ -276,11 +276,11 @@ class CheckIn:
     check_in_id: str
     rider_id: str
     ride_id: str
-    stage_number: int
-    stage_id: str
     timestamp: str
     checked_in_by: str
     method: CheckInMethod
+    stage_number: Optional[int] = None
+    stage_id: Optional[str] = None
     is_not_riding: bool = False
     is_quit_riding: bool = False
     is_manual_entry: bool = False
@@ -308,7 +308,8 @@ class CheckIn:
         """Convert to DynamoDB item format"""
         item = self.to_dict()
         item['rideId'] = self.ride_id
-        item['checkInId'] = f"{self.rider_id}#{self.stage_number:03d}#{self.timestamp}"
+        stage_for_key = self.stage_number if self.stage_number is not None else 0
+        item['checkInId'] = f"{self.rider_id}#{stage_for_key:03d}#{self.timestamp}"
         item['riderId'] = self.rider_id
         return item
 

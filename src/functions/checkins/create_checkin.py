@@ -51,8 +51,8 @@ def lambda_handler(event, context):
     Body:
         riderId: Rider ID (required)
         rideId: Ride ID (required)
-        stageNumber: Stage number (required)
         method: Check-in method (QR_SCAN, MANUAL, FALLBACK)
+        stageNumber: Stage number (required for normal check-ins; optional for Not Riding/Quit Riding)
         isNotRiding: Not Riding flag (default: false)
         isQuitRiding: Quit Riding flag (default: false)
         timestamp: Optional ISO 8601 timestamp for offline-synced check-ins
@@ -85,18 +85,18 @@ def lambda_handler(event, context):
         
         # Validate required fields
         try:
-            validate_required_fields(body, ['riderId', 'rideId', 'stageNumber', 'method'])
+            validate_required_fields(body, ['riderId', 'rideId', 'method'])
         except ValidationError as e:
             return bad_request_response(str(e))
         
         rider_id = body['riderId']
         ride_id = body['rideId']
-        stage_number = int(body['stageNumber'])
         method = body['method']
         is_not_riding = body.get('isNotRiding', False)
         is_quit_riding = body.get('isQuitRiding', False)
         notes = body.get('notes')
         client_timestamp = body.get('timestamp')  # Optional: for offline-synced check-ins
+        stage_number = None
         
         # Validate client-supplied timestamp if provided
         if client_timestamp:
@@ -131,7 +131,10 @@ def lambda_handler(event, context):
             if deny:
                 return deny
         
-        logger.info(f"Creating check-in: rider={rider_id}, ride={ride_id}, stage={stage_number}")
+        logger.info(
+            f"Creating check-in: rider={rider_id}, ride={ride_id}, "
+            f"isNotRiding={is_not_riding}, isQuitRiding={is_quit_riding}"
+        )
         
         # Step 1: Get ride details from tour-specific Ride table
         ride = get_tour_item(
@@ -159,18 +162,33 @@ def lambda_handler(event, context):
                     status_code=409
                 )
         
-        # Validate stage number against ride stages
+        # Validate stage number only for normal check-ins.
+        # Not Riding / Quit Riding entries do not require stage attributes.
         stages = ride.get('stages', [])
         total_stages = len(stages)
-        
-        try:
-            validate_stage_number(stage_number, total_stages)
-        except ValidationError as e:
-            return bad_request_response(str(e))
-        
-        # Get stage info
-        stage = stages[stage_number - 1]
-        stage_id = stage.get('stageId')
+        stage_id = None
+        requires_stage = not is_not_riding and not is_quit_riding
+
+        if requires_stage:
+            if 'stageNumber' not in body or body.get('stageNumber') is None:
+                return bad_request_response(
+                    "stageNumber is required for normal check-ins"
+                )
+
+            try:
+                stage_number = int(body['stageNumber'])
+            except (TypeError, ValueError):
+                return bad_request_response(
+                    f"Invalid stageNumber: {body.get('stageNumber')}. Must be a valid integer"
+                )
+
+            try:
+                validate_stage_number(stage_number, total_stages)
+            except ValidationError as e:
+                return bad_request_response(str(e))
+
+            stage = stages[stage_number - 1]
+            stage_id = stage.get('stageId')
         
         # Step 2: Verify rider is registered for this tour
         tour_rider = get_tour_item(
@@ -270,11 +288,11 @@ def lambda_handler(event, context):
             check_in_id=check_in_id,
             rider_id=rider_id,
             ride_id=ride_id,
-            stage_number=stage_number,
-            stage_id=stage_id,
             timestamp=timestamp,
             checked_in_by=checked_in_by,
             method=CheckInMethod(method),
+            stage_number=stage_number,
+            stage_id=stage_id,
             is_not_riding=is_not_riding,
             is_quit_riding=is_quit_riding,
             is_manual_entry=(method == CheckInMethod.MANUAL.value),

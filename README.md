@@ -48,7 +48,7 @@ Tour-specific tables can be created through two methods:
 1. **CLI Script (Deployment Method):** `make provision-tour` or `python scripts/provision_tour.py` — for initial setup or CI/CD pipelines
 2. **API Endpoint (Runtime Method):** `POST /v1/tours` — for external apps (e.g., Check-In App) to create tours programmatically
 
-Both methods create the same Tour record and 4 tour-specific tables. See [Deployment Guide → After Deployment: Provisioning a Tour](docs/deployment-guide.md#after-deployment-provisioning-a-tour) for details.
+Both methods create the same Tour record and 5 tour-specific tables. See [Deployment Guide → After Deployment: Provisioning a Tour](docs/deployment-guide.md#after-deployment-provisioning-a-tour) for details.
 
 ## Business Rules
 
@@ -104,10 +104,14 @@ Authorization: Bearer <jwt-token>
 - `POST /v1/tours/{tourId}/archive` - Archive a completed tour
 
 #### Riders
+- `POST /v1/riders/profile` - Create rider profile
 - `GET /v1/riders/profile/{profileId}` - Get rider profile
 - `PUT /v1/riders/profile/{profileId}` - Update rider profile
+- `POST /v1/riders/profile/{profileId}/picture` - Generate profile picture upload URL
 - `GET /v1/tours/{tourId}/riders` - Get all riders for a tour
+- `POST /v1/tours/{tourId}/riders` - Register rider for a tour
 - `GET /v1/tours/{tourId}/riders/{riderId}` - Get tour rider details
+- `GET /v1/tours/{tourId}/riders/{riderId}/statistics` - Get rider statistics
 
 #### Rides
 - `GET /v1/tours/{tourId}/rides/today` - Get today's ride
@@ -126,7 +130,12 @@ Authorization: Bearer <jwt-token>
 - `GET /v1/users/me` - Get current user
 - `GET /v1/tours/{tourId}/users` - List tour users
 
-For detailed API specifications, see [docs/SolutionDesign.md](docs/SolutionDesign.md).
+#### Notifications
+- `GET /v1/tours/{tourId}/notifications` - List notifications (supports optional `?type=` and `?riderId=`)
+- `POST /v1/tours/{tourId}/notifications` - Create notification
+- `PUT /v1/tours/{tourId}/notifications/{notificationId}` - Mark notification as read
+
+For detailed API specifications, mandatory attributes, and validation rules, see [docs/api-guide.md](docs/api-guide.md).
 
 ## 🔐 Security
 
@@ -186,8 +195,9 @@ For detailed project organization and folder structure, see [docs/project-struct
 | [Development Guide](docs/development-guide.md) | Environment setup, deploy to dev, local testing, unit tests, troubleshooting |
 | [Deployment Guide](docs/deployment-guide.md) | CI/CD via GitHub Actions, multi-environment deployment, AWS resources reference |
 | [Infrastructure Guide](docs/infrastructure-guide.md) | Resource tagging, CloudWatch monitoring, cost estimation |
+| [API Guide](docs/api-guide.md) | API endpoints, mandatory attributes, validation rules, and authorization matrix |
 | [Requirements](docs/Requirements.md) | Detailed requirements and use cases |
-| [Solution Design](docs/SolutionDesign.md) | Architecture, data model, API specifications |
+| [Solution Design](docs/SolutionDesign.md) | Architecture and data model design decisions |
 | [Project Structure](docs/project-structure.md) | Project folder organization |
 
 ## 🤝 Contributing

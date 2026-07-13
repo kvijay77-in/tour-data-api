@@ -410,6 +410,54 @@ class TestNotRidingValidation:
         assert body['error']['code'] == 'DUPLICATE_NOT_RIDING'
 
 
+class TestStageOptionalForStatusCheckins:
+    """Tests for conditional stage requirement based on check-in status flags"""
+
+    def test_create_not_riding_without_stage(self, checkin_dynamodb):
+        """Not Riding check-in should be accepted without stageNumber"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_checkin import lambda_handler
+
+        event = _make_checkin_event(MOCK_TOUR_ID, {
+            'riderId': 'R2',
+            'rideId': 'RIDE001',
+            'method': 'QR_SCAN',
+            'isNotRiding': True
+        })
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 201
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['is_not_riding'] is True
+        assert body['data'].get('stage_number') is None
+
+    def test_create_quit_riding_without_stage(self, checkin_dynamodb):
+        """Quit Riding check-in should be accepted without stageNumber"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_checkin import lambda_handler
+
+        event = _make_checkin_event(MOCK_TOUR_ID, {
+            'riderId': 'R2',
+            'rideId': 'RIDE001',
+            'method': 'QR_SCAN',
+            'isQuitRiding': True
+        })
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 201
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['is_quit_riding'] is True
+        assert body['data'].get('stage_number') is None
+
+
 # ============================================================================
 # TEST: Late-Sync for Closed Rides
 # ============================================================================
