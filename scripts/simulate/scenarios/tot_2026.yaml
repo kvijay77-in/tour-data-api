@@ -32,6 +32,14 @@ tour_riders:
 
 # Ride schedule and check-in distributions
 rides:
+  # Dynamic date generation:
+  # - anchor_ride_number is treated as today's ride
+  # - Each day's date is derived relative to that anchor
+  date_strategy:
+    mode: ride_number_anchor
+    anchor_ride_number: 4
+    anchor_date: today
+
   # Default stage layout for all rides (override per-day with 'stages' key)
   # Stage types: START, PIT_STOP, FINISH
   default_stages:
@@ -43,62 +51,68 @@ rides:
   schedule:
     # -------------------------------------------------------------------------
     # Day 1 - COMPLETED
-    # 0 not riding, 10 quit (5 after START, 5 after PS1), 15 quit after PS2
-    # Remaining 45 finished
     # -------------------------------------------------------------------------
     - day: 1
-      date: "2026-07-11"
       name: "Day 1"
       start_location: "Chennai"
       finish_location: "Mahabalipuram"
       distance: 58
       flag_off_time: "06:30"
       rides_count: 1
-      status: COMPLETED
       checkins:
         not_riding: 0
         quit:
-          - { after_stage: Start, count: 5 }
-          - { after_stage: PS1, count: 5 }
-          - { after_stage: PS2, count: 15 }
+          - { after_stage: Start, count: 0 }
+          - { after_stage: PS1, count: 0 }
+          - { after_stage: PS2, count: 0 }
         finished: all_remaining
 
     # -------------------------------------------------------------------------
     # Day 2 - COMPLETED
-    # 5 not riding, 12 quit (6 after START, 6 after PS1), 11 quit after PS2
-    # Remaining 42 finished
     # -------------------------------------------------------------------------
     - day: 2
-      date: "2026-07-12"
       name: "Day 2"
       start_location: "Mahabalipuram"
       finish_location: "Pondicherry"
       distance: 95
       flag_off_time: "06:00"
       rides_count: 1
-      status: COMPLETED
       checkins:
         not_riding: 5
         quit:
-          - { after_stage: Start, count: 6 }
-          - { after_stage: PS1, count: 6 }
-          - { after_stage: PS2, count: 11 }
+          - { after_stage: Start, count: 0 }
+          - { after_stage: PS1, count: 1 }
+          - { after_stage: PS2, count: 7 }
         finished: all_remaining
 
     # -------------------------------------------------------------------------
-    # Day 3 - ACTIVE (in progress)
-    # 4 not riding, 9 quit (4 after PS1, 5 after PS2), 10 finished
-    # Remaining 47 in-progress distributed across stages
+    # Day 3 - COMPLETED
     # -------------------------------------------------------------------------
     - day: 3
-      date: "2026-07-13"
       name: "Day 3"
       start_location: "Pondicherry"
       finish_location: "Chidambaram"
       distance: 70
       flag_off_time: "06:30"
       rides_count: 1
-      status: ACTIVE
+      checkins:
+        not_riding: 4
+        quit:
+          - { after_stage: Start, count: 1 }
+          - { after_stage: PS1, count: 2 }
+          - { after_stage: PS2, count: 5 }
+        finished: all_remaining
+
+    # -------------------------------------------------------------------------
+    # Day 4 - ACTIVE (in progress)
+    # -------------------------------------------------------------------------
+    - day: 4
+      name: "Day 4"
+      start_location: "Chidambaram"
+      finish_location: "Thanjavur"
+      distance: 120
+      flag_off_time: "06:00"
+      rides_count: 1
       checkins:
         not_riding: 4
         quit:
@@ -109,53 +123,34 @@ rides:
         # In-progress riders: checked in up to and including the named stage
         # Distribution: more toward later stages, fewer at earlier stages
         in_progress:
-          Start: 8
-          PS1: 15
-          PS2: 24
-
-    # -------------------------------------------------------------------------
-    # Days 4-7 - PLANNED (no check-ins)
-    # -------------------------------------------------------------------------
-    - day: 4
-      date: "2026-07-14"
-      name: "Day 4"
-      start_location: "Chidambaram"
-      finish_location: "Thanjavur"
-      distance: 120
-      flag_off_time: "06:00"
-      rides_count: 1
-      status: PLANNED
+          PS2: 27
+          PS1: 17
+          Start: 2
 
     - day: 5
-      date: "2026-07-15"
       name: "Day 5"
       start_location: "Thanjavur"
       finish_location: "Trichy"
       distance: 55
       flag_off_time: "07:00"
       rides_count: 1
-      status: PLANNED
 
     # Day 6 has 2 rides
     - day: 6
-      date: "2026-07-16"
       name: "Day 6"
       start_location: "Trichy"
       finish_location: "Madurai"
       distance: 130
       flag_off_time: "05:30"
       rides_count: 2
-      status: PLANNED
 
     - day: 7
-      date: "2026-07-17"
       name: "Day 7"
       start_location: "Madurai"
       finish_location: "Kanyakumari"
       distance: 110
       flag_off_time: "06:00"
       rides_count: 1
-      status: PLANNED
 
 # Script behaviour options
 options:
