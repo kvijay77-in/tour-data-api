@@ -277,7 +277,7 @@ class TestTimestampBasedQuitRidingValidation:
         assert response['statusCode'] == 201
         body = json.loads(response['body'])
         assert body['success'] is True
-        assert body['data']['rider_id'] == 'R1'
+        assert body['data']['riderId'] == 'R1'
 
     def test_reject_checkin_after_quit_with_timestamp(self, checkin_dynamodb):
         """Check-in with timestamp after quit should still be rejected"""
@@ -432,8 +432,8 @@ class TestStageOptionalForStatusCheckins:
         assert response['statusCode'] == 201
         body = json.loads(response['body'])
         assert body['success'] is True
-        assert body['data']['is_not_riding'] is True
-        assert body['data'].get('stage_number') is None
+        assert body['data']['isNotRiding'] is True
+        assert body['data'].get('stageNumber') is None
 
     def test_create_quit_riding_without_stage(self, checkin_dynamodb):
         """Quit Riding check-in should be accepted without stageNumber"""
@@ -454,8 +454,8 @@ class TestStageOptionalForStatusCheckins:
         assert response['statusCode'] == 201
         body = json.loads(response['body'])
         assert body['success'] is True
-        assert body['data']['is_quit_riding'] is True
-        assert body['data'].get('stage_number') is None
+        assert body['data']['isQuitRiding'] is True
+        assert body['data'].get('stageNumber') is None
 
 
 # ============================================================================

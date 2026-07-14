@@ -285,17 +285,17 @@ def lambda_handler(event, context):
         ).get('jwt', {}).get('claims', {}).get('sub', 'system')
         
         checkin = CheckIn(
-            check_in_id=check_in_id,
-            rider_id=rider_id,
-            ride_id=ride_id,
+            checkInId=check_in_id,
+            riderId=rider_id,
+            rideId=ride_id,
             timestamp=timestamp,
-            checked_in_by=checked_in_by,
+            checkedInBy=checked_in_by,
             method=CheckInMethod(method),
-            stage_number=stage_number,
-            stage_id=stage_id,
-            is_not_riding=is_not_riding,
-            is_quit_riding=is_quit_riding,
-            is_manual_entry=(method == CheckInMethod.MANUAL.value),
+            stageNumber=stage_number,
+            stageId=stage_id,
+            isNotRiding=is_not_riding,
+            isQuitRiding=is_quit_riding,
+            isManualEntry=(method == CheckInMethod.MANUAL.value),
             notes=notes
         )
         

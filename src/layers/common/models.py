@@ -129,15 +129,15 @@ class RiderProfile:
     Stored in shared RiderProfile table.
     Partition key: profileId
     """
-    profile_id: str
+    profileId: str
     name: str
     email: str
     phone: str
-    emergency_contact_name: str
-    emergency_contact_phone: str
-    photo_s3_key: Optional[str] = None
-    created_at: str = field(default_factory=utc_now_iso)
-    updated_at: str = field(default_factory=utc_now_iso)
+    emergencyContactName: str
+    emergencyContactPhone: str
+    photoS3Key: Optional[str] = None
+    createdAt: str = field(default_factory=utc_now_iso)
+    updatedAt: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -145,9 +145,7 @@ class RiderProfile:
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
-        item = self.to_dict()
-        item['profileId'] = self.profile_id
-        return item
+        return self.to_dict()
 
 
 @dataclass
@@ -157,16 +155,16 @@ class Tour:
     Partition key: tourId
     tourId is free-form (e.g., TOT-2026, TDF2026)
     """
-    tour_id: str
+    tourId: str
     name: str
-    start_date: str
-    end_date: str
+    startDate: str
+    endDate: str
     status: TourStatus
     description: Optional[str] = None
-    provisioned_at: Optional[str] = None
-    archived_at: Optional[str] = None
-    created_at: str = field(default_factory=utc_now_iso)
-    updated_at: str = field(default_factory=utc_now_iso)
+    provisionedAt: Optional[str] = None
+    archivedAt: Optional[str] = None
+    createdAt: str = field(default_factory=utc_now_iso)
+    updatedAt: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -176,9 +174,7 @@ class Tour:
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
-        item = self.to_dict()
-        item['tourId'] = self.tour_id
-        return item
+        return self.to_dict()
 
 
 @dataclass
@@ -188,13 +184,13 @@ class TourRider:
     Stored in tour-specific TourRider-{tourId} table.
     Partition key: riderId
     """
-    rider_id: str
-    profile_id: str
+    riderId: str
+    profileId: str
     status: TourRiderStatus
-    qr_code_data: Optional[str] = None
-    registered_at: str = field(default_factory=utc_now_iso)
-    created_at: str = field(default_factory=utc_now_iso)
-    updated_at: str = field(default_factory=utc_now_iso)
+    qrCodeData: Optional[str] = None
+    registeredAt: str = field(default_factory=utc_now_iso)
+    createdAt: str = field(default_factory=utc_now_iso)
+    updatedAt: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -204,22 +200,19 @@ class TourRider:
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
-        item = self.to_dict()
-        item['riderId'] = self.rider_id
-        item['profileId'] = self.profile_id
-        return item
+        return self.to_dict()
 
 
 @dataclass
 class Stage:
     """Stage information within a ride"""
-    stage_id: str
-    stage_number: int
+    stageId: str
+    stageNumber: int
     type: StageType
     name: str
     location: Optional[str] = None
-    distance_from_start: Optional[float] = None
-    estimated_time_from_start: Optional[int] = None
+    distanceFromStart: Optional[float] = None
+    estimatedTimeFromStart: Optional[int] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -235,22 +228,22 @@ class Ride:
     Stored in tour-specific Ride-{tourId} table.
     Partition key: rideId
     """
-    ride_id: str
+    rideId: str
     date: str
-    ride_no: int
+    rideNo: int
     name: str
-    start_location: str
-    finish_location: str
-    total_distance: float
-    flag_off_time: str
+    startLocation: str
+    finishLocation: str
+    totalDistance: float
+    flagOffTime: str
     status: RideStatus
     stages: List[Stage]
     description: Optional[str] = None
-    created_at: str = field(default_factory=utc_now_iso)
-    updated_at: str = field(default_factory=utc_now_iso)
-    started_at: Optional[str] = None
-    completed_at: Optional[str] = None
-    closed_at: Optional[str] = None
+    createdAt: str = field(default_factory=utc_now_iso)
+    updatedAt: str = field(default_factory=utc_now_iso)
+    startedAt: Optional[str] = None
+    completedAt: Optional[str] = None
+    closedAt: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -261,9 +254,7 @@ class Ride:
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
-        item = self.to_dict()
-        item['rideId'] = self.ride_id
-        return item
+        return self.to_dict()
 
 
 @dataclass
@@ -273,45 +264,59 @@ class CheckIn:
     Stored in tour-specific CheckIn-{tourId} table.
     Partition key: rideId, Sort key: checkInId (<riderId>#<stageNumber>#<timestamp>)
     """
-    check_in_id: str
-    rider_id: str
-    ride_id: str
+    checkInId: str
+    riderId: str
+    rideId: str
     timestamp: str
-    checked_in_by: str
+    checkedInBy: str
     method: CheckInMethod
-    stage_number: Optional[int] = None
-    stage_id: Optional[str] = None
-    is_not_riding: bool = False
-    is_quit_riding: bool = False
-    is_manual_entry: bool = False
+    stageNumber: Optional[int] = None
+    stageId: Optional[str] = None
+    isNotRiding: bool = False
+    isQuitRiding: bool = False
+    isManualEntry: bool = False
     notes: Optional[str] = None
     location: Optional[Dict[str, float]] = None
-    created_at: str = field(default_factory=utc_now_iso)
+    createdAt: str = field(default_factory=utc_now_iso)
+
+    def _composite_checkin_id(self) -> str:
+        """Build the stable sort key format used in CheckIn DynamoDB table."""
+        stage_for_key = self.stageNumber if self.stageNumber is not None else 0
+        return f"{self.riderId}#{stage_for_key:03d}#{self.timestamp}"
     
     def get_status(self) -> CheckInStatus:
         """Derive check-in status from flags"""
-        if self.is_not_riding:
+        if self.isNotRiding:
             return CheckInStatus.NOT_RIDING
-        elif self.is_quit_riding:
+        elif self.isQuitRiding:
             return CheckInStatus.QUIT_RIDING
         else:
             return CheckInStatus.CHECKED_IN
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
-        data = asdict(self)
-        data['method'] = self.method.value
-        data['status'] = self.get_status().value
+        """Convert to API/DynamoDB dictionary using camelCase attributes."""
+        data = {
+            'checkInId': self._composite_checkin_id(),
+            'riderId': self.riderId,
+            'rideId': self.rideId,
+            'timestamp': self.timestamp,
+            'checkedInBy': self.checkedInBy,
+            'method': self.method.value,
+            'isNotRiding': self.isNotRiding,
+            'isQuitRiding': self.isQuitRiding,
+            'isManualEntry': self.isManualEntry,
+            'createdAt': self.createdAt,
+            'status': self.get_status().value,
+            'stageNumber': self.stageNumber,
+            'stageId': self.stageId,
+            'notes': self.notes,
+            'location': self.location,
+        }
         return {k: v for k, v in data.items() if v is not None}
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
-        item = self.to_dict()
-        item['rideId'] = self.ride_id
-        stage_for_key = self.stage_number if self.stage_number is not None else 0
-        item['checkInId'] = f"{self.rider_id}#{stage_for_key:03d}#{self.timestamp}"
-        item['riderId'] = self.rider_id
-        return item
+        return self.to_dict()
 
 
 @dataclass
@@ -321,15 +326,15 @@ class User:
     Stored in tour-specific User-{tourId} table.
     Partition key: userId
     """
-    user_id: str
+    userId: str
     username: str
     email: str
     name: str
     role: UserRole
     status: str = "ACTIVE"
-    assigned_stage: Optional[int] = None
-    created_at: str = field(default_factory=utc_now_iso)
-    updated_at: str = field(default_factory=utc_now_iso)
+    assignedStage: Optional[int] = None
+    createdAt: str = field(default_factory=utc_now_iso)
+    updatedAt: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -339,9 +344,7 @@ class User:
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
-        item = self.to_dict()
-        item['userId'] = self.user_id
-        return item
+        return self.to_dict()
 
 
 @dataclass
@@ -351,15 +354,15 @@ class Notification:
     Stored in tour-specific Notification-{tourId} table.
     Partition key: notificationId
     """
-    notification_id: str
+    notificationId: str
     type: NotificationType
     title: str
     message: str
-    created_by: str
-    target_rider_id: Optional[str] = None
-    read_by: Optional[List[str]] = field(default_factory=list)
-    created_at: str = field(default_factory=utc_now_iso)
-    expires_at: Optional[str] = None
+    createdBy: str
+    targetRiderId: Optional[str] = None
+    readBy: Optional[List[str]] = field(default_factory=list)
+    createdAt: str = field(default_factory=utc_now_iso)
+    expiresAt: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -369,9 +372,7 @@ class Notification:
 
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
-        item = self.to_dict()
-        item['notificationId'] = self.notification_id
-        return item
+        return self.to_dict()
 
 
 # ============================================================================
@@ -381,13 +382,13 @@ class Notification:
 def create_stage_from_dict(data: Dict[str, Any]) -> Stage:
     """Create Stage object from dictionary"""
     return Stage(
-        stage_id=data['stageId'],
-        stage_number=data['stageNumber'],
+        stageId=data['stageId'],
+        stageNumber=data['stageNumber'],
         type=StageType(data['type']),
         name=data['name'],
         location=data.get('location'),
-        distance_from_start=data.get('distanceFromStart'),
-        estimated_time_from_start=data.get('estimatedTimeFromStart')
+        distanceFromStart=data.get('distanceFromStart'),
+        estimatedTimeFromStart=data.get('estimatedTimeFromStart')
     )
 
 
@@ -396,20 +397,20 @@ def create_ride_from_dynamodb_item(item: Dict[str, Any]) -> Ride:
     stages = [create_stage_from_dict(stage) for stage in item.get('stages', [])]
     
     return Ride(
-        ride_id=item['rideId'],
+        rideId=item['rideId'],
         date=item['date'],
-        ride_no=item['rideNo'],
+        rideNo=item['rideNo'],
         name=item['name'],
-        start_location=item['startLocation'],
-        finish_location=item['finishLocation'],
-        total_distance=item['totalDistance'],
-        flag_off_time=item['flagOffTime'],
+        startLocation=item['startLocation'],
+        finishLocation=item['finishLocation'],
+        totalDistance=item['totalDistance'],
+        flagOffTime=item['flagOffTime'],
         status=RideStatus(item['status']),
         stages=stages,
         description=item.get('description'),
-        created_at=item.get('createdAt', ''),
-        updated_at=item.get('updatedAt', ''),
-        started_at=item.get('startedAt'),
-        completed_at=item.get('completedAt'),
-        closed_at=item.get('closedAt')
+        createdAt=item.get('createdAt', ''),
+        updatedAt=item.get('updatedAt', ''),
+        startedAt=item.get('startedAt'),
+        completedAt=item.get('completedAt'),
+        closedAt=item.get('closedAt')
     )
