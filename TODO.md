@@ -197,10 +197,10 @@ A browser-based admin UI for tour organizers to manage tours, riders, rides, and
 
 ~~README, infrastructure guide, and deployment guide reported incorrect Lambda function counts.~~
 
-**Resolution:** All documentation updated to reflect the actual count of **20 Lambda functions** with correct distribution:
+**Resolution:** All documentation updated to reflect the actual count of **22 Lambda functions** with correct distribution:
 - Tours: 5 (get_active, get_tour, list_tours, create_tour, archive_tour)
 - Riders: 4 (get_rider_profile, update_rider_profile, get_tour_riders, get_tour_rider)
-- Rides: 6 (get_todays_ride, get_ride, list_rides, create_ride, update_ride, close_ride)
+- Rides: 8 (get_todays_ride, get_ride, list_rides, create_ride, update_ride, open_ride, start_ride, close_ride)
 - Check-ins: 3 (create_checkin, get_ride_checkins, get_dashboard_data)
 - Users: 2 (get_current_user, list_tour_users)
 

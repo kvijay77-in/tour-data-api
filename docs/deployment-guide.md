@@ -303,7 +303,7 @@ An "Unauthorized" response means the API is running and authentication is workin
 
 Detailed inventory of everything deployment creates in your AWS account.
 
-### Lambda Functions (All 20)
+### Lambda Functions (All 22)
 
 | Function | Endpoint | Purpose |
 |---|---|---|
@@ -321,6 +321,8 @@ Detailed inventory of everything deployment creates in your AWS account.
 | ListRidesFunction | `GET /v1/tours/{tourId}/rides` | List all rides |
 | CreateRideFunction | `POST /v1/tours/{tourId}/rides` | Create a ride |
 | UpdateRideFunction | `PUT /v1/tours/{tourId}/rides/{rideId}` | Update ride details |
+| OpenRideFunction | `POST /v1/tours/{tourId}/rides/open` | Open today's ride |
+| StartRideFunction | `POST /v1/tours/{tourId}/rides/start` | Start today's ride |
 | CloseRideFunction | `POST /v1/tours/{tourId}/rides/{rideId}/close` | Close a ride |
 | CreateCheckInFunction | `POST /v1/tours/{tourId}/checkins` | Record check-in |
 | GetRideCheckInsFunction | `GET /v1/tours/{tourId}/rides/{rideId}/checkins` | Get ride check-ins |

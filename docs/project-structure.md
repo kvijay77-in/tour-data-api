@@ -41,6 +41,8 @@ tour-data-api/
 │   │   │   ├── get_ride.py            # GET /v1/tours/{tourId}/rides/{rideId}
 │   │   │   ├── get_todays_ride.py     # GET /v1/tours/{tourId}/rides/today
 │   │   │   ├── list_rides.py          # GET /v1/tours/{tourId}/rides
+│   │   │   ├── open_ride.py           # POST /v1/tours/{tourId}/rides/open
+│   │   │   ├── start_ride.py          # POST /v1/tours/{tourId}/rides/start
 │   │   │   └── update_ride.py         # PUT /v1/tours/{tourId}/rides/{rideId}
 │   │   ├── tours/
 │   │   │   ├── __init__.py

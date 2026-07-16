@@ -589,6 +589,58 @@ class TestCloseRideRBAC:
 
 
 # ---------------------------------------------------------------------------
+# open_ride RBAC tests
+# ---------------------------------------------------------------------------
+
+class TestOpenRideRBAC:
+    def test_administrator_allowed(self, rbac_dynamodb):
+        open_ride = _load_handler('rides', 'open_ride')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            method='POST'
+        )
+        response = open_ride.lambda_handler(event, None)
+        assert response['statusCode'] != 403
+
+    def test_super_user_denied(self, rbac_dynamodb):
+        open_ride = _load_handler('rides', 'open_ride')
+        event = _make_event(
+            groups=['SUPER_USER'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            method='POST'
+        )
+        response = open_ride.lambda_handler(event, None)
+        assert response['statusCode'] == 403
+
+
+# ---------------------------------------------------------------------------
+# start_ride RBAC tests
+# ---------------------------------------------------------------------------
+
+class TestStartRideRBAC:
+    def test_administrator_allowed(self, rbac_dynamodb):
+        start_ride = _load_handler('rides', 'start_ride')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            method='POST'
+        )
+        response = start_ride.lambda_handler(event, None)
+        assert response['statusCode'] != 403
+
+    def test_super_user_denied(self, rbac_dynamodb):
+        start_ride = _load_handler('rides', 'start_ride')
+        event = _make_event(
+            groups=['SUPER_USER'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            method='POST'
+        )
+        response = start_ride.lambda_handler(event, None)
+        assert response['statusCode'] == 403
+
+
+# ---------------------------------------------------------------------------
 # create_checkin RBAC tests
 # ---------------------------------------------------------------------------
 

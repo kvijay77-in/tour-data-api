@@ -119,6 +119,8 @@ Authorization: Bearer <jwt-token>
 - `GET /v1/tours/{tourId}/rides/{rideId}` - Get ride details
 - `POST /v1/tours/{tourId}/rides` - Create a new ride
 - `PUT /v1/tours/{tourId}/rides/{rideId}` - Update ride
+- `POST /v1/tours/{tourId}/rides/open` - Open today's ride
+- `POST /v1/tours/{tourId}/rides/start` - Start today's ride
 - `POST /v1/tours/{tourId}/rides/{rideId}/close` - Close ride
 
 #### Check-ins

@@ -890,6 +890,56 @@ Resources:
             Path: /v1/tours/{tourId}/rides/{rideId}/close
             Method: POST
 
+  OpenRideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: open_ride.lambda_handler
+      Description: Open today's ride (tour scoped)
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides/open
+            Method: POST
+
+  StartRideFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: start_ride.lambda_handler
+      Description: Start today's ride (tour scoped)
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides/start
+            Method: POST
+
   # ============================================================================
   # LAMBDA FUNCTIONS - CHECK-INS
   # ============================================================================

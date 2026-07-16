@@ -55,6 +55,8 @@ class TourStatus(str, Enum):
 
 class RideStatus(str, Enum):
     """Ride status values"""
+    OPEN = "OPEN"
+    STARTED = "STARTED"
     PLANNED = "PLANNED"
     ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"

@@ -211,7 +211,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | description | String | Optional description |
 | totalDistance | Number | Distance in km |
 | flagOffTime | String | Planned flag-off time |
-| status | String | PLANNED, ACTIVE, COMPLETED, CLOSED |
+| status | String | OPEN, STARTED, PLANNED, ACTIVE, COMPLETED, CLOSED |
 | stages | List | Array of stage objects (see below) |
 | createdAt | String | ISO 8601 timestamp |
 | updatedAt | String | ISO 8601 timestamp |

@@ -69,6 +69,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Rides | GET | `/v1/tours/{tourId}/rides/{rideId}` | Get ride | [Rides](#rides) |
 | Rides | POST | `/v1/tours/{tourId}/rides` | Create ride | [Rides](#rides) |
 | Rides | PUT | `/v1/tours/{tourId}/rides/{rideId}` | Update ride | [Rides](#rides) |
+| Rides | POST | `/v1/tours/{tourId}/rides/open` | Open today's ride | [Rides](#rides) |
+| Rides | POST | `/v1/tours/{tourId}/rides/start` | Start today's ride | [Rides](#rides) |
 | Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/close` | Close ride | [Rides](#rides) |
 | Check-Ins | POST | `/v1/tours/{tourId}/checkins` | Create check-in | [Check-Ins](#check-ins) |
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/checkins` | List ride check-ins | [Check-Ins](#check-ins) |
@@ -109,10 +111,12 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
 | `GET /v1/tours/{tourId}/rides/today` | `tourId` (required) | None | None | `tourId` format; 404 `NO_ACTIVE_RIDE` when no ride for current UTC date |
-| `GET /v1/tours/{tourId}/rides` | `tourId` (required) | `status` (optional) | None | `tourId` format; `status` in `PLANNED, ACTIVE, COMPLETED, CLOSED`; date filter not implemented |
+| `GET /v1/tours/{tourId}/rides` | `tourId` (required) | `status` (optional) | None | `tourId` format; `status` in `OPEN, STARTED, PLANNED, ACTIVE, COMPLETED, CLOSED`; date filter not implemented |
 | `GET /v1/tours/{tourId}/rides/{rideId}` | `tourId, rideId` (required) | None | None | `tourId` format; `rideId` format `RIDE###` |
 | `POST /v1/tours/{tourId}/rides` | `tourId` (required) | None | Required: `rideId, date, rideNo, name, startLocation, finishLocation, totalDistance, flagOffTime, stages`; Optional: `description` | date `YYYY-MM-DD`; `flagOffTime` `HH:MM`; `totalDistance > 0`; `rideNo` positive integer; `stages` non-empty array; tour status `PLANNING/ACTIVE`; duplicate `rideId` rejected |
-| `PUT /v1/tours/{tourId}/rides/{rideId}` | `tourId, rideId` (required) | None | At least one of: `name, date, rideNo, startLocation, finishLocation, totalDistance, flagOffTime, stages, description, status` | date/time/number checks when fields present; `status` in `PLANNED, ACTIVE, COMPLETED, CLOSED` |
+| `PUT /v1/tours/{tourId}/rides/{rideId}` | `tourId, rideId` (required) | None | At least one of: `name, date, rideNo, startLocation, finishLocation, totalDistance, flagOffTime, stages, description, status` | date/time/number checks when fields present; `status` in `OPEN, STARTED, PLANNED, ACTIVE, COMPLETED, CLOSED` |
+| `POST /v1/tours/{tourId}/rides/open` | `tourId` (required) | None | None | Finds ride for current UTC date and sets status to `OPEN`; rejects if already `OPEN`; no `rideId` accepted |
+| `POST /v1/tours/{tourId}/rides/start` | `tourId` (required) | None | None | Finds ride for current UTC date and sets status to `STARTED`; rejects if already `STARTED`; no `rideId` accepted |
 | `POST /v1/tours/{tourId}/rides/{rideId}/close` | `tourId, rideId` (required) | None | None | Ride must exist and must not already be `CLOSED` |
 
 #### Check-Ins
@@ -240,6 +244,8 @@ Note: `GET /v1/riders/{riderId}/checkins` is not currently implemented.
 | POST tours (create/provision) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST archive tour | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST/PUT rides | ✅ | ❌ | ❌ | ❌ | ❌ |
+| POST open ride | ✅ | ❌ | ❌ | ❌ | ❌ |
+| POST start ride | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST close ride | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Manual check-in | ✅ | ✅ | ❌ | ❌ | ❌ |
 | POST notification (create) | ✅ | ✅ | ❌ | ❌ | ❌ |
@@ -261,7 +267,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 
 2. **Authorization (RBAC permissions in Lambda)**
    - `TOUR_MANAGE`: create/archive tours
-   - `RIDE_MANAGE`: create/update/close rides
+  - `RIDE_MANAGE`: create/update/open/start/close rides
    - `CHECKIN`: create check-ins
    - `CHECKIN_MANUAL`: required in addition to CHECKIN for `method=MANUAL`
    - `DASHBOARD`: read dashboard aggregation endpoint

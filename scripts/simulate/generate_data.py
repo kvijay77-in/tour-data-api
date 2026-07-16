@@ -170,7 +170,7 @@ def build_rides(config):
             if status in ('COMPLETED', 'CLOSED'):
                 ride['started_at'] = f"{day_cfg['date']}T{flag_off}:00Z"
                 ride['completed_at'] = f"{day_cfg['date']}T18:00:00Z"
-            elif status == 'ACTIVE':
+            elif status == 'STARTED':
                 ride['started_at'] = f"{day_cfg['date']}T{flag_off}:00Z"
 
             rides.append({'ride': ride, 'day_config': day_cfg})
@@ -367,7 +367,7 @@ def generate_checkins(rides_data, tour_riders, rng):
 
         temp_checkin_count_last = len(all_checkins)
 
-        # --- In Progress (only for ACTIVE rides) ---
+        # --- In Progress (only for STARTED rides) ---
         in_progress_cfg = checkin_cfg.get('in_progress')
         if in_progress_cfg:
             for stage_name, count in in_progress_cfg.items():
@@ -640,8 +640,8 @@ def resolve_schedule_statuses(config):
     Resolve schedule status from date strategy anchor ride.
 
     Rules:
-      - day < anchor_ride_number: COMPLETED
-      - day == anchor_ride_number: ACTIVE
+      - day < anchor_ride_number: CLOSED
+      - day == anchor_ride_number: STARTED
       - day > anchor_ride_number: PLANNED
     """
     rides_cfg = config.get('rides', {})
@@ -651,14 +651,14 @@ def resolve_schedule_statuses(config):
     anchor_ride = int(strategy.get('anchor_ride_number', 3))
 
     print("Resolving schedule statuses from anchor ride...")
-    print(f"  Status strategy: ride {anchor_ride} is ACTIVE")
+    print(f"  Status strategy: ride {anchor_ride} is STARTED")
 
     for idx, day_cfg in enumerate(schedule, 1):
         ride_day_number = int(day_cfg.get('day', idx))
         if ride_day_number < anchor_ride:
-            day_cfg['status'] = 'COMPLETED'
+            day_cfg['status'] = 'CLOSED'
         elif ride_day_number == anchor_ride:
-            day_cfg['status'] = 'ACTIVE'
+            day_cfg['status'] = 'STARTED'
         else:
             day_cfg['status'] = 'PLANNED'
 
