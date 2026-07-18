@@ -53,8 +53,15 @@ tour-data-api/
 │   │   │   └── list_tours.py          # GET /v1/tours
 │   │   └── users/
 │   │       ├── __init__.py
+│   │       ├── create_managed_user.py # POST /v1/admin/usermgmt/users
+│   │       ├── disable_managed_user.py # POST /v1/admin/usermgmt/users/{cognitoUserId}/disable
+│   │       ├── enable_managed_user.py # POST /v1/admin/usermgmt/users/{cognitoUserId}/enable
 │   │       ├── get_current_user.py    # GET /v1/users/me
-│   │       └── list_tour_users.py     # GET /v1/tours/{tourId}/users
+│   │       ├── list_managed_users.py  # GET /v1/admin/usermgmt/users
+│   │       ├── list_role_groups.py    # GET /v1/admin/usermgmt/roles
+│   │       ├── list_tour_users.py     # GET /v1/tours/{tourId}/users
+│   │       ├── update_managed_user.py # PUT /v1/admin/usermgmt/users/{cognitoUserId}
+│   │       └── usermgmt_common.py     # Shared Cognito admin user management helpers
 │   │   └── notifications/
 │   │       ├── __init__.py
 │   │       ├── create_notification.py # POST /v1/tours/{tourId}/notifications
