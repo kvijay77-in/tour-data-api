@@ -286,8 +286,8 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | username | String | Username |
 | email | String | Email |
 | name | String | Full name |
-| role | String | ADMINISTRATOR, SUPER_USER, PIT_STOP_CREW, HOTEL_STAFF, GUEST |
-| assignedStage | Number | For pit stop crew (optional) |
+| role | String | ADMINISTRATOR, SUPER_USER, HOTEL_STAFF, GUEST, RIDER, or PS_<n>_USER |
+| assignedStage | Number | Optional display metadata for pit stop users; authorization is enforced from Cognito groups + request stage |
 | status | String | ACTIVE, INACTIVE, SUSPENDED |
 | createdAt | String | ISO 8601 timestamp |
 | updatedAt | String | ISO 8601 timestamp |
@@ -503,7 +503,7 @@ tour-data-api/
 3. **Lambda Layer:** Common utilities shared across all functions (`dynamodb_utils`, `logger`, `models`, `rbac`, `response`, `tour_provisioning`, `validation`)
 4. **API Gateway (tour-mgmt-app):** HTTP API (`TourDataApi`) with JWT authorizer for the management User Pool
 5. **API Gateway (tour-rider-app):** HTTP API (`RiderApi`) with JWT authorizer for the rider User Pool — exposes rider-facing endpoints
-6. **Cognito User Pool (tour-mgmt-app):** `{stack}-users` — for tour organizers, pit stop crew, hotel staff, guests. Groups: `ADMINISTRATOR`, `SUPER_USER`, `PIT_STOP_CREW`, `HOTEL_STAFF`, `GUEST`
+6. **Cognito User Pool (tour-mgmt-app):** `{stack}-users` — for tour organizers, pit stop users, hotel staff, guests. Groups: `ADMINISTRATOR`, `SUPER_USER`, `PS_1_USER`, `PS_2_USER`, `PS_3_USER`, `PS_4_USER`, `PS_5_USER`, `HOTEL_STAFF`, `GUEST`
 7. **Cognito User Pool (tour-rider-app):** `{stack}-rider-users` — dedicated pool for riders, isolated from management users. Groups: `RIDER`. A person can exist in both pools with separate identities.
 8. **S3 Bucket:** Rider photos
 9. **IAM Roles:** Lambda execution roles with least privilege
@@ -581,11 +581,13 @@ Runtime-provisioned tour tables must also be tagged with the same `SubscriptionI
 
 ### RBAC Design
 
-Lambda handlers check API-level **permissions** (what action is being performed) rather than Cognito group names (who the caller is). The `GROUP_PERMISSIONS` mapping in `rbac.py` is the single configuration point connecting Cognito groups to API permissions — adding a new group or changing what a group can do requires only updating this mapping, with no Lambda handler changes.
+Lambda handlers check API-level **permissions** (what action is being performed) rather than Cognito group names (who the caller is). Standard groups are mapped through `GROUP_PERMISSIONS` in `rbac.py`, while pit stop groups are resolved dynamically from the `PS_<stage>_USER` naming pattern. This allows additional pit stop groups to be introduced without changing backend code.
+
+For regular check-ins, pit stop access is stage-aware. A user with `PS_1_USER` may create a normal check-in only for stage `1` when that ride stage type is `PIT_STOP`; `PS_2_USER` behaves the same for stage `2`, and so on. `START` is always stage `0`, the last stage is always `FINISH`, and pit stop roles must never authorize regular check-ins for `START` or `FINISH`. A user may belong to multiple pit stop groups, and any `PS_<n>_USER` role may still create `Quit Riding` check-ins.
 
 **Permissions and group mapping:**
 
-| Permission | ADMINISTRATOR | SUPER_USER | PIT_STOP_CREW | HOTEL_STAFF | GUEST | RIDER |
+| Permission | ADMINISTRATOR | SUPER_USER | PS_<n>_USER | HOTEL_STAFF | GUEST | RIDER |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | READ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | CHECKIN | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |

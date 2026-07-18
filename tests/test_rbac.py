@@ -187,9 +187,10 @@ class TestGroupPermissionsMapping:
         hotel_perms = set(GROUP_PERMISSIONS['HOTEL_STAFF'])
         assert Permission.DASHBOARD not in hotel_perms
 
-    def test_pit_stop_crew_has_no_manual_checkin(self):
-        from rbac import GROUP_PERMISSIONS, Permission
-        pit_perms = set(GROUP_PERMISSIONS['PIT_STOP_CREW'])
+    def test_dynamic_pit_stop_group_has_no_manual_checkin(self):
+        from rbac import Permission, get_user_permissions
+        event = _make_event(groups=['PS_3_USER'])
+        pit_perms = get_user_permissions(event)
         assert Permission.CHECKIN_MANUAL not in pit_perms
 
     def test_super_user_has_no_tour_or_ride_manage(self):
@@ -198,10 +199,14 @@ class TestGroupPermissionsMapping:
         assert Permission.TOUR_MANAGE not in su_perms
         assert Permission.RIDE_MANAGE not in su_perms
 
-    def test_all_groups_present(self):
+    def test_standard_groups_present(self):
         from rbac import GROUP_PERMISSIONS
-        expected = {'ADMINISTRATOR', 'SUPER_USER', 'PIT_STOP_CREW', 'HOTEL_STAFF', 'GUEST'}
+        expected = {'ADMINISTRATOR', 'SUPER_USER', 'HOTEL_STAFF', 'GUEST', 'RIDER'}
         assert expected == set(GROUP_PERMISSIONS.keys())
+
+    def test_dynamic_pit_stop_group_pattern_not_stored_in_mapping(self):
+        from rbac import GROUP_PERMISSIONS
+        assert 'PS_1_USER' not in GROUP_PERMISSIONS
 
     def test_unknown_group_not_in_mapping(self):
         from rbac import GROUP_PERMISSIONS
@@ -237,17 +242,28 @@ class TestGetUserPermissions:
         event = _make_event(groups=['UNKNOWN_GROUP'])
         assert get_user_permissions(event) == set()
 
+    def test_dynamic_pit_stop_group_gets_standard_permissions(self):
+        from rbac import get_user_permissions, Permission
+        event = _make_event(groups=['PS_2_USER'])
+        perms = get_user_permissions(event)
+        assert perms == {Permission.READ, Permission.CHECKIN, Permission.DASHBOARD}
+
     def test_multiple_groups_union_permissions(self):
         """User in multiple groups receives union of all their permissions."""
         from rbac import get_user_permissions, Permission
-        # PIT_STOP_CREW = [READ, CHECKIN, DASHBOARD]
+        # PS_2_USER     = [READ, CHECKIN, DASHBOARD]
         # HOTEL_STAFF   = [READ, CHECKIN]
         # Union         = [READ, CHECKIN, DASHBOARD]
-        event = _make_event(groups=['PIT_STOP_CREW', 'HOTEL_STAFF'])
+        event = _make_event(groups=['PS_2_USER', 'HOTEL_STAFF'])
         perms = get_user_permissions(event)
         assert Permission.READ in perms
         assert Permission.CHECKIN in perms
         assert Permission.DASHBOARD in perms
+
+    def test_multiple_pit_stop_groups_return_multiple_stage_numbers(self):
+        from rbac import get_user_pit_stop_stage_numbers
+        event = _make_event(groups=['PS_1_USER', 'PS_3_USER'])
+        assert get_user_pit_stop_stage_numbers(event) == {1, 3}
 
 
 class TestRequirePermission:
@@ -290,14 +306,14 @@ class TestRequirePermission:
         result = require_permission(event, Permission.DASHBOARD)
         assert result['statusCode'] == 403
 
-    def test_pit_stop_crew_allowed_checkin(self):
+    def test_pit_stop_user_allowed_checkin(self):
         from rbac import require_permission, Permission
-        event = _make_event(groups=['PIT_STOP_CREW'])
+        event = _make_event(groups=['PS_1_USER'])
         assert require_permission(event, Permission.CHECKIN) is None
 
-    def test_pit_stop_crew_denied_checkin_manual(self):
+    def test_pit_stop_user_denied_checkin_manual(self):
         from rbac import require_permission, Permission
-        event = _make_event(groups=['PIT_STOP_CREW'])
+        event = _make_event(groups=['PS_1_USER'])
         result = require_permission(event, Permission.CHECKIN_MANUAL)
         assert result['statusCode'] == 403
 
@@ -522,10 +538,10 @@ class TestCreateRideRBAC:
         response = create_ride.lambda_handler(event, None)
         assert response['statusCode'] != 403
 
-    def test_pit_stop_crew_denied(self, rbac_dynamodb):
+    def test_pit_stop_user_denied(self, rbac_dynamodb):
         create_ride = _load_handler('rides', 'create_ride')
         event = _make_event(
-            groups=['PIT_STOP_CREW'],
+            groups=['PS_1_USER'],
             path_params={'tourId': MOCK_TOUR_ID},
             body={},
             method='POST'
@@ -653,12 +669,59 @@ class TestCreateCheckinRBAC:
             'method': method
         }
 
-    def test_pit_stop_crew_qr_scan_allowed(self, rbac_dynamodb):
+    def test_pit_stop_user_qr_scan_allowed_for_assigned_stage(self, rbac_dynamodb):
         create_checkin = _load_handler('checkins', 'create_checkin')
         event = _make_event(
-            groups=['PIT_STOP_CREW'],
+            groups=['PS_1_USER'],
             path_params={'tourId': MOCK_TOUR_ID},
             body=self._checkin_body('QR_SCAN'),
+            method='POST'
+        )
+        response = create_checkin.lambda_handler(event, None)
+        assert response['statusCode'] != 403
+
+    def test_pit_stop_user_denied_for_unassigned_stage(self, rbac_dynamodb):
+        create_checkin = _load_handler('checkins', 'create_checkin')
+        event = _make_event(
+            groups=['PS_2_USER'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            body=self._checkin_body('QR_SCAN'),
+            method='POST'
+        )
+        response = create_checkin.lambda_handler(event, None)
+        assert response['statusCode'] == 403
+        body = json.loads(response['body'])
+        assert body['error']['code'] == 'PIT_STOP_ROLE_STAGE_MISMATCH'
+
+    def test_pit_stop_user_denied_for_finish_stage_regular_checkin(self, rbac_dynamodb):
+        create_checkin = _load_handler('checkins', 'create_checkin')
+        event = _make_event(
+            groups=['PS_2_USER'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            body={
+                'riderId': 'R2',
+                'rideId': 'RIDE001',
+                'stageNumber': 2,
+                'method': 'QR_SCAN'
+            },
+            method='POST'
+        )
+        response = create_checkin.lambda_handler(event, None)
+        assert response['statusCode'] == 403
+        body = json.loads(response['body'])
+        assert body['error']['code'] == 'PIT_STOP_ROLE_STAGE_MISMATCH'
+
+    def test_pit_stop_user_allowed_for_quit_riding(self, rbac_dynamodb):
+        create_checkin = _load_handler('checkins', 'create_checkin')
+        event = _make_event(
+            groups=['PS_2_USER'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            body={
+                'riderId': 'R2',
+                'rideId': 'RIDE001',
+                'method': 'QR_SCAN',
+                'isQuitRiding': True
+            },
             method='POST'
         )
         response = create_checkin.lambda_handler(event, None)
@@ -697,10 +760,10 @@ class TestCreateCheckinRBAC:
         response = create_checkin.lambda_handler(event, None)
         assert response['statusCode'] == 403
 
-    def test_pit_stop_crew_manual_denied(self, rbac_dynamodb):
+    def test_pit_stop_user_manual_denied(self, rbac_dynamodb):
         create_checkin = _load_handler('checkins', 'create_checkin')
         event = _make_event(
-            groups=['PIT_STOP_CREW'],
+            groups=['PS_1_USER'],
             path_params={'tourId': MOCK_TOUR_ID},
             body=self._checkin_body('MANUAL'),
             method='POST'
@@ -767,10 +830,10 @@ class TestGetDashboardDataRBAC:
         response = get_dashboard_data.lambda_handler(event, None)
         assert response['statusCode'] != 403
 
-    def test_pit_stop_crew_allowed(self, rbac_dynamodb):
+    def test_pit_stop_user_allowed(self, rbac_dynamodb):
         get_dashboard_data = _load_handler('checkins', 'get_dashboard_data')
         event = _make_event(
-            groups=['PIT_STOP_CREW'],
+            groups=['PS_1_USER'],
             path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001'},
             method='GET'
         )
@@ -823,10 +886,10 @@ class TestListTourUsersRBAC:
         response = list_tour_users.lambda_handler(event, None)
         assert response['statusCode'] == 200
 
-    def test_pit_stop_crew_denied(self, rbac_dynamodb):
+    def test_pit_stop_user_denied(self, rbac_dynamodb):
         list_tour_users = _load_handler('users', 'list_tour_users')
         event = _make_event(
-            groups=['PIT_STOP_CREW'],
+            groups=['PS_1_USER'],
             path_params={'tourId': MOCK_TOUR_ID},
             method='GET'
         )

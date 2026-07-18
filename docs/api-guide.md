@@ -134,7 +134,7 @@ Note: `GET /v1/riders/{riderId}/checkins` is not currently implemented.
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
 | `GET /v1/users/me` | None | None | None | Requires valid JWT claims; returns 401 for missing/invalid claims |
-| `GET /v1/tours/{tourId}/users` | `tourId` (required) | `role` (optional) | None | `tourId` format; `role` in `ADMINISTRATOR, SUPER_USER, PIT_STOP_CREW, HOTEL_STAFF, GUEST, RIDER` |
+| `GET /v1/tours/{tourId}/users` | `tourId` (required) | `role` (optional) | None | `tourId` format; `role` in `ADMINISTRATOR, SUPER_USER, HOTEL_STAFF, GUEST, RIDER`, or `PS_<n>_USER` |
 
 #### Notifications
 
@@ -234,13 +234,13 @@ Note: `GET /v1/riders/{riderId}/checkins` is not currently implemented.
 
 ## Authorization Matrix
 
-| Endpoint | Administrator | Super User | Pit Stop Crew | Hotel Staff | Guest |
-|----------|--------------|------------|---------------|-------------|-------|
+| Endpoint | Administrator | Super User | PS_<n>_User | Hotel Staff | Guest |
+|----------|--------------|------------|-------------|-------------|-------|
 | GET tours | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET riders | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET rides | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET dashboard | ✅ | ✅ | ✅ | ❌ | ✅ |
-| POST check-in | ✅ | ✅ | ✅ | ✅ | ❌ |
+| POST check-in | ✅ | ✅ | Stage-bound regular PIT_STOP check-ins plus any Quit Riding check-in | ✅ | ❌ |
 | POST tours (create/provision) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST archive tour | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST/PUT rides | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -268,6 +268,15 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 2. **Authorization (RBAC permissions in Lambda)**
    - `TOUR_MANAGE`: create/archive tours
   - `RIDE_MANAGE`: create/update/open/start/close rides
+  - `CHECKIN`: create check-ins, with additional stage-aware enforcement for `PS_<n>_USER` roles on regular pit-stop check-ins
+
+### Pit Stop Role Rules
+
+1. `PS_1_USER` can create a regular check-in only for stage `1` when stage type is `PIT_STOP`.
+2. `PS_2_USER`, `PS_3_USER`, and higher follow the same pattern using their numeric suffix.
+3. Stage `0` is always `START`, the last stage is always `FINISH`, and pit stop roles cannot create regular check-ins for either of those stage types.
+4. A user may hold multiple `PS_<n>_USER` groups and may create regular check-ins for any matching assigned pit-stop stage.
+5. Any `PS_<n>_USER` role may create a `Quit Riding` check-in.
    - `CHECKIN`: create check-ins
    - `CHECKIN_MANUAL`: required in addition to CHECKIN for `method=MANUAL`
    - `DASHBOARD`: read dashboard aggregation endpoint

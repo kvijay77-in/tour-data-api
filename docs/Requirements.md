@@ -15,6 +15,8 @@ For now this process is completely manual and only some tour data prepared from 
 ## Check-In App
 An application, let's refer it as Check-in App is available for use during the tour to manage daily rides and track riders in each ride. This app will be used by Cycling Tour administrators, pit stop team and optionally by hotel front desk staff to check-in riders at various stages of the daily ride - Start - Flag Off, Pit Stop(s) and Finish.
 
+Pit stop users will be provisioned as pre-defined Cognito roles `PS_1_USER` to `PS_5_USER`. These roles are meant only for `PIT_STOP` stages and each role maps to the same stage number as its suffix: `PS_1_USER` → stage 1, `PS_2_USER` → stage 2, and so on. Stage `0` is always `START`, the last stage is always `FINISH`, and `FINISH` must never be associated with a pit stop role. A user may hold more than one `PS_<n>_USER` role.
+
 This app will have 2 primary features:  
 1. Dashboard - for Ride progress & Rider tracking  
 1. Rider Check-In  
@@ -78,6 +80,8 @@ Ride No. can be sequence for the day and when combined with date will be unique.
 
 There will be always 'Start' and 'Finish'  first and last stages respectively. In between, depending on no. of stages there will be 'n' no. of pit stop1, PS1, PS2, PS3, etc. Simple labels Start, 'Finish and PS'n' where 'n' is stage no. can be used. Stage numbering must be zero-based (Start = 0, then 1, 2, ...). But provision to have a different label for stages should be available. Any further aspects of the stages are expected to be part of data model design phase and the same will be reviewed before development can begin.
 
+Pit stop role mapping for regular check-ins must follow the ride stage definition. A user with role `PS_<n>_USER` may perform a regular check-in only when the request is for stage `n` and that stage type is `PIT_STOP`. If a ride has fewer pit stops, or the matching stage number is the `FINISH` stage, that role must not be able to perform a regular check-in for that stage.
+
 ## Check-In registry
 This is expected to have each check in captured through QR Code scanning for all stages. This will also include 'Not Riding' and 'Quit Riding' check in. An exceptional manual entry for 'Quit Riding' is also possible. The following info should be captured for every check-in.
 - Rider ID
@@ -97,12 +101,16 @@ Check-in status should be derived as follows:
 
 For 'Not Riding', there can be only 1 entry per Rider per ride. For 'Quit Riding' there can be multiple entries per ride which should be latest entry and all previous entries are Normal check-in at various stages before rider decided to quit.
 
+`Quit Riding` check-ins must be permitted for users holding any `PS_<n>_USER` role, independent of the stage they are assigned to for regular pit-stop check-ins.
+
 Manual Entry indicator should be set to 'Yes' when check-in is done manually instead of scanning QR code. Location need not be implemented for now. 
 
 ## User Profile
 This is Check-in app user profile. User registration will be done by administrator and user get's notified with the access credentials. Authentication will be achieved using Amazon Cognito. But if Cognito data can't be used for Check-in App, then data required should be maintained in database. It is not known what data is required and can be finalized as part of design phase.
 
 For now User profile is tour specific since the team's constituents can change. So user setup is expected to be done (in Cognito) and (if required) uploaded to this database before the tour commences. 
+
+The deployment must pre-create the Cognito groups `PS_1_USER`, `PS_2_USER`, `PS_3_USER`, `PS_4_USER`, and `PS_5_USER` as the initial pit stop role set. If additional pit stop roles are ever required, deployment artifacts and Cognito group provisioning must be extended accordingly, but backend authorization must continue to work for any valid `PS_<n>_USER` group name without code changes.
 
 # API
 Since data is managed centrally in this database, access data for all apps and report generation will be provided using APIs - API Gateway HTTP API. Data model design should take this into consideration as API usage cost can be managed and kept to as low as possible.

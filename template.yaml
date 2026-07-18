@@ -156,14 +156,54 @@ Resources:
         view all data except user management.
       UserPoolId: !Ref CognitoUserPool
 
-  CognitoGroupPitStopCrew:
+  CognitoGroupPitStop1User:
     Type: AWS::Cognito::UserPoolGroup
     Condition: CreateCognito
     Properties:
-      GroupName: PIT_STOP_CREW
+      GroupName: PS_1_USER
       Description: >
-        Operational access: QR-scan check-ins and read operations.
-        Cannot create manual check-ins or perform admin actions.
+        Pit stop stage 1 access: regular PIT_STOP check-ins for stage 1,
+        plus Quit Riding check-ins and read operations.
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoGroupPitStop2User:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: CreateCognito
+    Properties:
+      GroupName: PS_2_USER
+      Description: >
+        Pit stop stage 2 access: regular PIT_STOP check-ins for stage 2,
+        plus Quit Riding check-ins and read operations.
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoGroupPitStop3User:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: CreateCognito
+    Properties:
+      GroupName: PS_3_USER
+      Description: >
+        Pit stop stage 3 access: regular PIT_STOP check-ins for stage 3,
+        plus Quit Riding check-ins and read operations.
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoGroupPitStop4User:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: CreateCognito
+    Properties:
+      GroupName: PS_4_USER
+      Description: >
+        Pit stop stage 4 access: regular PIT_STOP check-ins for stage 4,
+        plus Quit Riding check-ins and read operations.
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoGroupPitStop5User:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: CreateCognito
+    Properties:
+      GroupName: PS_5_USER
+      Description: >
+        Pit stop stage 5 access: regular PIT_STOP check-ins for stage 5,
+        plus Quit Riding check-ins and read operations.
       UserPoolId: !Ref CognitoUserPool
 
   CognitoGroupHotelStaff:

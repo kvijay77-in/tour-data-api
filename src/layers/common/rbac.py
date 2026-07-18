@@ -21,17 +21,18 @@ Flow:
 
 Permission → Group mapping (current default):
 
-  Permission        | ADMINISTRATOR | SUPER_USER | PIT_STOP_CREW | HOTEL_STAFF | GUEST | RIDER
-  ------------------|:-------------:|:----------:|:-------------:|:-----------:|:-----:|:-----:
-  READ              |      ✅       |     ✅     |      ✅       |     ✅      |   ✅  |   ✅
-  CHECKIN           |      ✅       |     ✅     |      ✅       |     ✅      |   ❌  |   ❌
-  CHECKIN_MANUAL    |      ✅       |     ✅     |      ❌       |     ❌      |   ❌  |   ❌
-  RIDE_MANAGE       |      ✅       |     ❌     |      ❌       |     ❌      |   ❌  |   ❌
-  TOUR_MANAGE       |      ✅       |     ❌     |      ❌       |     ❌      |   ❌  |   ❌
-  USER_LIST         |      ✅       |     ✅     |      ❌       |     ❌      |   ❌  |   ❌
-  DASHBOARD         |      ✅       |     ✅     |      ✅       |     ❌      |   ✅  |   ❌
+    Permission        | ADMINISTRATOR | SUPER_USER | PS_<n>_USER | HOTEL_STAFF | GUEST | RIDER
+    ------------------|:-------------:|:----------:|:-----------:|:-----------:|:-----:|:-----:
+    READ              |      ✅       |     ✅     |      ✅      |     ✅      |   ✅  |   ✅
+    CHECKIN           |      ✅       |     ✅     |      ✅      |     ✅      |   ❌  |   ❌
+    CHECKIN_MANUAL    |      ✅       |     ✅     |      ❌      |     ❌      |   ❌  |   ❌
+    RIDE_MANAGE       |      ✅       |     ❌     |      ❌      |     ❌      |   ❌  |   ❌
+    TOUR_MANAGE       |      ✅       |     ❌     |      ❌      |     ❌      |   ❌  |   ❌
+    USER_LIST         |      ✅       |     ✅     |      ❌      |     ❌      |   ❌  |   ❌
+    DASHBOARD         |      ✅       |     ✅     |      ✅      |     ❌      |   ✅  |   ❌
 """
 
+import re
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
@@ -102,11 +103,6 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.DASHBOARD,
         Permission.NOTIFICATION_MANAGE,
     ],
-    "PIT_STOP_CREW": [
-        Permission.READ,
-        Permission.CHECKIN,
-        Permission.DASHBOARD,
-    ],
     "HOTEL_STAFF": [
         Permission.READ,
         Permission.CHECKIN,
@@ -118,6 +114,13 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
     "RIDER": [
         Permission.READ,
     ],
+}
+
+PIT_STOP_GROUP_PATTERN = re.compile(r'^PS_(\d+)_USER$')
+PIT_STOP_GROUP_PERMISSIONS = {
+    Permission.READ,
+    Permission.CHECKIN,
+    Permission.DASHBOARD,
 }
 
 
@@ -185,6 +188,39 @@ def has_any_group(user_groups: List[str], required_groups: List[str]) -> bool:
     return bool(set(user_groups) & set(required_groups))
 
 
+def is_pit_stop_group(group_name: str) -> bool:
+    """Return True when the group name follows the dynamic pit-stop pattern."""
+    return bool(PIT_STOP_GROUP_PATTERN.fullmatch(group_name or ''))
+
+
+def get_pit_stop_stage_number(group_name: str) -> Optional[int]:
+    """Extract the stage number from a pit-stop group like PS_3_USER."""
+    match = PIT_STOP_GROUP_PATTERN.fullmatch(group_name or '')
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def get_user_pit_stop_stage_numbers(event: Dict[str, Any]) -> Set[int]:
+    """Return all pit-stop stage numbers assigned to the caller via Cognito groups."""
+    stage_numbers: Set[int] = set()
+    for group in get_user_groups(event):
+        stage_number = get_pit_stop_stage_number(group)
+        if stage_number is not None:
+            stage_numbers.add(stage_number)
+    return stage_numbers
+
+
+def has_non_pit_stop_checkin_access(event: Dict[str, Any]) -> bool:
+    """Return True when any non pit-stop group grants generic CHECKIN access."""
+    for group in get_user_groups(event):
+        if is_pit_stop_group(group):
+            continue
+        if Permission.CHECKIN in GROUP_PERMISSIONS.get(group, []):
+            return True
+    return False
+
+
 # ============================================================================
 # PERMISSION RESOLUTION
 # ============================================================================
@@ -207,6 +243,9 @@ def get_user_permissions(event: Dict[str, Any]) -> Set[Permission]:
     user_groups = get_user_groups(event)
     permissions: Set[Permission] = set()
     for group in user_groups:
+        if is_pit_stop_group(group):
+            permissions.update(PIT_STOP_GROUP_PERMISSIONS)
+            continue
         permissions.update(GROUP_PERMISSIONS.get(group, []))
     return permissions
 

@@ -89,7 +89,6 @@ class UserRole(str, Enum):
     """User role values"""
     ADMINISTRATOR = "ADMINISTRATOR"
     SUPER_USER = "SUPER_USER"
-    PIT_STOP_CREW = "PIT_STOP_CREW"
     HOTEL_STAFF = "HOTEL_STAFF"
     GUEST = "GUEST"
     RIDER = "RIDER"
@@ -332,7 +331,7 @@ class User:
     username: str
     email: str
     name: str
-    role: UserRole
+    role: str
     status: str = "ACTIVE"
     assignedStage: Optional[int] = None
     createdAt: str = field(default_factory=utc_now_iso)
@@ -341,7 +340,7 @@ class User:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         data = asdict(self)
-        data['role'] = self.role.value
+        data['role'] = self.role.value if isinstance(self.role, UserRole) else self.role
         return {k: v for k, v in data.items() if v is not None}
     
     def to_dynamodb_item(self) -> Dict[str, Any]:

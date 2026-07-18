@@ -13,7 +13,7 @@ from response import success_response, bad_request_response, internal_error_resp
 from validation import validate_tour_id, ValidationError
 from dynamodb_utils import scan_tour_items
 from models import UserRole
-from rbac import require_permission, Permission
+from rbac import Permission, is_pit_stop_group, require_permission
 
 logger = get_logger(__name__)
 
@@ -23,7 +23,7 @@ def lambda_handler(event, context):
     List all users (admin/staff) for a tour
     
     Path parameter: tourId (e.g., TOT-2026)
-    Query parameter: role (optional - ADMINISTRATOR, SUPER_USER, PIT_STOP_CREW, HOTEL_STAFF, GUEST)
+    Query parameter: role (optional - ADMINISTRATOR, SUPER_USER, HOTEL_STAFF, GUEST, RIDER, or PS_<n>_USER)
     
     Returns:
     - 200: List of users (may be empty)
@@ -55,9 +55,9 @@ def lambda_handler(event, context):
         # Validate role if provided
         if role_filter:
             valid_roles = [r.value for r in UserRole]
-            if role_filter not in valid_roles:
+            if role_filter not in valid_roles and not is_pit_stop_group(role_filter):
                 return bad_request_response(
-                    f"Invalid role. Must be one of: {', '.join(valid_roles)}"
+                    f"Invalid role. Must be one of: {', '.join(valid_roles)} or PS_<n>_USER"
                 )
         
         # Scan all users from tour-specific User table

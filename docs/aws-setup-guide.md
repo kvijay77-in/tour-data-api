@@ -149,7 +149,9 @@ aws cognito-idp admin-set-user-password \
 
 ### 3. Assign Users to Cognito Groups
 
-The API enforces server-side RBAC using Cognito groups. Available groups are: `ADMINISTRATOR`, `SUPER_USER`, `PIT_STOP_CREW`, `HOTEL_STAFF`, `GUEST`. These groups are created automatically when the Cognito User Pool is managed by this stack.
+The API enforces server-side RBAC using Cognito groups. Available groups are: `ADMINISTRATOR`, `SUPER_USER`, `PS_1_USER`, `PS_2_USER`, `PS_3_USER`, `PS_4_USER`, `PS_5_USER`, `HOTEL_STAFF`, `GUEST`. These groups are created automatically when the Cognito User Pool is managed by this stack.
+
+Pit stop groups are stage-specific for regular check-ins: `PS_1_USER` maps to stage 1, `PS_2_USER` to stage 2, and so on. Any pit stop group can still be used for `Quit Riding` check-ins.
 
 Assign a user to a group:
 
@@ -158,6 +160,11 @@ aws cognito-idp admin-add-user-to-group \
   --user-pool-id <pool-id> \
   --username admin@example.com \
   --group-name ADMINISTRATOR
+
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id <pool-id> \
+  --username pitstop1@example.com \
+  --group-name PS_1_USER
 ```
 
 Verify group membership:

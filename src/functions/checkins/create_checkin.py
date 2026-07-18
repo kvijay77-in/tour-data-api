@@ -35,8 +35,13 @@ from validation import (
     validate_iso_datetime,
     ValidationError
 )
-from models import CheckIn, CheckInMethod, RideStatus, utc_now_iso
-from rbac import require_permission, Permission
+from models import CheckIn, CheckInMethod, RideStatus, StageType, utc_now_iso
+from rbac import (
+    Permission,
+    get_user_pit_stop_stage_numbers,
+    has_non_pit_stop_checkin_access,
+    require_permission,
+)
 
 logger = get_logger(__name__)
 
@@ -76,6 +81,51 @@ def _normalize_keys_to_camel_case(payload):
         return normalized
 
     return payload
+
+
+def _authorize_pit_stop_role_checkin(
+    event,
+    stage_number,
+    stage_type,
+    is_not_riding,
+    is_quit_riding,
+):
+    """Enforce stage-aware check-in access for pit-stop-only users."""
+    assigned_stage_numbers = get_user_pit_stop_stage_numbers(event)
+    if not assigned_stage_numbers:
+        return None
+
+    if has_non_pit_stop_checkin_access(event):
+        return None
+
+    if is_quit_riding:
+        return None
+
+    if is_not_riding:
+        return error_response(
+            error_code="PIT_STOP_ROLE_STAGE_MISMATCH",
+            message="Pit stop users may only perform Quit Riding or assigned PIT_STOP regular check-ins.",
+            status_code=403
+        )
+
+    if stage_type != StageType.PIT_STOP.value:
+        return error_response(
+            error_code="PIT_STOP_ROLE_STAGE_MISMATCH",
+            message="Pit stop users may only perform regular check-ins for PIT_STOP stages.",
+            status_code=403
+        )
+
+    if stage_number not in assigned_stage_numbers:
+        return error_response(
+            error_code="PIT_STOP_ROLE_STAGE_MISMATCH",
+            message=(
+                f"Pit stop user is not authorized for stage {stage_number}. "
+                f"Assigned stages: {sorted(assigned_stage_numbers)}"
+            ),
+            status_code=403
+        )
+
+    return None
 
 
 def lambda_handler(event, context):
@@ -134,6 +184,7 @@ def lambda_handler(event, context):
         notes = body.get('notes')
         client_timestamp = body.get('timestamp')  # Optional: for offline-synced check-ins
         stage_number = None
+        stage_type = None
         
         # Validate client-supplied timestamp if provided
         if client_timestamp:
@@ -226,6 +277,7 @@ def lambda_handler(event, context):
 
             stage = stages[stage_number]
             stage_id = stage.get('stageId')
+            stage_type = stage.get('type')
         
         # Step 2: Verify rider is registered for this tour
         tour_rider = get_tour_item(
@@ -240,6 +292,16 @@ def lambda_handler(event, context):
                 message=f"Rider {rider_id} is not registered for this tour",
                 status_code=400
             )
+
+        deny = _authorize_pit_stop_role_checkin(
+            event,
+            stage_number=stage_number,
+            stage_type=stage_type,
+            is_not_riding=is_not_riding,
+            is_quit_riding=is_quit_riding,
+        )
+        if deny:
+            return deny
         
         # Step 3: Check for existing check-ins (business rules)
         existing_checkins = query_tour_items(
