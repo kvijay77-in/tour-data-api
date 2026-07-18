@@ -583,6 +583,8 @@ Runtime-provisioned tour tables must also be tagged with the same `SubscriptionI
 
 Lambda handlers check API-level **permissions** (what action is being performed) rather than Cognito group names (who the caller is). Standard groups are mapped through `GROUP_PERMISSIONS` in `rbac.py`, while pit stop groups are resolved dynamically from the `PS_<stage>_USER` naming pattern. This allows additional pit stop groups to be introduced without changing backend code.
 
+When a user has multiple roles, permission resolution uses a single effective role with priority `ADMINISTRATOR` > `SUPER_USER` > first `PS_<n>_USER` in claim order > `HOTEL_STAFF` > `GUEST`. If none of these roles are present, the legacy union of mapped non-priority groups continues to apply. This keeps role behavior deterministic while preserving compatibility for other role combinations.
+
 For regular check-ins, pit stop access is stage-aware. A user with `PS_1_USER` may create a normal check-in only for stage `1` when that ride stage type is `PIT_STOP`; `PS_2_USER` behaves the same for stage `2`, and so on. `START` is always stage `0`, the last stage is always `FINISH`, and pit stop roles must never authorize regular check-ins for `START` or `FINISH`. A user may belong to multiple pit stop groups, and any `PS_<n>_USER` role may still create `Quit Riding` check-ins.
 
 **Permissions and group mapping:**

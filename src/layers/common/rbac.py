@@ -32,6 +32,7 @@ Permission → Group mapping (current default):
     DASHBOARD         |      ✅       |     ✅     |      ✅      |     ❌      |   ✅  |   ❌
 """
 
+import json
 import re
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
@@ -123,6 +124,16 @@ PIT_STOP_GROUP_PERMISSIONS = {
     Permission.DASHBOARD,
 }
 
+ROLE_PRIORITY_ORDER = (
+    "ADMINISTRATOR",
+    "SUPER_USER",
+)
+
+LOW_PRIORITY_STANDARD_GROUPS = (
+    "HOTEL_STAFF",
+    "GUEST",
+)
+
 
 # ============================================================================
 # HELPERS — group extraction
@@ -150,28 +161,61 @@ def get_user_groups(event: Dict[str, Any]) -> List[str]:
         .get('claims', {})
     )
 
-    groups_raw = jwt_claims.get('cognito:groups', '')
+    # Prefer Cognito groups, but also tolerate common custom role claims.
+    # Some clients/proxies serialize multi-value claims in different formats.
+    claim_candidates = [
+        jwt_claims.get('cognito:groups'),
+        jwt_claims.get('groups'),
+        jwt_claims.get('custom:roles'),
+        jwt_claims.get('roles'),
+        jwt_claims.get('role'),
+    ]
 
-    # Already a list (used in unit tests / local SAM invocations)
-    if isinstance(groups_raw, list):
-        return [g for g in groups_raw if g]
+    parsed_groups: List[str] = []
+    for candidate in claim_candidates:
+        parsed_groups.extend(_parse_group_claim(candidate))
 
+    deduped_groups: List[str] = []
+    seen = set()
+    for group in parsed_groups:
+        if group in seen:
+            continue
+        deduped_groups.append(group)
+        seen.add(group)
+
+    return deduped_groups
+
+
+def _parse_group_claim(groups_raw: Any) -> List[str]:
+    """Parse a role/group claim in list, JSON-list, or delimited string forms."""
     if not groups_raw:
         return []
 
-    # API Gateway and some local/test paths can serialise Cognito array claims
-    # as either comma-separated strings or bracketed list-like strings.
-    raw_groups = groups_raw.strip()
-    if raw_groups.startswith('[') and raw_groups.endswith(']'):
-        raw_groups = raw_groups[1:-1]
+    if isinstance(groups_raw, list):
+        return [str(group).strip() for group in groups_raw if str(group).strip()]
 
-    groups: List[str] = []
-    for group in raw_groups.split(','):
-        cleaned = group.strip().strip("'\"")
-        if cleaned:
-            groups.append(cleaned)
+    if not isinstance(groups_raw, str):
+        return []
 
-    return groups
+    raw = groups_raw.strip()
+    if not raw:
+        return []
+
+    # Handles JSON arrays like ["PS_1_USER", "PS_3_USER"]
+    if raw.startswith('[') and raw.endswith(']'):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(group).strip() for group in parsed if str(group).strip()]
+        except json.JSONDecodeError:
+            raw = raw[1:-1]
+
+    # Tolerate both comma and whitespace-delimited values.
+    groups = [
+        token.strip().strip("'\"")
+        for token in re.split(r'[\s,]+', raw)
+    ]
+    return [group for group in groups if group]
 
 
 def has_any_group(user_groups: List[str], required_groups: List[str]) -> bool:
@@ -211,6 +255,34 @@ def get_user_pit_stop_stage_numbers(event: Dict[str, Any]) -> Set[int]:
     return stage_numbers
 
 
+def get_effective_group(user_groups: List[str]) -> Optional[str]:
+    """
+    Resolve one effective group for permission decisions.
+
+    Priority:
+    1. ADMINISTRATOR
+    2. SUPER_USER
+    3. First pit-stop role in request order (PS_<n>_USER)
+    4. HOTEL_STAFF
+    5. GUEST
+
+    If none of the above exists, return None so legacy union mapping can apply.
+    """
+    for priority_group in ROLE_PRIORITY_ORDER:
+        if priority_group in user_groups:
+            return priority_group
+
+    for group in user_groups:
+        if is_pit_stop_group(group):
+            return group
+
+    for low_priority_group in LOW_PRIORITY_STANDARD_GROUPS:
+        if low_priority_group in user_groups:
+            return low_priority_group
+
+    return None
+
+
 def has_non_pit_stop_checkin_access(event: Dict[str, Any]) -> bool:
     """Return True when any non pit-stop group grants generic CHECKIN access."""
     for group in get_user_groups(event):
@@ -227,12 +299,16 @@ def has_non_pit_stop_checkin_access(event: Dict[str, Any]) -> bool:
 
 def get_user_permissions(event: Dict[str, Any]) -> Set[Permission]:
     """
-    Resolve the full set of API permissions for the current caller.
+    Resolve API permissions for the current caller.
 
-    Looks up each Cognito group the caller belongs to in GROUP_PERMISSIONS
-    and returns the union of all granted permissions.  Groups not present in
-    GROUP_PERMISSIONS are silently ignored, making it safe to add new Cognito
-    groups (e.g. for other applications) without breaking existing mappings.
+    Multi-role resolution uses one effective group with priority:
+    ADMINISTRATOR > SUPER_USER > first PS_<n>_USER in claim order >
+    HOTEL_STAFF > GUEST.
+
+    If none of these priority roles exists, non-priority groups are resolved
+    with legacy union semantics (mapped groups are combined; unknown groups are
+    ignored). This keeps behavior deterministic for admin/super/pit-stop users
+    while preserving compatibility for other role combinations.
 
     Args:
         event: Lambda event dict from API Gateway HTTP API.
@@ -242,6 +318,16 @@ def get_user_permissions(event: Dict[str, Any]) -> Set[Permission]:
     """
     user_groups = get_user_groups(event)
     permissions: Set[Permission] = set()
+
+    effective_group = get_effective_group(user_groups)
+    if effective_group:
+        if is_pit_stop_group(effective_group):
+            permissions.update(PIT_STOP_GROUP_PERMISSIONS)
+        else:
+            permissions.update(GROUP_PERMISSIONS.get(effective_group, []))
+        return permissions
+
+    # Legacy fallback for non-priority groups to preserve existing behavior.
     for group in user_groups:
         if is_pit_stop_group(group):
             permissions.update(PIT_STOP_GROUP_PERMISSIONS)

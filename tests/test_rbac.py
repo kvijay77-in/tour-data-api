@@ -150,6 +150,45 @@ class TestGetUserGroups:
         }
         assert get_user_groups(event) == ['SUPER_USER']
 
+    def test_json_array_group_string(self):
+        from rbac import get_user_groups
+        event = {
+            'requestContext': {
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'cognito:groups': '["PS_1_USER", "PS_3_USER"]'}
+                    }
+                }
+            }
+        }
+        assert get_user_groups(event) == ['PS_1_USER', 'PS_3_USER']
+
+    def test_whitespace_separated_group_string(self):
+        from rbac import get_user_groups
+        event = {
+            'requestContext': {
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'cognito:groups': 'PS_1_USER PS_3_USER'}
+                    }
+                }
+            }
+        }
+        assert get_user_groups(event) == ['PS_1_USER', 'PS_3_USER']
+
+    def test_falls_back_to_custom_roles_claim(self):
+        from rbac import get_user_groups
+        event = {
+            'requestContext': {
+                'authorizer': {
+                    'jwt': {
+                        'claims': {'custom:roles': '["PS_1_USER", "PS_3_USER"]'}
+                    }
+                }
+            }
+        }
+        assert get_user_groups(event) == ['PS_1_USER', 'PS_3_USER']
+
 
 class TestHasAnyGroup:
     def test_has_matching_group(self):
@@ -259,6 +298,45 @@ class TestGetUserPermissions:
         assert Permission.READ in perms
         assert Permission.CHECKIN in perms
         assert Permission.DASHBOARD in perms
+
+    def test_admin_and_pit_stop_roles_use_admin_priority(self):
+        from rbac import get_user_permissions, Permission
+        event = _make_event(groups=['PS_1_USER', 'ADMINISTRATOR'])
+        perms = get_user_permissions(event)
+        assert Permission.TOUR_MANAGE in perms
+        assert Permission.RIDE_MANAGE in perms
+        assert Permission.CHECKIN_MANUAL in perms
+
+    def test_super_user_and_pit_stop_roles_use_super_user_priority(self):
+        from rbac import get_user_permissions, Permission
+        event = _make_event(groups=['PS_1_USER', 'SUPER_USER'])
+        perms = get_user_permissions(event)
+        assert Permission.CHECKIN_MANUAL in perms
+        assert Permission.TOUR_MANAGE not in perms
+
+    def test_pit_stop_role_has_priority_over_hotel_staff(self):
+        from rbac import get_user_permissions, Permission
+        event = _make_event(groups=['HOTEL_STAFF', 'PS_2_USER'])
+        perms = get_user_permissions(event)
+        assert Permission.DASHBOARD in perms
+
+    def test_hotel_staff_has_priority_over_guest(self):
+        from rbac import get_user_permissions, Permission
+        event = _make_event(groups=['GUEST', 'HOTEL_STAFF'])
+        perms = get_user_permissions(event)
+        assert Permission.CHECKIN in perms
+        assert Permission.DASHBOARD not in perms
+
+    def test_effective_group_priority_chain(self):
+        from rbac import get_effective_group
+        assert get_effective_group(['GUEST', 'HOTEL_STAFF']) == 'HOTEL_STAFF'
+        assert get_effective_group(['HOTEL_STAFF', 'PS_4_USER']) == 'PS_4_USER'
+        assert get_effective_group(['PS_3_USER', 'SUPER_USER']) == 'SUPER_USER'
+        assert get_effective_group(['SUPER_USER', 'ADMINISTRATOR']) == 'ADMINISTRATOR'
+
+    def test_multiple_pit_stop_roles_use_first_role(self):
+        from rbac import get_effective_group
+        assert get_effective_group(['PS_3_USER', 'PS_1_USER']) == 'PS_3_USER'
 
     def test_multiple_pit_stop_groups_return_multiple_stage_numbers(self):
         from rbac import get_user_pit_stop_stage_numbers
