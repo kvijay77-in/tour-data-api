@@ -98,7 +98,7 @@ def validate_stage_id(stage_id: str) -> None:
     """
     if not re.match(r'^S\d{3}$', stage_id):
         raise ValidationError(
-            f"Invalid Stage ID format: {stage_id}. Expected format: S001, S002",
+            f"Invalid Stage ID format: {stage_id}. Expected format: S000, S001",
             {"field": "stageId", "value": stage_id}
         )
 
@@ -225,9 +225,10 @@ def validate_stage_number(stage_number: int, total_stages: int) -> None:
     Raises:
         ValidationError: If stage number is invalid
     """
-    if stage_number < 1 or stage_number > total_stages:
+    max_stage_number = total_stages - 1
+    if stage_number < 0 or stage_number > max_stage_number:
         raise ValidationError(
-            f"Invalid stage number: {stage_number}. Must be between 1 and {total_stages}",
+            f"Invalid stage number: {stage_number}. Must be between 0 and {max_stage_number}",
             {"field": "stageNumber", "value": stage_number, "maxStages": total_stages}
         )
 

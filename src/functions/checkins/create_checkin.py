@@ -224,7 +224,7 @@ def lambda_handler(event, context):
             except ValidationError as e:
                 return bad_request_response(str(e))
 
-            stage = stages[stage_number - 1]
+            stage = stages[stage_number]
             stage_id = stage.get('stageId')
         
         # Step 2: Verify rider is registered for this tour

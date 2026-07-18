@@ -88,20 +88,20 @@ MOCK_RIDES = [
         'status': RideStatus.ACTIVE.value,
         'stages': [
             {
-                'stageId': 'S001',
-                'stageNumber': 1,
+                'stageId': 'S000',
+                'stageNumber': 0,
                 'type': 'START',
                 'name': 'Start Point'
             },
             {
-                'stageId': 'S002',
-                'stageNumber': 2,
+                'stageId': 'S001',
+                'stageNumber': 1,
                 'type': 'PIT_STOP',
                 'name': 'Pit Stop 1'
             },
             {
-                'stageId': 'S003',
-                'stageNumber': 3,
+                'stageId': 'S002',
+                'stageNumber': 2,
                 'type': 'FINISH',
                 'name': 'Finish Line'
             }
@@ -115,10 +115,10 @@ MOCK_RIDES = [
 MOCK_CHECKINS = [
     {
         'rideId': 'RIDE001',
-        'checkInId': 'R1#001#2026-02-11T10:30:00Z',
+        'checkInId': 'R1#000#2026-02-11T10:30:00Z',
         'riderId': 'R1',
-        'stageNumber': 1,
-        'stageId': 'S001',
+        'stageNumber': 0,
+        'stageId': 'S000',
         'timestamp': '2026-02-11T10:30:00Z',
         'checkedInBy': 'system',
         'method': CheckInMethod.QR_SCAN.value,

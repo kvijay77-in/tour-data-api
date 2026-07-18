@@ -48,16 +48,16 @@ tour_riders:
 # Applied to all rides. Override per ride if needed.
 # Types: START, PIT_STOP, FINISH
 default_stages:
-  - stage_number: 1
+  - stage_number: 0
     type: "START"
     name: "Start Point"
-  - stage_number: 2
+  - stage_number: 1
     type: "PIT_STOP"
     name: "Pit Stop 1"
-  - stage_number: 3
+  - stage_number: 2
     type: "PIT_STOP"
     name: "Pit Stop 2"
-  - stage_number: 4
+  - stage_number: 3
     type: "FINISH"
     name: "Finish"
 
@@ -71,11 +71,11 @@ default_stages:
 # Check-in scenario fields:
 #   not_riding     - Count of riders marked "Not Riding" for the ride
 #   quit_groups    - List of quit groups:
-#                      after_stage: Stage number after which rider quit
+#                      after_stage: Stage number after which rider quit (0-based)
 #                      count: Number of riders in this group
 #   finished       - Count of riders who completed all stages ("rest" = remaining)
 #   in_progress    - List of in-progress groups (for ACTIVE rides only):
-#                      at_stage: Last stage the rider checked in at
+#                      at_stage: Last stage the rider checked in at (0-based)
 #                      count: Number of riders at this stage
 #
 # Rider counts in a check-in scenario MUST add up to tour_riders.total.
@@ -94,11 +94,11 @@ rides:
     checkin_scenario:
       not_riding: 0
       quit_groups:
-        - after_stage: 1        # 5 riders quit after START
+        - after_stage: 0        # 5 riders quit after START
           count: 5
-        - after_stage: 2        # 5 riders quit after PS1
+        - after_stage: 1        # 5 riders quit after PS1
           count: 5
-        - after_stage: 3        # 15 riders quit after PS2
+        - after_stage: 2        # 15 riders quit after PS2
           count: 15
       finished: "rest"          # Remaining 45 riders finished
 
@@ -114,11 +114,11 @@ rides:
     checkin_scenario:
       not_riding: 5
       quit_groups:
-        - after_stage: 1        # 6 riders quit after START
+        - after_stage: 0        # 6 riders quit after START
           count: 6
-        - after_stage: 2        # 6 riders quit after PS1
+        - after_stage: 1        # 6 riders quit after PS1
           count: 6
-        - after_stage: 3        # 11 riders quit after PS2
+        - after_stage: 2        # 11 riders quit after PS2
           count: 11
       finished: "rest"          # Remaining 42 riders finished
 
@@ -135,17 +135,17 @@ rides:
     checkin_scenario:
       not_riding: 4
       quit_groups:
-        - after_stage: 2        # 4 riders quit after PS1
+        - after_stage: 1        # 4 riders quit after PS1
           count: 4
-        - after_stage: 3        # 5 riders quit after PS2
+        - after_stage: 2        # 5 riders quit after PS2
           count: 5
       finished: 10
       in_progress:
-        - at_stage: 1           # 10 riders checked in only at START
+        - at_stage: 0           # 10 riders checked in only at START
           count: 10
-        - at_stage: 2           # 14 riders checked in up to PS1
+        - at_stage: 1           # 14 riders checked in up to PS1
           count: 14
-        - at_stage: 3           # 23 riders checked in up to PS2
+        - at_stage: 2           # 23 riders checked in up to PS2
           count: 23
 
   # ---- Day 4: PLANNED ----

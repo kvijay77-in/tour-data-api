@@ -222,8 +222,8 @@ Both provisioning methods create the same resources: a Tour record in the shared
 **Stage Object Structure (embedded in stages array):**
 ```json
 {
-  "stageId": "S001",
-  "stageNumber": 1,
+   "stageId": "S000",
+   "stageNumber": 0,
   "type": "START|PIT_STOP|FINISH",
   "name": "Start|PS1|PS2|Finish",
   "location": "Location name",
@@ -252,7 +252,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | rideId | String | Ride ID (partition key) |
 | checkInId | String | `<riderId>#<stageNumber>#<timestamp>` (sort key) |
 | riderId | String | Rider ID |
-| stageNumber | Number | Stage number (1-based) |
+| stageNumber | Number | Stage number (0-based) |
 | stageId | String | Stage ID reference |
 | timestamp | String | ISO 8601 timestamp of check-in |
 | checkedInBy | String | User ID who performed check-in |
@@ -331,7 +331,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | Tour ID | Free-form (configurable by tour admin) | `TOT-2026`, `TDF2026`, `charity-ride-01` |
 | Rider ID | R + Number (no padding) | `R1`, `R57`, `R102` |
 | Ride ID | RIDE + 3-digit padded | `RIDE001`, `RIDE008` |
-| Stage ID | S + 3-digit padded | `S001`, `S002` |
+| Stage ID | S + 3-digit padded | `S000`, `S001` |
 | Check-In ID | UUID | `660e8400-e29b-41d4-a716-446655440000` |
 | Notification ID | UUID | `770e8400-e29b-41d4-a716-446655440000` |
 
@@ -384,9 +384,9 @@ Status is derived from flags, not stored directly:
    - Not Riding and Quit Riding check-ins are exempt from this check
 
 4. **Stage Numbering:**
-   - Start: stageNumber = 1
-   - Pit Stops: stageNumber = 2, 3, 4, ...
-   - Finish: stageNumber = (total stages)
+   - Start: stageNumber = 0
+   - Pit Stops: stageNumber = 1, 2, 3, ...
+   - Finish: stageNumber = (total stages - 1)
 
 # Cost Optimization Strategies
 

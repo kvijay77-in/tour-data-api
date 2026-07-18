@@ -334,17 +334,18 @@ def generate_rides(config):
             stages = []
             total_dist = ride_def.get('total_distance', 100.0)
             num_stages = len(default_stages)
-            for sdef in default_stages:
-                sn = sdef['stage_number']
-                if sn == 1:
+            for idx, sdef in enumerate(default_stages):
+                sn = idx
+                stage_position = idx + 1
+                if sn == 0:
                     loc = ride_def.get('start_location', f'City {day}')
                     dist = 0.0
                 elif sdef['type'] == 'FINISH':
                     loc = ride_def.get('finish_location', f'City {day + 1}')
                     dist = total_dist
                 else:
-                    loc = f"{sdef['name']} - Km {round(sn * total_dist / num_stages)}"
-                    dist = round(sn * total_dist / num_stages, 1)
+                    loc = f"{sdef['name']} - Km {round(stage_position * total_dist / num_stages)}"
+                    dist = round(stage_position * total_dist / num_stages, 1)
 
                 stages.append({
                     'stageId': f"{ride_id}-S{sn:03d}",
@@ -419,7 +420,7 @@ def _make_timestamp(ride_date, base_hour, rider_num):
 def _stage_base_hour(flag_off_time, stage_number):
     """Calculate base hour for a given stage."""
     flag_off_hour = int(flag_off_time.split(':')[0])
-    return flag_off_hour + (stage_number - 1) * 2
+    return flag_off_hour + stage_number * 2
 
 
 def generate_checkins(ride_scenarios, tour_riders, config, rng):
@@ -455,9 +456,9 @@ def generate_checkins(ride_scenarios, tour_riders, config, rng):
             ts = _make_timestamp(ride_date, nr_hour, rnum)
             all_checkins.append({
                 'rideId': ride_id,
-                'checkInId': f"{rider_id}#001#{ts}",
+                'checkInId': f"{rider_id}#000#{ts}",
                 'riderId': rider_id,
-                'stageNumber': 1,
+                'stageNumber': 0,
                 'stageId': stages[0]['stageId'],
                 'timestamp': ts,
                 'checkedInBy': 'admin-001',
@@ -479,8 +480,8 @@ def generate_checkins(ride_scenarios, tour_riders, config, rng):
             for rider_id in quit_riders:
                 rnum = int(rider_id[1:])
 
-                # Normal check-ins at stages 1 through after_stage
-                for stage in stages[:after_stage]:
+                # Normal check-ins at stages 0 through after_stage
+                for stage in stages[:after_stage + 1]:
                     sn = stage['stageNumber']
                     bh = _stage_base_hour(flag_off, sn)
                     ts = _make_timestamp(ride_date, bh, rnum)
@@ -503,7 +504,7 @@ def generate_checkins(ride_scenarios, tour_riders, config, rng):
                 # Quit riding check-in at the quit stage (1 hour later)
                 quit_bh = _stage_base_hour(flag_off, after_stage) + 1
                 quit_ts = _make_timestamp(ride_date, quit_bh, rnum)
-                quit_stage = stages[after_stage - 1]
+                quit_stage = stages[after_stage]
                 all_checkins.append({
                     'rideId': ride_id,
                     'checkInId': f"{rider_id}#{after_stage:03d}#{quit_ts}",
@@ -562,8 +563,8 @@ def generate_checkins(ride_scenarios, tour_riders, config, rng):
 
             for rider_id in ip_riders:
                 rnum = int(rider_id[1:])
-                # Check-ins from stage 1 through at_stage
-                for stage in stages[:at_stage]:
+                # Check-ins from stage 0 through at_stage
+                for stage in stages[:at_stage + 1]:
                     sn = stage['stageNumber']
                     bh = _stage_base_hour(flag_off, sn)
                     ts = _make_timestamp(ride_date, bh, rnum)

@@ -137,7 +137,7 @@ def build_rides(config):
             # Build stages from day-level override or default
             stages_cfg = day_cfg.get('stages', default_stages_cfg)
             stages = []
-            for idx, stage_def in enumerate(stages_cfg, 1):
+            for idx, stage_def in enumerate(stages_cfg):
                 stages.append({
                     'stage_id': f'S{idx:03d}',
                     'stage_number': idx,

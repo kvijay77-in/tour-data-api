@@ -97,7 +97,7 @@ class TestStageIdValidation:
     
     def test_valid_stage_ids(self):
         """Test valid Stage ID formats"""
-        valid_ids = ['S001', 'S010', 'S100', 'S999']
+        valid_ids = ['S000', 'S010', 'S100', 'S999']
         for stage_id in valid_ids:
             validate_stage_id(stage_id)  # Should not raise
     

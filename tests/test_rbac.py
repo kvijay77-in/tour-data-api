@@ -515,7 +515,7 @@ class TestCreateRideRBAC:
                 'finishLocation': 'City C',
                 'totalDistance': 80.0,
                 'flagOffTime': '08:00',
-                'stages': [{'stageId': 'S001', 'stageNumber': 1, 'type': 'START', 'name': 'Start'}]
+                'stages': [{'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'}]
             },
             method='POST'
         )
@@ -649,7 +649,7 @@ class TestCreateCheckinRBAC:
         return {
             'riderId': 'R2',
             'rideId': 'RIDE001',
-            'stageNumber': 2,
+            'stageNumber': 1,
             'method': method
         }
 

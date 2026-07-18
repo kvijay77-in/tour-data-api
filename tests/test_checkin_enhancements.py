@@ -209,10 +209,10 @@ class TestTimestampBasedQuitRidingValidation:
         checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
         checkin_table.put_item(Item={
             'rideId': 'RIDE001',
-            'checkInId': 'R1#002#2026-02-11T12:00:00Z',
+            'checkInId': 'R1#001#2026-02-11T12:00:00Z',
             'riderId': 'R1',
-            'stageNumber': 2,
-            'stageId': 'S002',
+            'stageNumber': 1,
+            'stageId': 'S001',
             'timestamp': '2026-02-11T12:00:00Z',
             'checkedInBy': 'system',
             'method': 'MANUAL',
@@ -228,7 +228,7 @@ class TestTimestampBasedQuitRidingValidation:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R1',
             'rideId': 'RIDE001',
-            'stageNumber': 2,
+            'stageNumber': 1,
             'method': 'QR_SCAN'
         })
 
@@ -248,10 +248,10 @@ class TestTimestampBasedQuitRidingValidation:
         checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
         checkin_table.put_item(Item={
             'rideId': 'RIDE001',
-            'checkInId': 'R1#002#2026-02-11T12:00:00Z',
+            'checkInId': 'R1#001#2026-02-11T12:00:00Z',
             'riderId': 'R1',
-            'stageNumber': 2,
-            'stageId': 'S002',
+            'stageNumber': 1,
+            'stageId': 'S001',
             'timestamp': '2026-02-11T12:00:00Z',
             'checkedInBy': 'system',
             'method': 'MANUAL',
@@ -268,7 +268,7 @@ class TestTimestampBasedQuitRidingValidation:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R1',
             'rideId': 'RIDE001',
-            'stageNumber': 2,
+            'stageNumber': 1,
             'method': 'QR_SCAN',
             'timestamp': '2026-02-11T11:00:00Z'
         })
@@ -290,10 +290,10 @@ class TestTimestampBasedQuitRidingValidation:
         checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
         checkin_table.put_item(Item={
             'rideId': 'RIDE001',
-            'checkInId': 'R1#002#2026-02-11T12:00:00Z',
+            'checkInId': 'R1#001#2026-02-11T12:00:00Z',
             'riderId': 'R1',
-            'stageNumber': 2,
-            'stageId': 'S002',
+            'stageNumber': 1,
+            'stageId': 'S001',
             'timestamp': '2026-02-11T12:00:00Z',
             'checkedInBy': 'system',
             'method': 'MANUAL',
@@ -310,7 +310,7 @@ class TestTimestampBasedQuitRidingValidation:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R1',
             'rideId': 'RIDE001',
-            'stageNumber': 3,
+            'stageNumber': 2,
             'method': 'QR_SCAN',
             'timestamp': '2026-02-11T13:00:00Z'
         })
@@ -339,10 +339,10 @@ class TestNotRidingValidation:
         checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
         checkin_table.put_item(Item={
             'rideId': 'RIDE001',
-            'checkInId': 'R2#001#2026-02-11T07:00:00Z',
+            'checkInId': 'R2#000#2026-02-11T07:00:00Z',
             'riderId': 'R2',
-            'stageNumber': 1,
-            'stageId': 'S001',
+            'stageNumber': 0,
+            'stageId': 'S000',
             'timestamp': '2026-02-11T07:00:00Z',
             'checkedInBy': 'admin',
             'method': 'QR_SCAN',
@@ -359,7 +359,7 @@ class TestNotRidingValidation:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R2',
             'rideId': 'RIDE001',
-            'stageNumber': 1,
+            'stageNumber': 0,
             'method': 'QR_SCAN',
             'timestamp': '2026-02-11T06:00:00Z'
         })
@@ -380,10 +380,10 @@ class TestNotRidingValidation:
         checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
         checkin_table.put_item(Item={
             'rideId': 'RIDE001',
-            'checkInId': 'R2#001#2026-02-11T07:00:00Z',
+            'checkInId': 'R2#000#2026-02-11T07:00:00Z',
             'riderId': 'R2',
-            'stageNumber': 1,
-            'stageId': 'S001',
+            'stageNumber': 0,
+            'stageId': 'S000',
             'timestamp': '2026-02-11T07:00:00Z',
             'checkedInBy': 'admin',
             'method': 'QR_SCAN',
@@ -399,7 +399,7 @@ class TestNotRidingValidation:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R2',
             'rideId': 'RIDE001',
-            'stageNumber': 1,
+            'stageNumber': 0,
             'method': 'QR_SCAN',
             'isNotRiding': True
         })
@@ -489,7 +489,7 @@ class TestLateSyncClosedRides:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R2',
             'rideId': 'RIDE001',
-            'stageNumber': 1,
+            'stageNumber': 0,
             'method': 'QR_SCAN'
         })
 
@@ -523,7 +523,7 @@ class TestLateSyncClosedRides:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R2',
             'rideId': 'RIDE001',
-            'stageNumber': 1,
+            'stageNumber': 0,
             'method': 'QR_SCAN',
             'timestamp': '2026-02-11T14:00:00Z'
         })
@@ -558,7 +558,7 @@ class TestLateSyncClosedRides:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R2',
             'rideId': 'RIDE001',
-            'stageNumber': 1,
+            'stageNumber': 0,
             'method': 'QR_SCAN',
             'timestamp': '2026-02-11T19:00:00Z'
         })
@@ -582,13 +582,13 @@ class TestDuplicateCheckInDetection:
         dynamodb_utils.TABLES = {}
         dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 
-        # R1 already has a check-in at stage 1 (from MOCK_CHECKINS)
+        # R1 already has a check-in at stage 0 (from MOCK_CHECKINS)
         from create_checkin import lambda_handler
 
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R1',
             'rideId': 'RIDE001',
-            'stageNumber': 1,
+            'stageNumber': 0,
             'method': 'QR_SCAN'
         })
 
@@ -596,7 +596,7 @@ class TestDuplicateCheckInDetection:
         assert response['statusCode'] == 409
         body = json.loads(response['body'])
         assert body['error']['code'] == 'DUPLICATE_CHECKIN'
-        assert 'already checked in at stage 1' in body['error']['message']
+        assert 'already checked in at stage 0' in body['error']['message']
 
     def test_allow_checkin_at_different_stage(self, checkin_dynamodb):
         """Check-in at a different stage should succeed"""
@@ -604,13 +604,13 @@ class TestDuplicateCheckInDetection:
         dynamodb_utils.TABLES = {}
         dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 
-        # R1 has check-in at stage 1; stage 2 should be fine
+        # R1 has check-in at stage 0; stage 1 should be fine
         from create_checkin import lambda_handler
 
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R1',
             'rideId': 'RIDE001',
-            'stageNumber': 2,
+            'stageNumber': 1,
             'method': 'QR_SCAN'
         })
 
@@ -623,13 +623,13 @@ class TestDuplicateCheckInDetection:
         dynamodb_utils.TABLES = {}
         dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 
-        # R1 has check-in at stage 1; QR at same stage should be allowed
+        # R1 has check-in at stage 0; QR at same stage should be allowed
         from create_checkin import lambda_handler
 
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R1',
             'rideId': 'RIDE001',
-            'stageNumber': 1,
+            'stageNumber': 0,
             'method': 'QR_SCAN',
             'isQuitRiding': True
         })
@@ -720,10 +720,10 @@ class TestDashboardETag:
         checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
         checkin_table.put_item(Item={
             'rideId': 'RIDE001',
-            'checkInId': 'R2#001#2026-02-11T11:00:00Z',
+            'checkInId': 'R2#000#2026-02-11T11:00:00Z',
             'riderId': 'R2',
-            'stageNumber': 1,
-            'stageId': 'S001',
+            'stageNumber': 0,
+            'stageId': 'S000',
             'timestamp': '2026-02-11T11:00:00Z',
             'checkedInBy': 'system',
             'method': 'QR_SCAN',
@@ -768,7 +768,7 @@ class TestClientTimestampValidation:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R2',
             'rideId': 'RIDE001',
-            'stageNumber': 1,
+            'stageNumber': 0,
             'method': 'QR_SCAN',
             'timestamp': 'not-a-timestamp'
         })
@@ -788,7 +788,7 @@ class TestClientTimestampValidation:
         event = _make_checkin_event(MOCK_TOUR_ID, {
             'riderId': 'R2',
             'rideId': 'RIDE001',
-            'stageNumber': 1,
+            'stageNumber': 0,
             'method': 'QR_SCAN',
             'timestamp': client_ts
         })

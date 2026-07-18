@@ -185,7 +185,7 @@ options:
 ### What is GENERATED and written
 
 - **TourRider records** — randomly selected from existing profiles (seed-controlled), assigned sequential rider IDs: R1, R2, ... R{count}
-- **Ride records** — sequential ride IDs: RIDE001, RIDE002, etc. Multi-ride days append "Ride N" to the name. Stages auto-numbered: S001, S002, S003, S004
+- **Ride records** — sequential ride IDs: RIDE001, RIDE002, etc. Multi-ride days append "Ride N" to the name. Stages auto-numbered: S000, S001, S002, S003
 - **CheckIn records** — realistic timestamps based on flag-off time and stage position:
   - Not Riding: single check-in at START with `isNotRiding=true`
   - Quit Riding: normal check-ins at completed stages + quit check-in (`isQuitRiding=true`) at the stage where they stopped

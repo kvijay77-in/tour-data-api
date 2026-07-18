@@ -76,7 +76,7 @@ This is expected to have info about each day's ride such as date, no. of rides f
 
 Ride No. can be sequence for the day and when combined with date will be unique. Date is the key attribute to identify today's ride. This is much easier for user to understand. However for technical reason if unique identifier is considered efficient, the it can be added and auto-generated.
 
-There will be always 'Start' and 'Finish'  first and last stages respectively. In between, depending on no. of stages there will be 'n' no. of pit stop1, PS1, PS2, PS3, etc. Simple labels Start, 'Finish and PS'n' where 'n' is stage no. can be used. But provision to have a different label for stages should be available. Any further aspects of the stages are expected to be part of data model design phase and the same will be reviewed before development can begin.
+There will be always 'Start' and 'Finish'  first and last stages respectively. In between, depending on no. of stages there will be 'n' no. of pit stop1, PS1, PS2, PS3, etc. Simple labels Start, 'Finish and PS'n' where 'n' is stage no. can be used. Stage numbering must be zero-based (Start = 0, then 1, 2, ...). But provision to have a different label for stages should be available. Any further aspects of the stages are expected to be part of data model design phase and the same will be reviewed before development can begin.
 
 ## Check-In registry
 This is expected to have each check in captured through QR Code scanning for all stages. This will also include 'Not Riding' and 'Quit Riding' check in. An exceptional manual entry for 'Quit Riding' is also possible. The following info should be captured for every check-in.

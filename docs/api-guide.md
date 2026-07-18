@@ -184,8 +184,8 @@ Note: `GET /v1/riders/{riderId}/checkins` is not currently implemented.
   "flagOffTime": "08:00",
   "stages": [
     {
-      "stageId": "S001",
-      "stageNumber": 1,
+      "stageId": "S000",
+      "stageNumber": 0,
       "type": "START",
       "name": "Start"
     }
@@ -198,7 +198,7 @@ Note: `GET /v1/riders/{riderId}/checkins` is not currently implemented.
 {
   "riderId": "R57",
   "rideId": "RIDE001",
-  "stageNumber": 2,
+  "stageNumber": 0,
   "method": "QR_SCAN",
   "isNotRiding": false,
   "isQuitRiding": false,
@@ -278,7 +278,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
    - Rider ID: `R1` to `R999` (`^R([1-9]\d{0,2})$`)
    - Tour ID: 3-50 chars, starts with letter/number, allowed chars `[a-zA-Z0-9_.-]`
    - Ride ID: `RIDE###` (for example `RIDE001`)
-   - Stage ID: `S###` (for example `S001`)
+  - Stage ID: `S###` (for example `S000`)
    - Date: `YYYY-MM-DD`
    - Datetime: ISO 8601 UTC with `Z` suffix only
    - Time: `HH:MM` 24-hour format
@@ -289,7 +289,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 
 ### Implemented Check-In Business Validation
 
-1. Stage number must be within ride stage range.
+1. Stage number must be within ride stage range (0 to total stages - 1).
 2. Rider must be registered in the tour.
 3. Duplicate normal check-in at same stage is rejected (`DUPLICATE_CHECKIN`).
 4. Duplicate Not Riding is rejected (`DUPLICATE_NOT_RIDING`).

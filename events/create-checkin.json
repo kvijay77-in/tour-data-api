@@ -26,6 +26,6 @@
       "principalId": "user123"
     }
   },
-  "body": "{\"riderId\": \"R57\", \"rideId\": \"RIDE001\", \"stageNumber\": 1, \"method\": \"QR_SCAN\", \"isNotRiding\": false, \"isQuitRiding\": false}",
+  "body": "{\"riderId\": \"R57\", \"rideId\": \"RIDE001\", \"stageNumber\": 0, \"method\": \"QR_SCAN\", \"isNotRiding\": false, \"isQuitRiding\": false}",
   "isBase64Encoded": false
 }
