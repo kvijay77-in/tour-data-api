@@ -19,7 +19,6 @@ from response import (
 from usermgmt_common import (
     audit_log,
     cognito_error_response,
-    generate_username,
     get_cognito_client,
     get_management_user_pool_id,
     list_pool_groups,
@@ -81,10 +80,11 @@ def lambda_handler(event, context):
         user_pool_id = get_management_user_pool_id()
         valid_groups = set(list_pool_groups(cognito, user_pool_id))
         roles = validate_roles(body.get("roles"), valid_groups)
+        cognito_username = email
 
         create_response = cognito.admin_create_user(
             UserPoolId=user_pool_id,
-            Username=generate_username(),
+            Username=cognito_username,
             UserAttributes=_create_attributes(
                 {
                     "email": email,

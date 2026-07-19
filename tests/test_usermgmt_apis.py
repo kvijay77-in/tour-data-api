@@ -163,6 +163,7 @@ def test_create_and_list_users_with_filters(monkeypatch):
     created_body = json.loads(created['body'])
     assert created['statusCode'] == 201
     assert created_body['data']['cognitoUserId']
+    assert created_body['data']['username'] == 'new.user@example.com'
 
     listed = list_mod.lambda_handler(
         _event(method='GET', groups=['ADMINISTRATOR'], query_params={'role': 'SUPER_USER'}),
