@@ -20,9 +20,9 @@ from validation import ValidationError, validate_email
 logger = get_logger(__name__)
 
 E164_PATTERN = re.compile(r"^\+[1-9]\d{1,14}$")
-UUID_PATTERN = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
-    r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+COGNITO_SUB_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 
 
@@ -89,10 +89,10 @@ def parse_limit(value: Optional[str]) -> Optional[int]:
 
 
 def validate_cognito_user_id(cognito_user_id: str) -> None:
-    """Validate Cognito user id (sub UUID)."""
-    if not cognito_user_id or not UUID_PATTERN.fullmatch(cognito_user_id):
+    """Validate Cognito user id (sub) without enforcing RFC UUID version bits."""
+    if not cognito_user_id or not COGNITO_SUB_PATTERN.fullmatch(cognito_user_id):
         raise ValidationError(
-            "cognitoUserId must be a valid UUID",
+            "cognitoUserId must be a valid Cognito sub",
             {"field": "cognitoUserId", "value": cognito_user_id},
         )
 

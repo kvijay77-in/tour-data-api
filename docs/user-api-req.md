@@ -77,6 +77,7 @@ Error:
 
 Rules:
 1. `cognitoUserId` maps to Cognito `sub` and is the key used by frontend for enable/disable/update.
+2. Treat `cognitoUserId` as the raw Cognito `sub` value. Do not enforce RFC UUID version/variant validation on this field.
 2. `roles` are Cognito group names.
 
 ## Endpoint Specifications
@@ -198,7 +199,7 @@ Implementation notes:
 - Purpose: enable user account.
 
 Path param:
-1. `cognitoUserId` required (Cognito `sub`, UUID string)
+1. `cognitoUserId` required (Cognito `sub` string)
 
 Response `200` example:
 
@@ -223,7 +224,7 @@ Business rule:
 - Purpose: disable user account.
 
 Path param:
-1. `cognitoUserId` required (Cognito `sub`, UUID string)
+1. `cognitoUserId` required (Cognito `sub` string)
 
 Response `200` example:
 
@@ -248,7 +249,7 @@ Business rule:
 - Purpose: update existing user fields from Modify User screen.
 
 Path param:
-1. `cognitoUserId` required (Cognito `sub`, UUID string)
+1. `cognitoUserId` required (Cognito `sub` string)
 
 Request body:
 

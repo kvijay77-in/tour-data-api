@@ -23,7 +23,7 @@ set -uo pipefail
 # Configuration
 # -------------------------------------------------------------------------
 STACK_NAME="${1:-dev}"
-TEST_USERNAME="${TEST_USERNAME:-kvijay77@yahoo.co.in}"
+TEST_USERNAME="${TEST_USERNAME:-tot.admin@someusefulapps.com}"
 TEST_PASSWORD="${TEST_PASSWORD:-}"
 
 echo ""

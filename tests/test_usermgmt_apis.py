@@ -242,3 +242,40 @@ def test_enable_disable_update_user_flow(monkeypatch):
 
     groups_after = fake.admin_list_groups_for_user(UserPoolId='pool-1', Username='seed-user')['Groups']
     assert [g['GroupName'] for g in groups_after] == ['ADMINISTRATOR']
+
+
+def test_disable_user_accepts_cognito_sub_without_rfc_uuid_bits(monkeypatch):
+    fake = FakeCognitoClient()
+    os.environ['MGMT_USER_POOL_ID'] = 'pool-1'
+
+    fake.users['seed-user'] = {
+        'Username': 'seed-user',
+        'Attributes': [
+            {'Name': 'sub', 'Value': 'c1536d0a-e071-707f-571e-9526433c84ac'},
+            {'Name': 'email', 'Value': 'flow.user@example.com'},
+            {'Name': 'name', 'Value': 'Flow User'},
+        ],
+        'Enabled': True,
+        'UserStatus': 'CONFIRMED',
+        'Groups': {'GUEST'},
+    }
+
+    disable_mod = _load('disable_managed_user')
+    monkeypatch.setattr(disable_mod, 'get_cognito_client', lambda: fake)
+
+    disabled = disable_mod.lambda_handler(
+        _event(
+            method='POST',
+            groups=['ADMINISTRATOR'],
+            path_params={'cognitoUserId': 'c1536d0a-e071-707f-571e-9526433c84ac'},
+        ),
+        None,
+    )
+    disabled_body = json.loads(disabled['body'])
+
+    assert disabled['statusCode'] == 200
+    assert disabled_body['data'] == {
+        'cognitoUserId': 'c1536d0a-e071-707f-571e-9526433c84ac',
+        'enabled': False,
+    }
+    assert fake.users['seed-user']['Enabled'] is False
