@@ -82,6 +82,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Admin UserMgmt | POST | `/v1/admin/usermgmt/users` | Create Cognito user and assign roles | [Admin User Management](#admin-user-management) |
 | Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/enable` | Enable Cognito user | [Admin User Management](#admin-user-management) |
 | Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/disable` | Disable Cognito user | [Admin User Management](#admin-user-management) |
+| Admin UserMgmt | DELETE | `/v1/admin/usermgmt/users/{cognitoUserId}` | Delete Cognito user | [Admin User Management](#admin-user-management) |
 | Admin UserMgmt | PUT | `/v1/admin/usermgmt/users/{cognitoUserId}` | Update Cognito profile and roles | [Admin User Management](#admin-user-management) |
 | Notifications | GET | `/v1/tours/{tourId}/notifications` | List notifications | [Notifications](#notifications) |
 | Notifications | POST | `/v1/tours/{tourId}/notifications` | Create notification | [Notifications](#notifications) |
@@ -153,6 +154,7 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 | `POST /v1/admin/usermgmt/users` | None | None | Required: `email, roles`; Optional: `phoneNumber, name` | `email` valid; `phoneNumber` E.164 when present; `roles` non-empty valid groups; role assignment failure triggers rollback + `ROLE_ASSIGNMENT_CONFLICT` |
 | `POST /v1/admin/usermgmt/users/{cognitoUserId}/enable` | `cognitoUserId` (required UUID) | None | None | Idempotent success for already enabled users |
 | `POST /v1/admin/usermgmt/users/{cognitoUserId}/disable` | `cognitoUserId` (required UUID) | None | None | Idempotent success for already disabled users |
+| `DELETE /v1/admin/usermgmt/users/{cognitoUserId}` | `cognitoUserId` (required UUID) | None | None | Deletes the Cognito user directly with `AdminDeleteUser`; SDK/API flow does not require a prior disable |
 | `PUT /v1/admin/usermgmt/users/{cognitoUserId}` | `cognitoUserId` (required UUID) | None | At least one of: `email, phoneNumber, name, roles` | `roles` when provided is full replacement set; empty `phoneNumber`/`name` clears Cognito attribute |
 
 #### Notifications

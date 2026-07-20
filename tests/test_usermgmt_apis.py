@@ -245,6 +245,40 @@ def test_enable_disable_update_user_flow(monkeypatch):
     assert [g['GroupName'] for g in groups_after] == ['ADMINISTRATOR']
 
 
+def test_delete_user_flow_without_prior_disable(monkeypatch):
+    fake = FakeCognitoClient()
+    os.environ['MGMT_USER_POOL_ID'] = 'pool-1'
+
+    bootstrap = fake.admin_create_user(
+        UserPoolId='pool-1',
+        Username='delete-user',
+        UserAttributes=[
+            {'Name': 'email', 'Value': 'delete.user@example.com'},
+            {'Name': 'name', 'Value': 'Delete User'},
+            {'Name': 'email_verified', 'Value': 'true'},
+        ],
+    )
+    user_sub = _attr_value(bootstrap['User']['Attributes'], 'sub')
+
+    delete_mod = _load('delete_managed_user')
+    monkeypatch.setattr(delete_mod, 'get_cognito_client', lambda: fake)
+
+    deleted = delete_mod.lambda_handler(
+        _event(
+            method='DELETE',
+            groups=['ADMINISTRATOR'],
+            path_params={'cognitoUserId': user_sub},
+        ),
+        None,
+    )
+    deleted_body = json.loads(deleted['body'])
+
+    assert deleted['statusCode'] == 200
+    assert deleted_body['data']['cognitoUserId'] == user_sub
+    assert deleted_body['data']['deleted'] is True
+    assert 'delete-user' not in fake.users
+
+
 def test_disable_user_accepts_cognito_sub_without_rfc_uuid_bits(monkeypatch):
     fake = FakeCognitoClient()
     os.environ['MGMT_USER_POOL_ID'] = 'pool-1'

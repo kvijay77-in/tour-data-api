@@ -8,7 +8,8 @@ It is not part of app end-user documentation.
 Implement backend APIs to support these Administrator-only app features:
 1. New user onboarding
 2. Enable/disable existing user
-3. Modify user profile (email, phone, name)
+3. Delete existing user
+4. Modify user profile (email, phone, name)
 
 ## API Base Path
 
@@ -31,6 +32,7 @@ All endpoints must be under:
 | Create user | POST | `/v1/admin/usermgmt/users` |
 | Enable user | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/enable` |
 | Disable user | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/disable` |
+| Delete user | DELETE | `/v1/admin/usermgmt/users/{cognitoUserId}` |
 | Update user profile | PUT | `/v1/admin/usermgmt/users/{cognitoUserId}` |
 
 ## Common Response Envelope
@@ -78,7 +80,7 @@ Error:
 Rules:
 1. `cognitoUserId` maps to Cognito `sub` and is the key used by frontend for enable/disable/update.
 2. Treat `cognitoUserId` as the raw Cognito `sub` value. Do not enforce RFC UUID version/variant validation on this field.
-2. `roles` are Cognito group names.
+3. `roles` are Cognito group names.
 
 ## Endpoint Specifications
 
@@ -243,6 +245,34 @@ Business rule:
 1. Idempotent: disabling an already disabled user should still return success.
 
 ### 6) Update User Profile
+
+### 6) Delete User
+
+- Method: `DELETE`
+- Path: `/v1/admin/usermgmt/users/{cognitoUserId}`
+- Purpose: permanently delete an existing user from the management Cognito user pool.
+
+Path param:
+1. `cognitoUserId` required (Cognito `sub` string)
+
+Response `200` example:
+
+```json
+{
+  "success": true,
+  "data": {
+    "cognitoUserId": "6b3f8ca7-2f56-4f1a-a4a5-2fd9a29d3f5d",
+    "deleted": true
+  },
+  "timestamp": "2026-07-18T12:00:00Z"
+}
+```
+
+Business rules:
+1. The backend must call Cognito `AdminDeleteUser` directly.
+2. A prior disable step is not required in the SDK/API flow, even if the AWS Console UI expects disable before manual deletion.
+
+### 7) Update User Profile
 
 - Method: `PUT`
 - Path: `/v1/admin/usermgmt/users/{cognitoUserId}`

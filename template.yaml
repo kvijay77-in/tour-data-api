@@ -1256,6 +1256,33 @@ Resources:
             Path: /v1/admin/usermgmt/users/{cognitoUserId}/disable
             Method: POST
 
+  DeleteUserMgmtUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/users/
+      Handler: delete_managed_user.lambda_handler
+      Description: Delete Cognito user for admin user management
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminDeleteUser
+                - cognito-idp:ListUsers
+              Resource:
+                - !If
+                  - CreateCognito
+                  - !GetAtt CognitoUserPool.Arn
+                  - !Ref CognitoUserPoolArn
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/admin/usermgmt/users/{cognitoUserId}
+            Method: DELETE
+
   UpdateUserMgmtUserFunction:
     Type: AWS::Serverless::Function
     Properties:
