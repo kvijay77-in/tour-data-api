@@ -117,6 +117,73 @@ def select_tour_riders(profiles, count, rng):
     return tour_riders
 
 
+def _offset_time_hhmm(base_time, offset_minutes):
+    """Return HH:MM offset from a base HH:MM time."""
+    hour, minute = _parse_flag_off(base_time)
+    total_minutes = max(0, hour * 60 + minute + offset_minutes)
+    return f"{(total_minutes // 60) % 24:02d}:{total_minutes % 60:02d}"
+
+
+def _offset_timestamp(base_date, base_time, offset_minutes):
+    """Return ISO timestamp offset from a base date/time pair."""
+    hour, minute = _parse_flag_off(base_time)
+    base_dt = datetime.fromisoformat(
+        f"{base_date}T{hour:02d}:{minute:02d}:00+00:00"
+    )
+    shifted = base_dt + timedelta(minutes=offset_minutes)
+    return shifted.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def _derive_close_time(flag_off_time, stages_cfg, fallback_minutes=720):
+    """Derive ride close time from the latest planned pit-stop window."""
+    latest_window_end = None
+    for stage_def in stages_cfg:
+        if stage_def.get('type') != 'PIT_STOP':
+            continue
+        estimated_open = int(stage_def.get('estimated_open_time', 0))
+        duration = int(stage_def.get('pit_stop_duration', 0))
+        latest_window_end = max(latest_window_end or 0, estimated_open + duration)
+
+    return _offset_time_hhmm(flag_off_time, latest_window_end or fallback_minutes)
+
+
+def _build_stage(stage_def, idx, base_date, flag_off_time, ride_status):
+    """Build a simulated stage record with pit-stop planning/runtime fields."""
+    stage = {
+        'stage_id': f'S{idx:03d}',
+        'stage_number': idx,
+        'type': stage_def['type'],
+        'name': stage_def['name'],
+    }
+
+    if stage_def.get('location') is not None:
+        stage['location'] = stage_def['location']
+    if stage_def.get('distance_from_start') is not None:
+        stage['distance_from_start'] = Decimal(str(stage_def['distance_from_start']))
+
+    if stage_def['type'] != 'PIT_STOP':
+        return stage
+
+    estimated_open_time = int(stage_def.get('estimated_open_time', idx * 90))
+    pit_stop_duration = int(stage_def.get('pit_stop_duration', 45))
+    stage['estimated_open_time'] = estimated_open_time
+    stage['pit_stop_duration'] = pit_stop_duration
+
+    if ride_status == 'STARTED':
+        stage['pit_stop_status'] = 'OPEN'
+        stage['opened_at'] = _offset_timestamp(base_date, flag_off_time, estimated_open_time)
+    elif ride_status in ('COMPLETED', 'CLOSED'):
+        stage['pit_stop_status'] = 'CLOSED'
+        stage['opened_at'] = _offset_timestamp(base_date, flag_off_time, estimated_open_time)
+        stage['closed_at'] = _offset_timestamp(
+            base_date,
+            flag_off_time,
+            estimated_open_time + pit_stop_duration,
+        )
+
+    return stage
+
+
 def build_rides(config):
     """
     Generate ride records from schedule configuration.
@@ -133,24 +200,23 @@ def build_rides(config):
 
         for ride_num in range(1, rides_count + 1):
             ride_id = f"RIDE{ride_counter:03d}"
+            status = day_cfg.get('status', 'PLANNED')
+            flag_off = day_cfg.get('flag_off_time', '06:00')
 
             # Build stages from day-level override or default
             stages_cfg = day_cfg.get('stages', default_stages_cfg)
             stages = []
             for idx, stage_def in enumerate(stages_cfg):
-                stages.append({
-                    'stage_id': f'S{idx:03d}',
-                    'stage_number': idx,
-                    'type': stage_def['type'],
-                    'name': stage_def['name'],
-                })
+                stages.append(
+                    _build_stage(stage_def, idx, day_cfg['date'], flag_off, status)
+                )
 
             ride_name = day_cfg.get('name', f"Day {day_cfg['day']}")
             if rides_count > 1:
                 ride_name = f"{ride_name} Ride {ride_num}"
 
-            status = day_cfg.get('status', 'PLANNED')
-            flag_off = day_cfg.get('flag_off_time', '06:00')
+            open_time = day_cfg.get('open_time', flag_off)
+            close_time = day_cfg.get('close_time', _derive_close_time(flag_off, stages_cfg))
 
             ride = {
                 'ride_id': ride_id,
@@ -161,6 +227,8 @@ def build_rides(config):
                 'finish_location': day_cfg.get('finish_location', 'Finish'),
                 'total_distance': Decimal(str(day_cfg.get('distance', 100))),
                 'flag_off_time': flag_off,
+                'open_time': open_time,
+                'close_time': close_time,
                 'status': status,
                 'stages': stages,
                 'created_at': '2026-02-01T00:00:00Z',
@@ -411,12 +479,27 @@ def generate_checkins(rides_data, tour_riders, rng):
 
 def _stage_to_dynamodb(stage):
     """Convert snake_case stage attributes to DynamoDB table attribute names."""
-    return {
+    item = {
         'stageId': stage['stage_id'],
         'stageNumber': stage['stage_number'],
         'type': stage['type'],
         'name': stage['name'],
     }
+    if stage.get('location') is not None:
+        item['location'] = stage['location']
+    if stage.get('distance_from_start') is not None:
+        item['distanceFromStart'] = stage['distance_from_start']
+    if stage.get('estimated_open_time') is not None:
+        item['estimatedOpenTime'] = stage['estimated_open_time']
+    if stage.get('pit_stop_duration') is not None:
+        item['pitStopDuration'] = stage['pit_stop_duration']
+    if stage.get('pit_stop_status') is not None:
+        item['pitStopStatus'] = stage['pit_stop_status']
+    if stage.get('opened_at') is not None:
+        item['openedAt'] = stage['opened_at']
+    if stage.get('closed_at') is not None:
+        item['closedAt'] = stage['closed_at']
+    return item
 
 
 def _tour_rider_to_dynamodb(item):
@@ -443,6 +526,8 @@ def _ride_to_dynamodb(item):
         'finishLocation': item['finish_location'],
         'totalDistance': item['total_distance'],
         'flagOffTime': item['flag_off_time'],
+        'openTime': item['open_time'],
+        'closeTime': item['close_time'],
         'status': item['status'],
         'stages': [_stage_to_dynamodb(s) for s in item['stages']],
         'createdAt': item['created_at'],

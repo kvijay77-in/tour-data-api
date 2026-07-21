@@ -74,6 +74,7 @@ def lambda_handler(event, context):
 
         now = utc_now_iso()
         ride['status'] = 'OPEN'
+        ride['openedAt'] = now
         ride['updatedAt'] = now
 
         logger.info(f"Opening today's ride: {ride.get('rideId')}")

@@ -24,6 +24,7 @@ This app will have 2 primary features:
 Apart from these following Admin features will also be available.  
 1. Add/Modify Ride
 1. Close Ride
+1. Open/Close Pit Stop stage
 
 To understand how the data is used refer to the following document from Check-In App project.
  - [App Requirements](https://github.com/kvijay77-in/tour-mgmt-app/blob/main/docs/Requirements.md)
@@ -73,14 +74,18 @@ This is expected to have info about each day's ride such as date, no. of rides f
 - Date of the ride
 - No. of Stages
 - Distance
+- Ride opening time
 - Flag off time
+- Ride closing time
 - Ride Status (Active/Closed)
 
 Ride No. can be sequence for the day and when combined with date will be unique. Date is the key attribute to identify today's ride. This is much easier for user to understand. However for technical reason if unique identifier is considered efficient, the it can be added and auto-generated.
 
-There will be always 'Start' and 'Finish'  first and last stages respectively. In between, depending on no. of stages there will be 'n' no. of pit stop1, PS1, PS2, PS3, etc. Simple labels Start, 'Finish and PS'n' where 'n' is stage no. can be used. Stage numbering must be zero-based (Start = 0, then 1, 2, ...). But provision to have a different label for stages should be available. Any further aspects of the stages are expected to be part of data model design phase and the same will be reviewed before development can begin.
+There will be always 'Start' and 'Finish'  first and last stages respectively. In between, depending on no. of stages there will be 'n' no. of pit stop1, PS1, PS2, PS3, etc. Simple labels Start, 'Finish and PS'n' where 'n' is stage no. can be used. Stage numbering must be zero-based (Start = 0, then 1, 2, ...). But provision to have a different label for stages should be available. Stage definitions must also support `estimatedOpenTime` (minutes from `flagOffTime`, or from `startedAt` when the ride is started), `pitStopDuration` (minutes), and `pitStopStatus` (`OPEN` / `CLOSED`, empty when the ride is created). `estimatedTimeFromStart` is redundant and must not be used. Any further aspects of the stages are expected to be part of data model design phase and the same will be reviewed before development can begin.
 
 Pit stop role mapping for regular check-ins must follow the ride stage definition. A user with role `PS_<n>_USER` may perform a regular check-in only when the request is for stage `n` and that stage type is `PIT_STOP`. If a ride has fewer pit stops, or the matching stage number is the `FINISH` stage, that role must not be able to perform a regular check-in for that stage.
+
+Pit stop open and close actions must follow the same stage mapping. A user with role `PS_<n>_USER` may open or close only pit stop stage `n`, while `SUPER_USER` and `ADMINISTRATOR` may open or close any pit stop stage. These actions are valid only for `PIT_STOP` stages and only when the ride status is `STARTED`. Opening a pit stop must record the stage `openedAt` timestamp and closing it must record the stage `closedAt` timestamp.
 
 ## Check-In registry
 This is expected to have each check in captured through QR Code scanning for all stages. This will also include 'Not Riding' and 'Quit Riding' check in. An exceptional manual entry for 'Quit Riding' is also possible. The following info should be captured for every check-in.

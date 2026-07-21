@@ -27,6 +27,7 @@ Permission → Group mapping (current default):
     CHECKIN           |      ✅       |     ✅     |      ✅      |     ✅      |   ❌  |   ❌
     CHECKIN_MANUAL    |      ✅       |     ✅     |      ❌      |     ❌      |   ❌  |   ❌
     RIDE_MANAGE       |      ✅       |     ❌     |      ❌      |     ❌      |   ❌  |   ❌
+    PIT_STOP_MANAGE   |      ✅       |     ✅     |      ✅      |     ❌      |   ❌  |   ❌
     TOUR_MANAGE       |      ✅       |     ❌     |      ❌      |     ❌      |   ❌  |   ❌
     USER_LIST         |      ✅       |     ✅     |      ❌      |     ❌      |   ❌  |   ❌
     DASHBOARD         |      ✅       |     ✅     |      ✅      |     ❌      |   ✅  |   ❌
@@ -65,6 +66,9 @@ class Permission(str, Enum):
     RIDE_MANAGE = "RIDE_MANAGE"
     """Create, update, or close a ride."""
 
+    PIT_STOP_MANAGE = "PIT_STOP_MANAGE"
+    """Open or close a PIT_STOP stage for a ride."""
+
     TOUR_MANAGE = "TOUR_MANAGE"
     """Create or archive a tour."""
 
@@ -91,6 +95,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.CHECKIN,
         Permission.CHECKIN_MANUAL,
         Permission.RIDE_MANAGE,
+        Permission.PIT_STOP_MANAGE,
         Permission.TOUR_MANAGE,
         Permission.USER_LIST,
         Permission.DASHBOARD,
@@ -100,6 +105,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.READ,
         Permission.CHECKIN,
         Permission.CHECKIN_MANUAL,
+        Permission.PIT_STOP_MANAGE,
         Permission.USER_LIST,
         Permission.DASHBOARD,
         Permission.NOTIFICATION_MANAGE,
@@ -121,6 +127,7 @@ PIT_STOP_GROUP_PATTERN = re.compile(r'^PS_(\d+)_USER$')
 PIT_STOP_GROUP_PERMISSIONS = {
     Permission.READ,
     Permission.CHECKIN,
+    Permission.PIT_STOP_MANAGE,
     Permission.DASHBOARD,
 }
 
@@ -392,3 +399,26 @@ def require_permission(
         return forbidden_response(deny_message)
 
     return None
+
+
+def require_pit_stop_stage_access(
+    event: Dict[str, Any],
+    stage_number: int,
+    message: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Enforce stage-bound access for pit-stop-only users."""
+    assigned_stage_numbers = get_user_pit_stop_stage_numbers(event)
+    if not assigned_stage_numbers:
+        return None
+
+    if has_non_pit_stop_checkin_access(event):
+        return None
+
+    if stage_number in assigned_stage_numbers:
+        return None
+
+    deny_message = message or (
+        f"Pit stop user is not authorized for stage {stage_number}. "
+        f"Assigned stages: {sorted(assigned_stage_numbers)}"
+    )
+    return forbidden_response(deny_message)

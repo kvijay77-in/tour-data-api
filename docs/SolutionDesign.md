@@ -210,11 +210,14 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | finishLocation | String | Finishing place |
 | description | String | Optional description |
 | totalDistance | Number | Distance in km |
+| openTime | String | Planned ride opening time for start / not-riding check-ins |
 | flagOffTime | String | Planned flag-off time |
+| closeTime | String | Planned ride closing time |
 | status | String | OPEN, STARTED, PLANNED, ACTIVE, COMPLETED, CLOSED |
 | stages | List | Array of stage objects (see below) |
 | createdAt | String | ISO 8601 timestamp |
 | updatedAt | String | ISO 8601 timestamp |
+| openedAt | String | Ride open timestamp |
 | startedAt | String | Actual start timestamp |
 | completedAt | String | Completion timestamp |
 | closedAt | String | Closed/locked timestamp |
@@ -228,9 +231,18 @@ Both provisioning methods create the same resources: a Tour record in the shared
   "name": "Start|PS1|PS2|Finish",
   "location": "Location name",
   "distanceFromStart": 0,
-  "estimatedTimeFromStart": 0
+   "estimatedOpenTime": 90,
+   "pitStopDuration": 45,
+   "pitStopStatus": "OPEN|CLOSED",
+   "openedAt": "2026-02-11T09:30:00Z",
+   "closedAt": "2026-02-11T10:15:00Z"
 }
 ```
+
+Notes:
+- `estimatedOpenTime` and `pitStopDuration` apply only to `PIT_STOP` stages.
+- `pitStopStatus`, `openedAt`, and `closedAt` are runtime-managed and remain empty when a ride is created.
+- `estimatedTimeFromStart` is removed from the stage contract.
 
 **Indexes:**
 - Primary Key: `rideId` (partition key only)
@@ -374,10 +386,18 @@ Status is derived from flags, not stored directly:
 
 3. **Ride Status:**
    - PLANNED: Ride created but not started
+   - OPEN: Ride opened for start / not-riding check-ins
+   - STARTED: Ride flagged off and pit-stop opening time becomes relative to `startedAt` when available
    - ACTIVE: Ride in progress
    - COMPLETED: All riders finished
    - CLOSED: Locked, no more check-ins allowed
    - **Late-sync for closed rides:** If client provides a `timestamp` that predates the `closedAt` value, the check-in is accepted (captured before ride was closed)
+
+4. **Pit Stop Window Management:**
+   - Only `PIT_STOP` stages support pit-stop open and close operations.
+   - Stage `pitStopStatus` transitions from empty to `OPEN` to `CLOSED`.
+   - Pit-stop open/close operations are permitted only while ride status is `STARTED`.
+   - Opening a pit stop stamps the stage `openedAt` time and closing it stamps `closedAt`.
 
 4. **Duplicate Check-In Detection:**
    - Same rider + same stage (normal check-ins only) returns 409 with `DUPLICATE_CHECKIN`
@@ -595,6 +615,7 @@ For regular check-ins, pit stop access is stage-aware. A user with `PS_1_USER` m
 | CHECKIN | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | CHECKIN_MANUAL | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | RIDE_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| PIT_STOP_MANAGE | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | TOUR_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | USER_LIST | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | DASHBOARD | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |

@@ -70,6 +70,12 @@ class StageType(str, Enum):
     FINISH = "FINISH"
 
 
+class PitStopStatus(str, Enum):
+    """Pit stop status values"""
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+
+
 class CheckInMethod(str, Enum):
     """Check-in method values"""
     QR_SCAN = "QR_SCAN"
@@ -213,12 +219,18 @@ class Stage:
     name: str
     location: Optional[str] = None
     distanceFromStart: Optional[float] = None
-    estimatedTimeFromStart: Optional[int] = None
+    estimatedOpenTime: Optional[int] = None
+    pitStopDuration: Optional[int] = None
+    pitStopStatus: Optional[PitStopStatus] = None
+    openedAt: Optional[str] = None
+    closedAt: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         data = asdict(self)
         data['type'] = self.type.value
+        if self.pitStopStatus is not None:
+            data['pitStopStatus'] = self.pitStopStatus.value
         return {k: v for k, v in data.items() if v is not None}
 
 
@@ -239,10 +251,13 @@ class Ride:
     flagOffTime: str
     status: RideStatus
     stages: List[Stage]
+    openTime: Optional[str] = None
+    closeTime: Optional[str] = None
     description: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)
     startedAt: Optional[str] = None
+    openedAt: Optional[str] = None
     completedAt: Optional[str] = None
     closedAt: Optional[str] = None
     
@@ -389,7 +404,14 @@ def create_stage_from_dict(data: Dict[str, Any]) -> Stage:
         name=data['name'],
         location=data.get('location'),
         distanceFromStart=data.get('distanceFromStart'),
-        estimatedTimeFromStart=data.get('estimatedTimeFromStart')
+        estimatedOpenTime=data.get('estimatedOpenTime'),
+        pitStopDuration=data.get('pitStopDuration'),
+        pitStopStatus=(
+            PitStopStatus(data['pitStopStatus'])
+            if data.get('pitStopStatus') is not None else None
+        ),
+        openedAt=data.get('openedAt'),
+        closedAt=data.get('closedAt')
     )
 
 
@@ -408,10 +430,13 @@ def create_ride_from_dynamodb_item(item: Dict[str, Any]) -> Ride:
         flagOffTime=item['flagOffTime'],
         status=RideStatus(item['status']),
         stages=stages,
+        openTime=item.get('openTime'),
+        closeTime=item.get('closeTime'),
         description=item.get('description'),
         createdAt=item.get('createdAt', ''),
         updatedAt=item.get('updatedAt', ''),
         startedAt=item.get('startedAt'),
+        openedAt=item.get('openedAt'),
         completedAt=item.get('completedAt'),
         closedAt=item.get('closedAt')
     )

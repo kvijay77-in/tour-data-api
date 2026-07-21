@@ -7,6 +7,10 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 
+STAGE_TYPES = {"START", "PIT_STOP", "FINISH"}
+PIT_STOP_RUNTIME_FIELDS = ('pitStopStatus', 'openedAt', 'closedAt')
+
+
 class ValidationError(Exception):
     """Validation error exception"""
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
@@ -249,3 +253,137 @@ def validate_positive_number(value: float, field_name: str) -> None:
             f"{field_name} must be a positive number",
             {"field": field_name, "value": value}
         )
+
+
+def validate_ride_stages(stages: Any) -> List[Dict[str, Any]]:
+    """Validate and normalize ride stages payload."""
+    if not isinstance(stages, list) or not stages:
+        raise ValidationError("stages must be a non-empty array", {"field": "stages"})
+
+    normalized_stages: List[Dict[str, Any]] = []
+    seen_stage_ids = set()
+
+    for index, stage in enumerate(stages):
+        if not isinstance(stage, dict):
+            raise ValidationError(
+                f"Stage at index {index} must be an object",
+                {"field": f"stages[{index}]"}
+            )
+
+        validate_required_fields(stage, ['stageId', 'stageNumber', 'type', 'name'])
+        validate_stage_id(stage['stageId'])
+
+        if not isinstance(stage['stageNumber'], int):
+            raise ValidationError(
+                f"stageNumber for stage '{stage['stageId']}' must be an integer",
+                {"field": f"stages[{index}].stageNumber", "value": stage['stageNumber']}
+            )
+
+        stage_type = stage['type']
+        if stage_type not in STAGE_TYPES:
+            raise ValidationError(
+                f"Invalid stage type: {stage_type}. Must be one of: START, PIT_STOP, FINISH",
+                {"field": f"stages[{index}].type", "value": stage_type}
+            )
+
+        if not isinstance(stage['name'], str) or not stage['name'].strip():
+            raise ValidationError(
+                f"name for stage '{stage['stageId']}' must be a non-empty string",
+                {"field": f"stages[{index}].name", "value": stage['name']}
+            )
+
+        stage_id = stage['stageId']
+        if stage_id in seen_stage_ids:
+            raise ValidationError(
+                f"Duplicate stageId: {stage_id}",
+                {"field": f"stages[{index}].stageId", "value": stage_id}
+            )
+        seen_stage_ids.add(stage_id)
+
+        normalized_stage = {
+            'stageId': stage_id,
+            'stageNumber': stage['stageNumber'],
+            'type': stage_type,
+            'name': stage['name'].strip(),
+        }
+
+        if 'location' in stage and stage['location'] is not None:
+            if not isinstance(stage['location'], str) or not stage['location'].strip():
+                raise ValidationError(
+                    f"location for stage '{stage_id}' must be a non-empty string when provided",
+                    {"field": f"stages[{index}].location", "value": stage['location']}
+                )
+            normalized_stage['location'] = stage['location'].strip()
+
+        if 'distanceFromStart' in stage and stage['distanceFromStart'] is not None:
+            if not isinstance(stage['distanceFromStart'], (int, float)) or stage['distanceFromStart'] < 0:
+                raise ValidationError(
+                    f"distanceFromStart for stage '{stage_id}' must be a non-negative number",
+                    {"field": f"stages[{index}].distanceFromStart", "value": stage['distanceFromStart']}
+                )
+            normalized_stage['distanceFromStart'] = stage['distanceFromStart']
+
+        if 'estimatedOpenTime' in stage and stage['estimatedOpenTime'] is not None:
+            if stage_type != 'PIT_STOP':
+                raise ValidationError(
+                    f"estimatedOpenTime is only applicable to PIT_STOP stages: {stage_id}",
+                    {"field": f"stages[{index}].estimatedOpenTime", "value": stage['estimatedOpenTime']}
+                )
+            if not isinstance(stage['estimatedOpenTime'], int) or stage['estimatedOpenTime'] < 0:
+                raise ValidationError(
+                    f"estimatedOpenTime for stage '{stage_id}' must be a non-negative integer",
+                    {"field": f"stages[{index}].estimatedOpenTime", "value": stage['estimatedOpenTime']}
+                )
+            normalized_stage['estimatedOpenTime'] = stage['estimatedOpenTime']
+
+        if 'pitStopDuration' in stage and stage['pitStopDuration'] is not None:
+            if stage_type != 'PIT_STOP':
+                raise ValidationError(
+                    f"pitStopDuration is only applicable to PIT_STOP stages: {stage_id}",
+                    {"field": f"stages[{index}].pitStopDuration", "value": stage['pitStopDuration']}
+                )
+            if not isinstance(stage['pitStopDuration'], int) or stage['pitStopDuration'] < 0:
+                raise ValidationError(
+                    f"pitStopDuration for stage '{stage_id}' must be a non-negative integer",
+                    {"field": f"stages[{index}].pitStopDuration", "value": stage['pitStopDuration']}
+                )
+            normalized_stage['pitStopDuration'] = stage['pitStopDuration']
+
+        if 'estimatedTimeFromStart' in stage:
+            raise ValidationError(
+                "estimatedTimeFromStart is no longer supported; use estimatedOpenTime and pitStopDuration",
+                {"field": f"stages[{index}].estimatedTimeFromStart"}
+            )
+
+        for runtime_field in PIT_STOP_RUNTIME_FIELDS:
+            if runtime_field in stage and stage[runtime_field] is not None:
+                raise ValidationError(
+                    f"{runtime_field} is managed by the system and cannot be set in ride payloads",
+                    {"field": f"stages[{index}].{runtime_field}", "value": stage[runtime_field]}
+                )
+
+        normalized_stages.append(normalized_stage)
+
+    ordered_stages = sorted(normalized_stages, key=lambda stage: stage['stageNumber'])
+
+    for expected_stage_number, stage in enumerate(ordered_stages):
+        if stage['stageNumber'] != expected_stage_number:
+            raise ValidationError(
+                f"stageNumber values must be sequential starting at 0. Expected {expected_stage_number}, got {stage['stageNumber']}",
+                {"field": "stages.stageNumber", "value": stage['stageNumber']}
+            )
+
+    if ordered_stages[0]['type'] != 'START':
+        raise ValidationError("First stage must be type START", {"field": "stages[0].type"})
+
+    if ordered_stages[-1]['type'] != 'FINISH':
+        raise ValidationError("Last stage must be type FINISH", {"field": "stages[-1].type"})
+
+    for stage in ordered_stages[1:-1]:
+        if stage['type'] != 'PIT_STOP':
+            raise ValidationError(
+                "Intermediate stages must be type PIT_STOP",
+                {"field": "stages.type", "value": stage['type']}
+            )
+
+    return ordered_stages

@@ -934,6 +934,54 @@ Resources:
             Path: /v1/tours/{tourId}/rides/{rideId}/close
             Method: POST
 
+  OpenPitStopFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: open_pit_stop.lambda_handler
+      Description: Open a PIT_STOP stage for a started ride
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/open
+            Method: POST
+
+  ClosePitStopFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/rides/
+      Handler: close_pit_stop.lambda_handler
+      Description: Close a PIT_STOP stage for a started ride
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/close
+            Method: POST
+
   OpenRideFunction:
     Type: AWS::Serverless::Function
     Properties:

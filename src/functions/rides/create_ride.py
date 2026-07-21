@@ -16,8 +16,9 @@ from response import (
     not_found_response, internal_error_response
 )
 from validation import (
-    validate_tour_id, validate_required_fields, validate_iso_date,
-    validate_time_hhmm, ValidationError
+    validate_tour_id, validate_ride_id, validate_required_fields,
+    validate_iso_date, validate_time_hhmm, validate_ride_stages,
+    ValidationError
 )
 from dynamodb_utils import get_item, get_tour_item, put_tour_item
 from models import RideStatus, TourStatus, utc_now_iso
@@ -82,6 +83,11 @@ def lambda_handler(event, context):
             validate_required_fields(body, required_fields)
         except ValidationError as e:
             return bad_request_response(str(e))
+
+        try:
+            validate_ride_id(body['rideId'])
+        except ValidationError as e:
+            return bad_request_response(str(e))
         
         # Validate date
         try:
@@ -94,6 +100,18 @@ def lambda_handler(event, context):
             validate_time_hhmm(body['flagOffTime'], 'flagOffTime')
         except ValidationError as e:
             return bad_request_response(str(e))
+
+        if body.get('openTime') is not None:
+            try:
+                validate_time_hhmm(body['openTime'], 'openTime')
+            except ValidationError as e:
+                return bad_request_response(str(e))
+
+        if body.get('closeTime') is not None:
+            try:
+                validate_time_hhmm(body['closeTime'], 'closeTime')
+            except ValidationError as e:
+                return bad_request_response(str(e))
         
         # Validate numeric fields
         if not isinstance(body['totalDistance'], (int, float)) or body['totalDistance'] <= 0:
@@ -102,9 +120,10 @@ def lambda_handler(event, context):
         if not isinstance(body['rideNo'], int) or body['rideNo'] < 1:
             return bad_request_response("rideNo must be a positive integer")
         
-        # Validate stages
-        if not isinstance(body['stages'], list) or len(body['stages']) == 0:
-            return bad_request_response("stages must be a non-empty array")
+        try:
+            normalized_stages = validate_ride_stages(body['stages'])
+        except ValidationError as e:
+            return bad_request_response(str(e))
         
         # Check if tour exists and is in the right status
         logger.info(f"Checking if tour exists: {tour_id}")
@@ -146,8 +165,10 @@ def lambda_handler(event, context):
             'finishLocation': body['finishLocation'],
             'totalDistance': body['totalDistance'],
             'flagOffTime': body['flagOffTime'],
-            'stages': body['stages'],
+            'stages': normalized_stages,
             'status': RideStatus.PLANNED.value,
+            'openTime': body.get('openTime'),
+            'closeTime': body.get('closeTime'),
             'description': body.get('description'),
             'createdAt': now,
             'updatedAt': now

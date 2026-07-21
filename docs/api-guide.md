@@ -69,6 +69,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Rides | GET | `/v1/tours/{tourId}/rides/{rideId}` | Get ride | [Rides](#rides) |
 | Rides | POST | `/v1/tours/{tourId}/rides` | Create ride | [Rides](#rides) |
 | Rides | PUT | `/v1/tours/{tourId}/rides/{rideId}` | Update ride | [Rides](#rides) |
+| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/open` | Open pit stop stage | [Rides](#rides) |
+| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/close` | Close pit stop stage | [Rides](#rides) |
 | Rides | POST | `/v1/tours/{tourId}/rides/open` | Open today's ride | [Rides](#rides) |
 | Rides | POST | `/v1/tours/{tourId}/rides/start` | Start today's ride | [Rides](#rides) |
 | Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/close` | Close ride | [Rides](#rides) |
@@ -120,8 +122,10 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/{tourId}/rides/today` | `tourId` (required) | None | None | `tourId` format; 404 `NO_ACTIVE_RIDE` when no ride for current UTC date |
 | `GET /v1/tours/{tourId}/rides` | `tourId` (required) | `status` (optional) | None | `tourId` format; `status` in `OPEN, STARTED, PLANNED, ACTIVE, COMPLETED, CLOSED`; date filter not implemented |
 | `GET /v1/tours/{tourId}/rides/{rideId}` | `tourId, rideId` (required) | None | None | `tourId` format; `rideId` format `RIDE###` |
-| `POST /v1/tours/{tourId}/rides` | `tourId` (required) | None | Required: `rideId, date, rideNo, name, startLocation, finishLocation, totalDistance, flagOffTime, stages`; Optional: `description` | date `YYYY-MM-DD`; `flagOffTime` `HH:MM`; `totalDistance > 0`; `rideNo` positive integer; `stages` non-empty array; tour status `PLANNING/ACTIVE`; duplicate `rideId` rejected |
-| `PUT /v1/tours/{tourId}/rides/{rideId}` | `tourId, rideId` (required) | None | At least one of: `name, date, rideNo, startLocation, finishLocation, totalDistance, flagOffTime, stages, description, status` | date/time/number checks when fields present; `status` in `OPEN, STARTED, PLANNED, ACTIVE, COMPLETED, CLOSED` |
+| `POST /v1/tours/{tourId}/rides` | `tourId` (required) | None | Required: `rideId, date, rideNo, name, startLocation, finishLocation, totalDistance, flagOffTime, stages`; Optional: `openTime, closeTime, description` | date `YYYY-MM-DD`; `flagOffTime/openTime/closeTime` `HH:MM`; `totalDistance > 0`; `rideNo` positive integer; `stages` must be sequential with `START` first and `FINISH` last; `estimatedOpenTime` and `pitStopDuration` allowed only for `PIT_STOP`; `pitStopStatus/openedAt/closedAt` are system-managed; tour status `PLANNING/ACTIVE`; duplicate `rideId` rejected |
+| `PUT /v1/tours/{tourId}/rides/{rideId}` | `tourId, rideId` (required) | None | At least one of: `name, date, rideNo, startLocation, finishLocation, totalDistance, flagOffTime, openTime, closeTime, stages, description, status` | date/time/number checks when fields present; `status` in `OPEN, STARTED, PLANNED, ACTIVE, COMPLETED, CLOSED`; stage updates preserve live pit-stop runtime state |
+| `POST /v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/open` | `tourId, rideId, stageNumber` (required) | None | None | Caller requires `PIT_STOP_MANAGE`; stage must exist, be `PIT_STOP`, and caller must hold matching `PS_<n>_USER` role unless SUPER_USER/ADMINISTRATOR; ride status must be `STARTED`; sets `pitStopStatus=OPEN` and `openedAt` |
+| `POST /v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/close` | `tourId, rideId, stageNumber` (required) | None | None | Caller requires `PIT_STOP_MANAGE`; same stage rules as open; ride status must be `STARTED`; pit stop must already be `OPEN`; sets `pitStopStatus=CLOSED` and `closedAt` |
 | `POST /v1/tours/{tourId}/rides/open` | `tourId` (required) | None | None | Finds ride for current UTC date and sets status to `OPEN`; rejects if already `OPEN`; no `rideId` accepted |
 | `POST /v1/tours/{tourId}/rides/start` | `tourId` (required) | None | None | Finds ride for current UTC date and sets status to `STARTED`; rejects if already `STARTED`; no `rideId` accepted |
 | `POST /v1/tours/{tourId}/rides/{rideId}/close` | `tourId, rideId` (required) | None | None | Ride must exist and must not already be `CLOSED` |
@@ -202,13 +206,29 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
   "startLocation": "Geneva Central",
   "finishLocation": "Lausanne",
   "totalDistance": 65.5,
+  "openTime": "07:30",
   "flagOffTime": "08:00",
+  "closeTime": "13:30",
   "stages": [
     {
       "stageId": "S000",
       "stageNumber": 0,
       "type": "START",
       "name": "Start"
+    },
+    {
+      "stageId": "S001",
+      "stageNumber": 1,
+      "type": "PIT_STOP",
+      "name": "PS1",
+      "estimatedOpenTime": 90,
+      "pitStopDuration": 45
+    },
+    {
+      "stageId": "S002",
+      "stageNumber": 2,
+      "type": "FINISH",
+      "name": "Finish"
     }
   ]
 }
@@ -265,6 +285,7 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 | POST tours (create/provision) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST archive tour | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST/PUT rides | ✅ | ❌ | ❌ | ❌ | ❌ |
+| POST open/close pit stop | ✅ | ✅ | Assigned stage only | ❌ | ❌ |
 | POST open ride | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST start ride | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST close ride | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -289,6 +310,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 2. **Authorization (RBAC permissions in Lambda)**
    - `TOUR_MANAGE`: create/archive tours
   - `RIDE_MANAGE`: create/update/open/start/close rides
+  - `PIT_STOP_MANAGE`: open/close pit-stop stages
   - `CHECKIN`: create check-ins, with additional stage-aware enforcement for `PS_<n>_USER` roles on regular pit-stop check-ins
 
 ### Pit Stop Role Rules
@@ -298,11 +320,8 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 3. Stage `0` is always `START`, the last stage is always `FINISH`, and pit stop roles cannot create regular check-ins for either of those stage types.
 4. A user may hold multiple `PS_<n>_USER` groups and may create regular check-ins for any matching assigned pit-stop stage.
 5. Any `PS_<n>_USER` role may create a `Quit Riding` check-in.
-   - `CHECKIN`: create check-ins
-   - `CHECKIN_MANUAL`: required in addition to CHECKIN for `method=MANUAL`
-   - `DASHBOARD`: read dashboard aggregation endpoint
-   - `USER_LIST`: list tour users
-   - `NOTIFICATION_MANAGE`: create notifications
+6. `PS_<n>_USER` may open or close only pit stop stage `n`; `SUPER_USER` and `ADMINISTRATOR` may manage any pit stop stage.
+7. Pit stop open/close is valid only for `PIT_STOP` stages while the ride status is `STARTED`.
 
 3. **Identifier and format validators**
    - Rider ID: `R1` to `R999` (`^R([1-9]\d{0,2})$`)
@@ -331,7 +350,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 ### Additional Endpoint-Specific Validation Highlights
 
 1. Create Tour enforces `endDate >= startDate` and unique `tourId`.
-2. Create Ride enforces positive `totalDistance`, positive integer `rideNo`, and non-empty `stages`.
+2. Create Ride enforces positive `totalDistance`, positive integer `rideNo`, and sequential `stages` with `START` first and `FINISH` last.
 3. List filters validate enum values (`status`, `role`, `notification type`).
 4. Dashboard endpoint supports ETag and conditional `304 Not Modified`.
 

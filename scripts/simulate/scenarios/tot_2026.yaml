@@ -44,8 +44,8 @@ rides:
   # Stage types: START, PIT_STOP, FINISH
   default_stages:
     - { type: START, name: Start }
-    - { type: PIT_STOP, name: PS1 }
-    - { type: PIT_STOP, name: PS2 }
+    - { type: PIT_STOP, name: PS1, estimated_open_time: 90, pit_stop_duration: 45 }
+    - { type: PIT_STOP, name: PS2, estimated_open_time: 210, pit_stop_duration: 60 }
     - { type: FINISH, name: Finish }
 
   schedule:

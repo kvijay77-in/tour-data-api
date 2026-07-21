@@ -85,6 +85,8 @@ MOCK_RIDES = [
         'finishLocation': 'City B',
         'totalDistance': 120.5,
         'flagOffTime': '08:00',
+        'openTime': '08:00',
+        'closeTime': '13:15',
         'status': RideStatus.ACTIVE.value,
         'stages': [
             {
@@ -97,7 +99,9 @@ MOCK_RIDES = [
                 'stageId': 'S001',
                 'stageNumber': 1,
                 'type': 'PIT_STOP',
-                'name': 'Pit Stop 1'
+                'name': 'Pit Stop 1',
+                'estimatedOpenTime': 90,
+                'pitStopDuration': 45
             },
             {
                 'stageId': 'S002',

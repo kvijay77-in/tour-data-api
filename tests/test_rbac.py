@@ -231,6 +231,7 @@ class TestGroupPermissionsMapping:
         event = _make_event(groups=['PS_3_USER'])
         pit_perms = get_user_permissions(event)
         assert Permission.CHECKIN_MANUAL not in pit_perms
+        assert Permission.PIT_STOP_MANAGE in pit_perms
 
     def test_super_user_has_no_tour_or_ride_manage(self):
         from rbac import GROUP_PERMISSIONS, Permission
@@ -259,6 +260,30 @@ class TestGetUserPermissions:
         perms = get_user_permissions(event)
         assert perms == set(Permission)
 
+    def test_super_user_gets_pit_stop_manage(self):
+        from rbac import get_user_permissions, Permission
+        event = _make_event(groups=['SUPER_USER'])
+        perms = get_user_permissions(event)
+        assert Permission.PIT_STOP_MANAGE in perms
+
+
+class TestRequirePitStopStageAccess:
+    def test_admin_not_stage_bound(self):
+        from rbac import require_pit_stop_stage_access
+        event = _make_event(groups=['ADMINISTRATOR'])
+        assert require_pit_stop_stage_access(event, 3) is None
+
+    def test_pit_stop_user_allowed_for_assigned_stage(self):
+        from rbac import require_pit_stop_stage_access
+        event = _make_event(groups=['PS_2_USER'])
+        assert require_pit_stop_stage_access(event, 2) is None
+
+    def test_pit_stop_user_denied_for_unassigned_stage(self):
+        from rbac import require_pit_stop_stage_access
+        event = _make_event(groups=['PS_2_USER'])
+        response = require_pit_stop_stage_access(event, 1)
+        assert response['statusCode'] == 403
+
     def test_guest_gets_read_and_dashboard_only(self):
         from rbac import get_user_permissions, Permission
         event = _make_event(groups=['GUEST'])
@@ -285,7 +310,12 @@ class TestGetUserPermissions:
         from rbac import get_user_permissions, Permission
         event = _make_event(groups=['PS_2_USER'])
         perms = get_user_permissions(event)
-        assert perms == {Permission.READ, Permission.CHECKIN, Permission.DASHBOARD}
+        assert perms == {
+            Permission.READ,
+            Permission.CHECKIN,
+            Permission.PIT_STOP_MANAGE,
+            Permission.DASHBOARD,
+        }
 
     def test_multiple_groups_union_permissions(self):
         """User in multiple groups receives union of all their permissions."""
@@ -609,7 +639,16 @@ class TestCreateRideRBAC:
                 'finishLocation': 'City C',
                 'totalDistance': 80.0,
                 'flagOffTime': '08:00',
-                'stages': [{'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'}]
+                'openTime': '07:30',
+                'closeTime': '13:30',
+                'stages': [
+                    {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+                    {
+                        'stageId': 'S001', 'stageNumber': 1, 'type': 'PIT_STOP',
+                        'name': 'PS1', 'estimatedOpenTime': 90, 'pitStopDuration': 30
+                    },
+                    {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH', 'name': 'Finish'}
+                ]
             },
             method='POST'
         )
@@ -732,6 +771,140 @@ class TestStartRideRBAC:
         )
         response = start_ride.lambda_handler(event, None)
         assert response['statusCode'] == 403
+
+
+class TestPitStopManageRBAC:
+    def test_super_user_allowed_to_open_pit_stop(self, rbac_dynamodb):
+        open_pit_stop = _load_handler('rides', 'open_pit_stop')
+        event = _make_event(
+            groups=['SUPER_USER'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001', 'stageNumber': '1'},
+            method='POST'
+        )
+        response = open_pit_stop.lambda_handler(event, None)
+        assert response['statusCode'] != 403
+
+    def test_hotel_staff_denied_to_open_pit_stop(self, rbac_dynamodb):
+        open_pit_stop = _load_handler('rides', 'open_pit_stop')
+        event = _make_event(
+            groups=['HOTEL_STAFF'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001', 'stageNumber': '1'},
+            method='POST'
+        )
+        response = open_pit_stop.lambda_handler(event, None)
+        assert response['statusCode'] == 403
+
+
+class TestPitStopHandlers:
+    def _set_started_ride(self, dynamodb, stage_status=None):
+        table = dynamodb.Table(f'test-stack-Ride-{MOCK_TOUR_ID}')
+        ride = dict(MOCK_RIDES[0])
+        ride['status'] = 'STARTED'
+        ride['startedAt'] = '2026-02-11T08:00:00Z'
+        if stage_status is not None:
+            ride['stages'] = [dict(stage) for stage in ride['stages']]
+            ride['stages'][1]['pitStopStatus'] = stage_status
+            if stage_status == 'OPEN':
+                ride['stages'][1]['openedAt'] = '2026-02-11T09:30:00Z'
+            if stage_status == 'CLOSED':
+                ride['stages'][1]['openedAt'] = '2026-02-11T09:30:00Z'
+                ride['stages'][1]['closedAt'] = '2026-02-11T10:15:00Z'
+        table.put_item(Item=_convert_floats(ride))
+
+    def test_open_pit_stop_success_for_assigned_user(self, rbac_dynamodb):
+        self._set_started_ride(rbac_dynamodb)
+        open_pit_stop = _load_handler('rides', 'open_pit_stop')
+        event = _make_event(
+            groups=['PS_1_USER'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001', 'stageNumber': '1'},
+            method='POST'
+        )
+        response = open_pit_stop.lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['data']['stages'][1]['pitStopStatus'] == 'OPEN'
+        assert 'openedAt' in body['data']['stages'][1]
+
+    def test_open_pit_stop_denied_for_wrong_stage_user(self, rbac_dynamodb):
+        self._set_started_ride(rbac_dynamodb)
+        open_pit_stop = _load_handler('rides', 'open_pit_stop')
+        event = _make_event(
+            groups=['PS_2_USER'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001', 'stageNumber': '1'},
+            method='POST'
+        )
+        response = open_pit_stop.lambda_handler(event, None)
+        assert response['statusCode'] == 403
+
+    def test_open_pit_stop_requires_started_ride(self, rbac_dynamodb):
+        open_pit_stop = _load_handler('rides', 'open_pit_stop')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001', 'stageNumber': '1'},
+            method='POST'
+        )
+        response = open_pit_stop.lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+    def test_open_pit_stop_rejects_non_pit_stop_stage(self, rbac_dynamodb):
+        self._set_started_ride(rbac_dynamodb)
+        open_pit_stop = _load_handler('rides', 'open_pit_stop')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001', 'stageNumber': '0'},
+            method='POST'
+        )
+        response = open_pit_stop.lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+    def test_close_pit_stop_success(self, rbac_dynamodb):
+        self._set_started_ride(rbac_dynamodb, stage_status='OPEN')
+        close_pit_stop = _load_handler('rides', 'close_pit_stop')
+        event = _make_event(
+            groups=['PS_1_USER'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001', 'stageNumber': '1'},
+            method='POST'
+        )
+        response = close_pit_stop.lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['data']['stages'][1]['pitStopStatus'] == 'CLOSED'
+        assert 'closedAt' in body['data']['stages'][1]
+
+    def test_close_pit_stop_requires_open_status(self, rbac_dynamodb):
+        self._set_started_ride(rbac_dynamodb)
+        close_pit_stop = _load_handler('rides', 'close_pit_stop')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001', 'stageNumber': '1'},
+            method='POST'
+        )
+        response = close_pit_stop.lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+    def test_update_ride_preserves_pit_stop_runtime_fields(self, rbac_dynamodb):
+        self._set_started_ride(rbac_dynamodb, stage_status='OPEN')
+        update_ride = _load_handler('rides', 'update_ride')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001'},
+            body={
+                'stages': [
+                    {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start Point'},
+                    {
+                        'stageId': 'S001', 'stageNumber': 1, 'type': 'PIT_STOP',
+                        'name': 'Pit Stop 1 Updated', 'estimatedOpenTime': 100, 'pitStopDuration': 50
+                    },
+                    {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH', 'name': 'Finish Line'}
+                ]
+            },
+            method='PUT'
+        )
+        response = update_ride.lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['data']['stages'][1]['pitStopStatus'] == 'OPEN'
+        assert body['data']['stages'][1]['openedAt'] == '2026-02-11T09:30:00Z'
 
 
 # ---------------------------------------------------------------------------

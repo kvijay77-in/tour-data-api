@@ -37,10 +37,12 @@ tour-data-api/
 │   │   ├── rides/
 │   │   │   ├── __init__.py
 │   │   │   ├── close_ride.py          # POST /v1/tours/{tourId}/rides/{rideId}/close
+│   │   │   ├── close_pit_stop.py      # POST /v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/close
 │   │   │   ├── create_ride.py         # POST /v1/tours/{tourId}/rides
 │   │   │   ├── get_ride.py            # GET /v1/tours/{tourId}/rides/{rideId}
 │   │   │   ├── get_todays_ride.py     # GET /v1/tours/{tourId}/rides/today
 │   │   │   ├── list_rides.py          # GET /v1/tours/{tourId}/rides
+│   │   │   ├── open_pit_stop.py       # POST /v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/open
 │   │   │   ├── open_ride.py           # POST /v1/tours/{tourId}/rides/open
 │   │   │   ├── start_ride.py          # POST /v1/tours/{tourId}/rides/start
 │   │   │   └── update_ride.py         # PUT /v1/tours/{tourId}/rides/{rideId}

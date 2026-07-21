@@ -12,12 +12,32 @@ sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
-from validation import validate_tour_id, validate_ride_id, validate_iso_date, validate_time_hhmm, ValidationError
+from validation import (
+    validate_tour_id, validate_ride_id, validate_iso_date,
+    validate_time_hhmm, validate_ride_stages, ValidationError
+)
 from dynamodb_utils import get_tour_item, put_tour_item
 from models import RideStatus, utc_now_iso
 from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
+
+
+def _merge_stage_runtime_fields(existing_stages, updated_stages):
+    """Preserve system-managed pit-stop runtime fields during stage updates."""
+    existing_stages_by_id = {
+        stage.get('stageId'): stage for stage in (existing_stages or []) if stage.get('stageId')
+    }
+
+    merged_stages = []
+    for stage in updated_stages:
+        existing_stage = existing_stages_by_id.get(stage.get('stageId'), {})
+        merged_stage = dict(stage)
+        for field_name in ('pitStopStatus', 'openedAt', 'closedAt'):
+            if existing_stage.get(field_name) is not None:
+                merged_stage[field_name] = existing_stage[field_name]
+        merged_stages.append(merged_stage)
+    return merged_stages
 
 
 def lambda_handler(event, context):
@@ -76,7 +96,8 @@ def lambda_handler(event, context):
         # Validate updatable fields
         updatable_fields = [
             'name', 'date', 'rideNo', 'startLocation', 'finishLocation',
-            'totalDistance', 'flagOffTime', 'stages', 'description', 'status'
+            'totalDistance', 'flagOffTime', 'stages', 'description', 'status',
+            'openTime', 'closeTime'
         ]
         updates = {k: v for k, v in body.items() if k in updatable_fields}
         
@@ -101,6 +122,18 @@ def lambda_handler(event, context):
                 validate_time_hhmm(updates['flagOffTime'], 'flagOffTime')
             except ValidationError as e:
                 return bad_request_response(str(e))
+
+        if 'openTime' in updates and updates['openTime'] is not None:
+            try:
+                validate_time_hhmm(updates['openTime'], 'openTime')
+            except ValidationError as e:
+                return bad_request_response(str(e))
+
+        if 'closeTime' in updates and updates['closeTime'] is not None:
+            try:
+                validate_time_hhmm(updates['closeTime'], 'closeTime')
+            except ValidationError as e:
+                return bad_request_response(str(e))
         
         # Validate status if provided
         if 'status' in updates:
@@ -109,6 +142,16 @@ def lambda_handler(event, context):
                 return bad_request_response(
                     f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
                 )
+
+        if 'stages' in updates:
+            try:
+                normalized_stages = validate_ride_stages(updates['stages'])
+            except ValidationError as e:
+                return bad_request_response(str(e))
+            updates['stages'] = _merge_stage_runtime_fields(
+                existing_ride.get('stages', []),
+                normalized_stages
+            )
         
         # Update ride
         updated_ride = {**existing_ride, **updates}
