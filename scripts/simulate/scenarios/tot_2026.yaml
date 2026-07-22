@@ -12,7 +12,7 @@
 
 scenario:
   name: "TOT-2026 Full Tour Simulation"
-  description: "7-day tour with 70 riders, days 1-2 completed, day 3 active"
+  description: "7-day tour with 70 riders, days 1-3 completed, day 4 active"
 
 # AWS environment configuration
 aws:
@@ -42,10 +42,14 @@ rides:
 
   # Default stage layout for all rides (override per-day with 'stages' key)
   # Stage types: START, PIT_STOP, FINISH
+  # default_stage_count includes START and FINISH.
+  # Example: 4 -> START + 2 PIT_STOP + FINISH.
+  default_stage_count: 4
   default_stages:
     - { type: START, name: Start }
     - { type: PIT_STOP, name: PS1, estimated_open_time: 90, pit_stop_duration: 45 }
     - { type: PIT_STOP, name: PS2, estimated_open_time: 210, pit_stop_duration: 60 }
+    - { type: PIT_STOP, name: PS3, estimated_open_time: 300, pit_stop_duration: 60 }
     - { type: FINISH, name: Finish }
 
   schedule:
@@ -54,10 +58,13 @@ rides:
     # -------------------------------------------------------------------------
     - day: 1
       name: "Day 1"
+      pit_stop_distances_from_start:
+        PS1: 22
+        PS2: 52
       start_location: "Chennai"
       finish_location: "Mahabalipuram"
-      distance: 58
-      flag_off_time: "06:30"
+      distance: 80
+      flag_off_time: "08:00"
       rides_count: 1
       checkins:
         not_riding: 0
@@ -72,10 +79,17 @@ rides:
     # -------------------------------------------------------------------------
     - day: 2
       name: "Day 2"
+      stage_count: 5
+      # Per-ride pit-stop distance from start (km).
+      # Keys can be pit-stop names (PS1/PS2/...) or order (1..N).
+      pit_stop_distances_from_start:
+        PS1: 28
+        PS2: 62
+        PS3: 92
       start_location: "Mahabalipuram"
       finish_location: "Pondicherry"
-      distance: 95
-      flag_off_time: "06:00"
+      distance: 110
+      flag_off_time: "08:00"
       rides_count: 1
       checkins:
         not_riding: 5
@@ -90,10 +104,13 @@ rides:
     # -------------------------------------------------------------------------
     - day: 3
       name: "Day 3"
+      pit_stop_distances_from_start:
+        PS1: 30
+        PS2: 72
       start_location: "Pondicherry"
       finish_location: "Chidambaram"
-      distance: 70
-      flag_off_time: "06:30"
+      distance: 120
+      flag_off_time: "08:00"
       rides_count: 1
       checkins:
         not_riding: 4
@@ -108,10 +125,13 @@ rides:
     # -------------------------------------------------------------------------
     - day: 4
       name: "Day 4"
+      pit_stop_distances_from_start:
+        PS1: 29
+        PS2: 69
       start_location: "Chidambaram"
       finish_location: "Thanjavur"
       distance: 120
-      flag_off_time: "06:00"
+      flag_off_time: "08:00"
       rides_count: 1
       checkins:
         not_riding: 4
@@ -129,27 +149,47 @@ rides:
 
     - day: 5
       name: "Day 5"
+      stage_count: 5
+      pit_stop_distances_from_start:
+        PS1: 20
+        PS2: 42
+        PS3: 60
       start_location: "Thanjavur"
       finish_location: "Trichy"
-      distance: 55
-      flag_off_time: "07:00"
+      distance: 75
+      flag_off_time: "09:00"
       rides_count: 1
 
     # Day 6 has 2 rides
     - day: 6
       name: "Day 6"
-      start_location: "Trichy"
-      finish_location: "Madurai"
-      distance: 130
-      flag_off_time: "05:30"
-      rides_count: 2
+      rides:
+        - name: "Day 6 Ride 1"
+          pit_stop_distances_from_start:
+            PS1: 35
+            PS2: 85
+          start_location: "Trichy"
+          finish_location: "Madurai"
+          distance: 130
+          flag_off_time: "07:30"
+        - name: "Day 6 Ride 2"
+          pit_stop_distances_from_start:
+            PS1: 35
+            PS2: 85
+          start_location: "Trichy"
+          finish_location: "Madurai"
+          distance: 130
+          flag_off_time: "12:30"
 
     - day: 7
       name: "Day 7"
+      pit_stop_distances_from_start:
+        PS1: 45
+        PS2: 105
       start_location: "Madurai"
       finish_location: "Kanyakumari"
-      distance: 110
-      flag_off_time: "06:00"
+      distance: 160
+      flag_off_time: "08:00"
       rides_count: 1
 
 # Script behaviour options

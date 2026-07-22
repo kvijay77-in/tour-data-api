@@ -121,10 +121,12 @@ tour_riders:
 
 ```yaml
 rides:
+  default_stage_count: 4      # Includes START + FINISH (default if omitted)
   default_stages:            # Default stage layout (override per-day with 'stages' key)
     - { type: START, name: Start }
     - { type: PIT_STOP, name: PS1 }
     - { type: PIT_STOP, name: PS2 }
+    - { type: PIT_STOP, name: PS3 }
     - { type: FINISH, name: Finish }
 
   schedule:
@@ -136,9 +138,48 @@ rides:
       distance: 58               # km
       flag_off_time: "06:30"     # HH:MM
       rides_count: 1             # Number of rides this day (default: 1)
+      stage_count: 4             # Optional per-ride override (START + 2 PIT_STOP + FINISH)
+      pit_stop_distances_from_start:
+        PS1: 22                  # Optional: distanceFromStart for PIT_STOP stages (km)
+        PS2: 44
       status: COMPLETED          # PLANNED | ACTIVE | COMPLETED | CLOSED
       checkins: ...              # Check-in distribution (see below)
+
+    # Multi-ride day with explicit per-ride configuration
+    - day: 6
+      date: "2026-02-15"
+      name: "Day 6"
+      rides:
+        - name: "Day 6 Ride 1"
+          start_location: "City A"
+          finish_location: "City B"
+          distance: 70
+          flag_off_time: "07:30"
+          pit_stop_distances_from_start: { PS1: 20, PS2: 45 }
+          checkins: ...
+        - name: "Day 6 Ride 2"
+          start_location: "City C"
+          finish_location: "City D"
+          distance: 65
+          flag_off_time: "12:30"
+          pit_stop_distances_from_start: { PS1: 18, PS2: 40 }
+          checkins: ...
 ```
+
+  Stage selection rule: `stage_count` includes START and FINISH. PIT_STOP stages are taken in order from `default_stages` (or day-level `stages`) up to `stage_count - 2`.
+
+  Multi-ride rule: for a day entry, choose one style:
+- Legacy: `rides_count` with day-level ride fields
+- Refactored: explicit `rides` list with per-ride fields
+
+  When both day-level and per-ride fields exist, per-ride values override day-level values for that ride.
+
+Pit-stop distance rule: `pit_stop_distances_from_start` is ride-level and applies only to `PIT_STOP` stages. It supports:
+- Stage-name map: `PS1: 22, PS2: 44`
+- Pit-stop order map: `1: 22, 2: 44`
+- Ordered list: `[22, 44]`
+
+These values are stored in stage `distanceFromStart` in DynamoDB ride records.
 
 ### Check-in Distribution
 
@@ -185,7 +226,7 @@ options:
 ### What is GENERATED and written
 
 - **TourRider records** — randomly selected from existing profiles (seed-controlled), assigned sequential rider IDs: R1, R2, ... R{count}
-- **Ride records** — sequential ride IDs: RIDE001, RIDE002, etc. Multi-ride days append "Ride N" to the name. Stages auto-numbered: S000, S001, S002, S003
+- **Ride records** — sequential ride IDs: RIDE001, RIDE002, etc. Multi-ride days append "Ride N" to the name. Stages auto-numbered from S000 through the configured stage count for each ride.
 - **CheckIn records** — realistic timestamps based on flag-off time and stage position:
   - Not Riding: single check-in at START with `isNotRiding=true`
   - Quit Riding: normal check-ins at completed stages + quit check-in (`isQuitRiding=true`) at the stage where they stopped
@@ -209,7 +250,7 @@ If `options.update_tour_status` is true and `tour.target_status` is set, the scr
 - Change `seed` to get different random rider selections with the same config
 - Use `finished: all_remaining` to auto-calculate finished riders
 - PLANNED rides need no `checkins` block
-- For multi-ride days, all rides on that day share the same check-in config (only applicable if rides have check-ins)
+- For multi-ride days, define `checkins` per ride using the `rides` list when distributions differ
 
 ## File Structure
 
@@ -224,6 +265,5 @@ scripts/simulate/
 
 ## Limitations
 
-- Multi-ride days with check-ins: when `rides_count > 1` and `checkins` is defined, the same check-in distribution is applied to each ride independently. For different distributions per ride on the same day, use separate day entries.
 - The script does not create or provision DynamoDB tables. Tables must exist before running.
 - Rider profiles must already exist in the RiderProfile table — the script does not create profiles.

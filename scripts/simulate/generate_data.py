@@ -147,6 +147,104 @@ def _derive_close_time(flag_off_time, stages_cfg, fallback_minutes=720):
     return _offset_time_hhmm(flag_off_time, latest_window_end or fallback_minutes)
 
 
+def _build_stages_for_ride(stage_templates, stage_count):
+    """Build ordered stage definitions for a ride using start/pit/finish rules.
+
+    Stage count includes start and finish. Pit stops are selected from
+    templates in order and truncated to fit the requested count.
+    """
+    if stage_count < 2:
+        raise ValueError("stage_count must be at least 2 (START and FINISH)")
+
+    starts = [s for s in stage_templates if s.get('type') == 'START']
+    finishes = [s for s in stage_templates if s.get('type') == 'FINISH']
+    pit_stops = [s for s in stage_templates if s.get('type') == 'PIT_STOP']
+
+    if not starts:
+        raise ValueError("Stage templates must include a START stage")
+    if not finishes:
+        raise ValueError("Stage templates must include a FINISH stage")
+
+    required_pit_stops = stage_count - 2
+    if required_pit_stops > len(pit_stops):
+        raise ValueError(
+            f"Requested stage_count={stage_count} but only {len(pit_stops)} "
+            "PIT_STOP definitions are available"
+        )
+
+    selected = [starts[0], *pit_stops[:required_pit_stops], finishes[-1]]
+    return selected
+
+
+def _apply_pit_stop_distances(stage_defs, pit_stop_distances):
+    """Apply ride-level pit-stop distances to selected stage definitions.
+
+    Supported formats for pit_stop_distances_from_start:
+      - dict keyed by pit-stop stage name (e.g., PS1: 45)
+      - dict keyed by pit-stop order 1..N (as int or string)
+      - list in pit-stop order (index 0 -> first pit stop)
+    """
+    if pit_stop_distances is None:
+        return stage_defs
+
+    pit_stops = [s for s in stage_defs if s.get('type') == 'PIT_STOP']
+    pit_stop_names = [s.get('name') for s in pit_stops]
+    pit_stop_count = len(pit_stops)
+
+    if isinstance(pit_stop_distances, list):
+        if len(pit_stop_distances) > pit_stop_count:
+            raise ValueError(
+                "pit_stop_distances_from_start has more entries than "
+                f"available PIT_STOP stages ({len(pit_stop_distances)} > {pit_stop_count})"
+            )
+    elif isinstance(pit_stop_distances, dict):
+        for key in pit_stop_distances.keys():
+            if key in pit_stop_names:
+                continue
+
+            key_str = str(key)
+            if key_str.isdigit() and 1 <= int(key_str) <= pit_stop_count:
+                continue
+
+            raise ValueError(
+                "Invalid pit_stop_distances_from_start key "
+                f"'{key}'. Use pit-stop names {pit_stop_names} or "
+                f"pit-stop order 1..{pit_stop_count}."
+            )
+    else:
+        raise ValueError(
+            "pit_stop_distances_from_start must be a list or dict"
+        )
+
+    updated = []
+    pit_stop_idx = 0
+    for stage_def in stage_defs:
+        stage_copy = dict(stage_def)
+
+        if stage_copy.get('type') == 'PIT_STOP':
+            pit_stop_idx += 1
+            distance = None
+
+            if isinstance(pit_stop_distances, list):
+                if pit_stop_idx <= len(pit_stop_distances):
+                    distance = pit_stop_distances[pit_stop_idx - 1]
+            else:
+                stage_name = stage_copy.get('name')
+                if stage_name in pit_stop_distances:
+                    distance = pit_stop_distances[stage_name]
+                elif pit_stop_idx in pit_stop_distances:
+                    distance = pit_stop_distances[pit_stop_idx]
+                elif str(pit_stop_idx) in pit_stop_distances:
+                    distance = pit_stop_distances[str(pit_stop_idx)]
+
+            if distance is not None:
+                stage_copy['distance_from_start'] = distance
+
+        updated.append(stage_copy)
+
+    return updated
+
+
 def _build_stage(stage_def, idx, base_date, flag_off_time, ride_status):
     """Build a simulated stage record with pit-stop planning/runtime fields."""
     stage = {
@@ -184,6 +282,34 @@ def _build_stage(stage_def, idx, base_date, flag_off_time, ride_status):
     return stage
 
 
+def _normalize_day_ride_configs(day_cfg):
+    """Normalize day-level schedule config into per-ride definitions.
+
+    Supported formats:
+      - Legacy: day-level ride fields + rides_count
+      - Refactored: explicit day.rides list with per-ride definitions
+    """
+    rides_cfg = day_cfg.get('rides')
+    if rides_cfg is not None:
+        if not isinstance(rides_cfg, list) or not rides_cfg:
+            raise ValueError(
+                f"Day {day_cfg.get('day', '?')}: 'rides' must be a non-empty list"
+            )
+        if 'rides_count' in day_cfg and int(day_cfg['rides_count']) != len(rides_cfg):
+            raise ValueError(
+                f"Day {day_cfg.get('day', '?')}: rides_count ({day_cfg['rides_count']}) "
+                f"does not match rides list size ({len(rides_cfg)})"
+            )
+        return rides_cfg
+
+    rides_count = int(day_cfg.get('rides_count', 1))
+    if rides_count < 1:
+        raise ValueError(
+            f"Day {day_cfg.get('day', '?')}: rides_count must be at least 1"
+        )
+    return [{} for _ in range(rides_count)]
+
+
 def build_rides(config):
     """
     Generate ride records from schedule configuration.
@@ -191,41 +317,71 @@ def build_rides(config):
     Returns list of dicts with 'ride' (DynamoDB item) and 'day_config'
     (original YAML config for check-in generation).
     """
-    default_stages_cfg = config['rides']['default_stages']
+    rides_cfg = config['rides']
+    default_stages_cfg = rides_cfg['default_stages']
+    default_stage_count = int(rides_cfg.get('default_stage_count', 4))
     rides = []
     ride_counter = 1
 
     for day_cfg in config['rides']['schedule']:
-        rides_count = day_cfg.get('rides_count', 1)
+        ride_defs = _normalize_day_ride_configs(day_cfg)
+        rides_count = len(ride_defs)
 
-        for ride_num in range(1, rides_count + 1):
+        for ride_num, ride_cfg in enumerate(ride_defs, 1):
             ride_id = f"RIDE{ride_counter:03d}"
-            status = day_cfg.get('status', 'PLANNED')
-            flag_off = day_cfg.get('flag_off_time', '06:00')
+            status = ride_cfg.get('status', day_cfg.get('status', 'PLANNED'))
+            flag_off = ride_cfg.get('flag_off_time', day_cfg.get('flag_off_time', '06:00'))
 
-            # Build stages from day-level override or default
-            stages_cfg = day_cfg.get('stages', default_stages_cfg)
+            # Build stages from day-level override or default, then apply
+            # per-ride stage_count (includes START and FINISH).
+            stage_templates = ride_cfg.get(
+                'stages',
+                day_cfg.get('stages', default_stages_cfg),
+            )
+            stage_count = int(
+                ride_cfg.get(
+                    'stage_count',
+                    day_cfg.get('stage_count', default_stage_count),
+                )
+            )
+            stages_cfg = _build_stages_for_ride(stage_templates, stage_count)
+            stages_cfg = _apply_pit_stop_distances(
+                stages_cfg,
+                ride_cfg.get(
+                    'pit_stop_distances_from_start',
+                    day_cfg.get('pit_stop_distances_from_start'),
+                ),
+            )
             stages = []
             for idx, stage_def in enumerate(stages_cfg):
                 stages.append(
                     _build_stage(stage_def, idx, day_cfg['date'], flag_off, status)
                 )
 
-            ride_name = day_cfg.get('name', f"Day {day_cfg['day']}")
-            if rides_count > 1:
+            ride_name = ride_cfg.get('name', day_cfg.get('name', f"Day {day_cfg['day']}"))
+            if rides_count > 1 and 'name' not in ride_cfg:
                 ride_name = f"{ride_name} Ride {ride_num}"
 
-            open_time = day_cfg.get('open_time', flag_off)
-            close_time = day_cfg.get('close_time', _derive_close_time(flag_off, stages_cfg))
+            open_time = ride_cfg.get('open_time', day_cfg.get('open_time', flag_off))
+            close_time = ride_cfg.get(
+                'close_time',
+                day_cfg.get('close_time', _derive_close_time(flag_off, stages_cfg)),
+            )
 
             ride = {
                 'ride_id': ride_id,
                 'date': day_cfg['date'],
                 'ride_no': ride_num,
                 'name': ride_name,
-                'start_location': day_cfg.get('start_location', 'Start'),
-                'finish_location': day_cfg.get('finish_location', 'Finish'),
-                'total_distance': Decimal(str(day_cfg.get('distance', 100))),
+                'start_location': ride_cfg.get(
+                    'start_location', day_cfg.get('start_location', 'Start')
+                ),
+                'finish_location': ride_cfg.get(
+                    'finish_location', day_cfg.get('finish_location', 'Finish')
+                ),
+                'total_distance': Decimal(
+                    str(ride_cfg.get('distance', day_cfg.get('distance', 100)))
+                ),
                 'flag_off_time': flag_off,
                 'open_time': open_time,
                 'close_time': close_time,
@@ -241,7 +397,15 @@ def build_rides(config):
             elif status == 'STARTED':
                 ride['started_at'] = f"{day_cfg['date']}T{flag_off}:00Z"
 
-            rides.append({'ride': ride, 'day_config': day_cfg})
+            checkin_cfg = ride_cfg.get('checkins', day_cfg.get('checkins'))
+            rides.append(
+                {
+                    'ride': ride,
+                    'day_config': day_cfg,
+                    'ride_config': ride_cfg,
+                    'checkin_cfg': checkin_cfg,
+                }
+            )
             ride_counter += 1
 
     return rides
@@ -342,8 +506,7 @@ def generate_checkins(rides_data, tour_riders, rng):
     print(f"*** Check in created: {len(all_checkins)}")
     for ride_data in rides_data:
         ride = ride_data['ride']
-        day_cfg = ride_data['day_config']
-        checkin_cfg = day_cfg.get('checkins')
+        checkin_cfg = ride_data.get('checkin_cfg')
 
         if not checkin_cfg:
             continue
@@ -353,8 +516,8 @@ def generate_checkins(rides_data, tour_riders, rng):
 
         ride_id = ride['ride_id']
         stages = ride['stages']
-        base_date = day_cfg['date']
-        flag_h, flag_m = _parse_flag_off(day_cfg.get('flag_off_time', '06:00'))
+        base_date = ride['date']
+        flag_h, flag_m = _parse_flag_off(ride.get('flag_off_time', '06:00'))
 
         # Map stage names to indices
         stage_name_to_idx = {s['name']: idx for idx, s in enumerate(stages)}
@@ -747,6 +910,9 @@ def resolve_schedule_statuses(config):
         else:
             day_cfg['status'] = 'PLANNED'
 
+        for ride_cfg in _normalize_day_ride_configs(day_cfg):
+            ride_cfg['status'] = day_cfg['status']
+
 
 def validate_schedule_dates(config):
     """Ensure all schedule entries have valid ISO dates before generation."""
@@ -776,6 +942,10 @@ def validate_status_configuration(config):
         if 'status' in day_cfg:
             day = day_cfg.get('day', idx)
             bad_entries.append(str(day))
+        for ride_idx, ride_cfg in enumerate(_normalize_day_ride_configs(day_cfg), 1):
+            if 'status' in ride_cfg:
+                day = day_cfg.get('day', idx)
+                bad_entries.append(f"{day}.ride{ride_idx}")
 
     if bad_entries:
         raise ValueError(
@@ -789,31 +959,34 @@ def validate_scenario(config):
     rider_count = config['tour_riders']['count']
     errors = []
 
-    for day_cfg in config['rides']['schedule']:
-        checkin_cfg = day_cfg.get('checkins')
-        if not checkin_cfg:
-            continue
+    for day_idx, day_cfg in enumerate(config['rides']['schedule'], 1):
+        day = day_cfg.get('day', day_idx)
+        ride_defs = _normalize_day_ride_configs(day_cfg)
 
-        day = day_cfg.get('day', '?')
-        nr = checkin_cfg.get('not_riding', 0)
-        quit_total = sum(q['count'] for q in checkin_cfg.get('quit', []))
+        for ride_idx, ride_cfg in enumerate(ride_defs, 1):
+            checkin_cfg = ride_cfg.get('checkins', day_cfg.get('checkins'))
+            if not checkin_cfg:
+                continue
 
-        finished_cfg = checkin_cfg.get('finished', 0)
-        if finished_cfg == 'all_remaining':
-            finished = rider_count - nr - quit_total
-        else:
-            finished = int(finished_cfg)
+            nr = checkin_cfg.get('not_riding', 0)
+            quit_total = sum(q['count'] for q in checkin_cfg.get('quit', []))
 
-        ip_total = sum(checkin_cfg.get('in_progress', {}).values())
-        assigned = nr + quit_total + finished + ip_total
-        expected = rider_count
+            finished_cfg = checkin_cfg.get('finished', 0)
+            if finished_cfg == 'all_remaining':
+                finished = rider_count - nr - quit_total
+            else:
+                finished = int(finished_cfg)
 
-        if finished_cfg != 'all_remaining' and assigned != expected:
-            errors.append(
-                f"Day {day}: assigned {assigned} riders but tour has "
-                f"{expected} (NR:{nr} + Quit:{quit_total} + "
-                f"Finished:{finished} + InProgress:{ip_total})"
-            )
+            ip_total = sum(checkin_cfg.get('in_progress', {}).values())
+            assigned = nr + quit_total + finished + ip_total
+            expected = rider_count
+
+            if finished_cfg != 'all_remaining' and assigned != expected:
+                errors.append(
+                    f"Day {day} ride {ride_idx}: assigned {assigned} riders "
+                    f"but tour has {expected} (NR:{nr} + Quit:{quit_total} + "
+                    f"Finished:{finished} + InProgress:{ip_total})"
+                )
 
     if errors:
         print("\nScenario validation warnings:")
