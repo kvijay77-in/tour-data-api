@@ -15,6 +15,16 @@ Usage:
     python scripts/simulate/generate_data.py \\
         --scenario scripts/simulate/scenarios/tot_2026.yaml
 
+    # Include today's ride check-ins (default skips them)
+    python scripts/simulate/generate_data.py \\
+        --scenario scripts/simulate/scenarios/tot_2026.yaml \\
+        --include-today-checkins
+
+    # Generate/load check-ins for today's ride only
+    python scripts/simulate/generate_data.py \\
+        --scenario scripts/simulate/scenarios/tot_2026.yaml \\
+        --today-checkins-only
+
     # Dry run - output JSON files without writing to DynamoDB
     python scripts/simulate/generate_data.py \\
         --scenario scripts/simulate/scenarios/tot_2026.yaml --dry-run
@@ -492,7 +502,14 @@ def _checkin_record(ride_id, rider_id, stage, timestamp, **overrides):
     return record
 
 
-def generate_checkins(rides_data, tour_riders, rng):
+def generate_checkins(
+    rides_data,
+    tour_riders,
+    rng,
+    include_today_checkins=False,
+    today_checkins_only=False,
+    today_iso_date=None,
+):
     """
     Generate check-in records based on per-ride check-in configurations.
 
@@ -501,12 +518,26 @@ def generate_checkins(rides_data, tour_riders, rng):
     """
 
     all_checkins = []
+    skipped_today_rides = 0
+    skipped_non_today_rides = 0
     rider_ids = [r['rider_id'] for r in tour_riders]
+
+    if today_iso_date is None:
+        today_iso_date = date.today().isoformat()
 
     print(f"*** Check in created: {len(all_checkins)}")
     for ride_data in rides_data:
         ride = ride_data['ride']
         checkin_cfg = ride_data.get('checkin_cfg')
+        is_today_ride = ride.get('date') == today_iso_date
+
+        if today_checkins_only and not is_today_ride:
+            skipped_non_today_rides += 1
+            continue
+
+        if not include_today_checkins and is_today_ride:
+            skipped_today_rides += 1
+            continue
 
         if not checkin_cfg:
             continue
@@ -636,6 +667,19 @@ def generate_checkins(rides_data, tour_riders, rng):
 
         if available:
             print(f"  Warning: {len(available)} riders unassigned for {ride_id}")
+
+    if skipped_today_rides:
+        print(
+            f"Skipped check-in generation for {skipped_today_rides} "
+            f"today ride(s) on {today_iso_date} "
+            f"(use --include-today-checkins to include)."
+        )
+
+    if today_checkins_only and skipped_non_today_rides:
+        print(
+            f"Generated check-ins only for rides on {today_iso_date}; "
+            f"skipped {skipped_non_today_rides} non-today ride(s)."
+        )
 
     return all_checkins
 
@@ -883,14 +927,15 @@ def resolve_schedule_dates(config, anchor_today=None):
         day_cfg['date'] = resolved.isoformat()
 
 
-def resolve_schedule_statuses(config):
+def resolve_schedule_statuses(config, include_today_checkins=False):
     """
     Resolve schedule status from date strategy anchor ride.
 
-    Rules:
-      - day < anchor_ride_number: CLOSED
-      - day == anchor_ride_number: STARTED
-      - day > anchor_ride_number: PLANNED
+        Rules:
+            - day < anchor_ride_number: CLOSED
+            - day == anchor_ride_number: STARTED when include_today_checkins is true,
+                otherwise PLANNED
+            - day > anchor_ride_number: PLANNED
     """
     rides_cfg = config.get('rides', {})
     strategy = rides_cfg.get('date_strategy') or {}
@@ -899,14 +944,15 @@ def resolve_schedule_statuses(config):
     anchor_ride = int(strategy.get('anchor_ride_number', 3))
 
     print("Resolving schedule statuses from anchor ride...")
-    print(f"  Status strategy: ride {anchor_ride} is STARTED")
+    today_status = 'STARTED' if include_today_checkins else 'PLANNED'
+    print(f"  Status strategy: ride {anchor_ride} is {today_status}")
 
     for idx, day_cfg in enumerate(schedule, 1):
         ride_day_number = int(day_cfg.get('day', idx))
         if ride_day_number < anchor_ride:
             day_cfg['status'] = 'CLOSED'
         elif ride_day_number == anchor_ride:
-            day_cfg['status'] = 'STARTED'
+            day_cfg['status'] = 'STARTED' if include_today_checkins else 'PLANNED'
         else:
             day_cfg['status'] = 'PLANNED'
 
@@ -1053,6 +1099,14 @@ Examples:
   python scripts/simulate/generate_data.py \\
       --scenario scripts/simulate/scenarios/tot_2026.yaml --clean-only
 
+  # Include today's check-ins
+  python scripts/simulate/generate_data.py \\
+      --scenario scripts/simulate/scenarios/tot_2026.yaml --include-today-checkins
+
+  # Generate check-ins only for today's ride
+  python scripts/simulate/generate_data.py \\
+      --scenario scripts/simulate/scenarios/tot_2026.yaml --today-checkins-only
+
 Note: RiderProfile and TourMaster data must already exist in DynamoDB.
       This script only generates tour-specific data (TourRider, Ride, CheckIn).
         """,
@@ -1082,8 +1136,31 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
         '--output-dir', default='scripts/simulate/output',
         help='Output directory for --dry-run JSON files (default: scripts/simulate/output)',
     )
+    parser.add_argument(
+        '--include-today-checkins', action='store_true',
+        help=(
+            "Generate check-ins for today's ride as well. "
+            "Default is to skip today's ride check-ins."
+        ),
+    )
+    parser.add_argument(
+        '--today-checkins-only', action='store_true',
+        help=(
+            "Generate/load check-ins for today's ride only "
+            "(does not write TourRider or Ride data)."
+        ),
+    )
 
     args = parser.parse_args()
+
+    if args.today_checkins_only and args.clean_only:
+        parser.error('--today-checkins-only cannot be combined with --clean-only')
+
+    if args.today_checkins_only and args.clean:
+        parser.error('--today-checkins-only cannot be combined with --clean')
+
+    if args.today_checkins_only:
+        args.include_today_checkins = True
 
     # Load scenario
     with open(args.scenario) as f:
@@ -1094,7 +1171,10 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
 
     # Resolve dynamic schedule dates before any validation/build steps.
     resolve_schedule_dates(config)
-    resolve_schedule_statuses(config)
+    resolve_schedule_statuses(
+        config,
+        include_today_checkins=args.include_today_checkins,
+    )
     validate_schedule_dates(config)
 
     scenario = config.get('scenario', {})
@@ -1113,6 +1193,8 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
     print(f"  Stack    : {stack_name}")
     print(f"  Seed     : {seed}")
     print(f"  Mode     : {'DRY RUN' if args.dry_run else 'DynamoDB'}")
+    print(f"  Include today's check-ins : {args.include_today_checkins}")
+    print(f"  Today's check-ins only    : {args.today_checkins_only}")
     print(f"{'=' * 60}\n")
 
     # Validate scenario
@@ -1150,7 +1232,11 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
         sys.exit(1)
 
     # Clean if requested
-    if (args.clean or args.clean_only or options.get('clean_before_load')) \
+    effective_clean_before_load = (
+        options.get('clean_before_load') and not args.today_checkins_only
+    )
+
+    if (args.clean or args.clean_only or effective_clean_before_load) \
             and not args.dry_run:
         print("\nCleaning existing tour data...")
         clean_tour_data(dynamodb, stack_name, tour_id)
@@ -1172,31 +1258,42 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
     print(f"  Built {len(rides)} rides")
 
     print("Generating check-ins...")
-    checkins = generate_checkins(rides_data, tour_riders, rng)
+    checkins = generate_checkins(
+        rides_data,
+        tour_riders,
+        rng,
+        include_today_checkins=args.include_today_checkins,
+        today_checkins_only=args.today_checkins_only,
+    )
     print(f"  Generated {len(checkins)} check-in records")
 
     # Output
     if args.dry_run:
         print(f"\nWriting JSON files to {args.output_dir}/")
-        write_json(tour_riders, os.path.join(args.output_dir, 'tour_riders.json'))
-        write_json(rides, os.path.join(args.output_dir, 'rides.json'))
+        if not args.today_checkins_only:
+            write_json(tour_riders, os.path.join(args.output_dir, 'tour_riders.json'))
+            write_json(rides, os.path.join(args.output_dir, 'rides.json'))
         write_json(checkins, os.path.join(args.output_dir, 'checkins.json'))
     else:
         print("\nLoading data to DynamoDB...")
 
-        ddb_tour_riders = to_dynamodb_items('TourRider', tour_riders)
-        ddb_rides = to_dynamodb_items('Ride', rides)
         ddb_checkins = to_dynamodb_items('CheckIn', checkins)
 
-        table_name = f"{stack_name}-TourRider-{tour_id}"
-        print(f"  Loading {len(tour_riders)} tour riders to {table_name}...")
-        loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_tour_riders)
-        print(f"    Loaded: {loaded}, Failed: {failed}")
+        if not args.today_checkins_only:
+            ddb_tour_riders = to_dynamodb_items('TourRider', tour_riders)
+            ddb_rides = to_dynamodb_items('Ride', rides)
 
-        table_name = f"{stack_name}-Ride-{tour_id}"
-        print(f"  Loading {len(rides)} rides to {table_name}...")
-        loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_rides)
-        print(f"    Loaded: {loaded}, Failed: {failed}")
+            table_name = f"{stack_name}-TourRider-{tour_id}"
+            print(f"  Loading {len(tour_riders)} tour riders to {table_name}...")
+            loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_tour_riders)
+            print(f"    Loaded: {loaded}, Failed: {failed}")
+
+            table_name = f"{stack_name}-Ride-{tour_id}"
+            print(f"  Loading {len(rides)} rides to {table_name}...")
+            loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_rides)
+            print(f"    Loaded: {loaded}, Failed: {failed}")
+        else:
+            print("  Skipping TourRider and Ride writes (--today-checkins-only)")
 
         table_name = f"{stack_name}-CheckIn-{tour_id}"
         print(f"  Loading {len(checkins)} check-ins to {table_name}...")

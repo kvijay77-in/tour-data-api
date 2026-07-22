@@ -28,6 +28,14 @@ python scripts/simulate/generate_data.py \
 # Load test data to DynamoDB (cleans existing tour data first per config)
 python scripts/simulate/generate_data.py \
     --scenario scripts/simulate/scenarios/tot_2026.yaml
+
+# Include today's ride check-ins (default skips today's check-ins)
+python scripts/simulate/generate_data.py \
+  --scenario scripts/simulate/scenarios/tot_2026.yaml --include-today-checkins
+
+# Generate/load check-ins for today's ride only
+python scripts/simulate/generate_data.py \
+  --scenario scripts/simulate/scenarios/tot_2026.yaml --today-checkins-only
 ```
 
 ## Usage
@@ -46,6 +54,8 @@ python scripts/simulate/generate_data.py --scenario <path> [options]
 | `--clean-only` | Only clean data, do not generate or load new data |
 | `--region REGION` | AWS region (overrides scenario config) |
 | `--output-dir DIR` | Output directory for `--dry-run` (default: `scripts/simulate/output`) |
+| `--include-today-checkins` | Include today's ride check-ins (default behavior skips today's check-ins) |
+| `--today-checkins-only` | Generate/load check-ins only for today's ride; skips TourRider and Ride writes |
 
 ### Examples
 
@@ -69,7 +79,23 @@ python scripts/simulate/generate_data.py \
 # Override AWS region
 python scripts/simulate/generate_data.py \
     --scenario scripts/simulate/scenarios/tot_2026.yaml --region ap-south-1
+
+# Include today's ride check-ins
+python scripts/simulate/generate_data.py \
+  --scenario scripts/simulate/scenarios/tot_2026.yaml --include-today-checkins
+
+# Generate and load only today's ride check-ins
+python scripts/simulate/generate_data.py \
+  --scenario scripts/simulate/scenarios/tot_2026.yaml --today-checkins-only
 ```
+
+### Today's Ride Check-In Behavior
+
+- By default, today's ride check-ins are not generated.
+- With dynamic status strategy, today's ride is set to `PLANNED` by default so pit-stop runtime fields remain empty (`pitStopStatus`, `openedAt`, `closedAt` are not set).
+- Use `--include-today-checkins` when you want today's ride to be treated as started and have check-ins generated.
+- Use `--today-checkins-only` to add only today's check-ins later (for example, after an initial run that skipped them).
+- In `--today-checkins-only` mode, config-driven `clean_before_load` is ignored to avoid deleting previously loaded data.
 
 ## Scenario Configuration Reference
 
