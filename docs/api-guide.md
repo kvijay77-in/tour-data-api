@@ -76,6 +76,9 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/close` | Close ride | [Rides](#rides) |
 | Check-Ins | POST | `/v1/tours/{tourId}/checkins` | Create check-in | [Check-Ins](#check-ins) |
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/checkins` | List ride check-ins | [Check-Ins](#check-ins) |
+| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/checkins` | List all check-ins for a rider | [Check-Ins](#check-ins) |
+| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | List rider check-ins for a ride number | [Check-Ins](#check-ins) |
+| Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | Cancel check-in (special update) | [Check-Ins](#check-ins) |
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard` | Get dashboard payload | [Check-Ins](#check-ins) |
 | Users | GET | `/v1/users/me` | Get current user claims | [Users](#users) |
 | Users | GET | `/v1/tours/{tourId}/users` | List tour users | [Users](#users) |
@@ -134,11 +137,12 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `POST /v1/tours/{tourId}/checkins` | `tourId` (required) | None | Required: `riderId, rideId, method`; Conditionally Required: `stageNumber` (normal check-in only); Optional: `isNotRiding, isQuitRiding, timestamp, notes` | `method` in `QR_SCAN, MANUAL, FALLBACK`; MANUAL requires `CHECKIN_MANUAL`; timestamp ISO UTC `Z`; `stageNumber` required only when both `isNotRiding=false` and `isQuitRiding=false`; rider exists in tour; duplicate and status conflict checks enforced (`DUPLICATE_CHECKIN`, `DUPLICATE_NOT_RIDING`, `RIDER_NOT_RIDING`, `RIDER_QUIT_RIDING`, `RIDE_CLOSED`) |
-| `GET /v1/tours/{tourId}/rides/{rideId}/checkins` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist |
+| `POST /v1/tours/{tourId}/checkins` | `tourId` (required) | None | Required: `riderId, rideId, method`; Conditionally Required: `stageNumber` (normal check-in only); Optional: `isNotRiding, isQuitRiding, timestamp, notes` | `method` in `QR_SCAN, MANUAL, FALLBACK`; MANUAL requires `CHECKIN_MANUAL`; timestamp ISO UTC `Z`; `stageNumber` required only when both `isNotRiding=false` and `isQuitRiding=false`; rider exists in tour; duplicate and status conflict checks enforced (`DUPLICATE_CHECKIN`, `DUPLICATE_NOT_RIDING`, `RIDER_NOT_RIDING`, `RIDER_QUIT_RIDING`, `RIDE_CLOSED`); cancelled check-ins are ignored during these validations |
+| `GET /v1/tours/{tourId}/rides/{rideId}/checkins` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist; cancelled check-ins are excluded from the response |
+| `GET /v1/tours/{tourId}/riders/{riderId}/checkins` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must be registered in tour; cancelled check-ins are excluded from the response |
+| `GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | `tourId, riderId, rideNo` (required) | None | None | `tourId` + `riderId` format rules; `rideNo` positive integer; rider must be registered in tour; cancelled check-ins are excluded from the response |
+| `POST /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | `tourId, rideId, checkInId` (required) | None | Required: `status, prevStatus` | Invocation is valid only when `status` contains `CANCELLED` (case-insensitive); updates only `status`, `prevStatus`, `cancelledBy`, and `cancelledAt`; any non-cancel status returns `INVALID_CANCEL_INVOCATION` |
 | `GET /v1/tours/{tourId}/rides/{rideId}/dashboard` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist; supports `If-None-Match` and `304 Not Modified` |
-
-Note: `GET /v1/riders/{riderId}/checkins` is not currently implemented.
 
 #### Users
 

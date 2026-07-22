@@ -89,6 +89,7 @@ class CheckInStatus(str, Enum):
     CHECKED_IN = "CHECKED_IN"
     NOT_RIDING = "NOT_RIDING"
     QUIT_RIDING = "QUIT_RIDING"
+    CANCELLED = "CANCELLED"
 
 
 class UserRole(str, Enum):
@@ -293,6 +294,9 @@ class CheckIn:
     isManualEntry: bool = False
     notes: Optional[str] = None
     location: Optional[Dict[str, float]] = None
+    prevStatus: Optional[str] = None
+    cancelledBy: Optional[str] = None
+    cancelledAt: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
 
     def _composite_checkin_id(self) -> str:
@@ -302,6 +306,8 @@ class CheckIn:
     
     def get_status(self) -> CheckInStatus:
         """Derive check-in status from flags"""
+        if self.cancelledAt is not None:
+            return CheckInStatus.CANCELLED
         if self.isNotRiding:
             return CheckInStatus.NOT_RIDING
         elif self.isQuitRiding:
@@ -327,6 +333,9 @@ class CheckIn:
             'stageId': self.stageId,
             'notes': self.notes,
             'location': self.location,
+            'prevStatus': self.prevStatus,
+            'cancelledBy': self.cancelledBy,
+            'cancelledAt': self.cancelledAt,
         }
         return {k: v for k, v in data.items() if v is not None}
     
@@ -440,3 +449,16 @@ def create_ride_from_dynamodb_item(item: Dict[str, Any]) -> Ride:
         completedAt=item.get('completedAt'),
         closedAt=item.get('closedAt')
     )
+
+
+def is_cancelled_checkin_item(item: Dict[str, Any]) -> bool:
+    """Return True when a persisted check-in item represents a cancelled record."""
+    status = item.get('status') or item.get('Status')
+    if status == CheckInStatus.CANCELLED.value:
+        return True
+
+    cancelled_at = item.get('cancelledAt')
+    if cancelled_at is None:
+        cancelled_at = item.get('cancelled_at')
+
+    return cancelled_at is not None

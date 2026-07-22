@@ -29,6 +29,7 @@ from dynamodb_utils import (
 )
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from rbac import require_permission, Permission
+from models import is_cancelled_checkin_item
 
 logger = get_logger(__name__)
 
@@ -121,6 +122,7 @@ def lambda_handler(event, context):
             key_condition_expression='rideId = :rid',
             expression_values={':rid': ride_id}
         )
+        check_ins = [checkin for checkin in check_ins if not is_cancelled_checkin_item(checkin)]
         
         logger.info(f"Found {len(check_ins)} check-ins for ride: {ride_id}")
         

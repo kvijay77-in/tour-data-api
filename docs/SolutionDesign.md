@@ -39,7 +39,10 @@ Based on Check-In App requirements, the following access patterns are critical:
 2. **Check-In Operations**
    - Create check-in record (QR scan or manual)
    - Get existing check-ins for a rider in a ride
+   - Get all check-ins for a rider (tour scope)
    - Update check-in status (Not Riding, Quit Riding)
+   - Cancel check-in (special update of cancellation metadata)
+   - Cancelled check-ins are excluded from subsequent validation and read APIs
 
 3. **Ride Management**
    - Get all rides for a tour
@@ -274,6 +277,9 @@ Notes:
 | isManualEntry | Boolean | True if manual entry |
 | notes | String | Optional notes |
 | location | Map | {latitude: Number, longitude: Number} (optional) |
+| prevStatus | String | Previous status supplied when a check-in is cancelled |
+| cancelledBy | String | User ID who cancelled the check-in |
+| cancelledAt | String | ISO 8601 timestamp when cancelled |
 | createdAt | String | ISO 8601 timestamp |
 
 **Indexes:**

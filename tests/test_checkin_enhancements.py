@@ -126,8 +126,18 @@ def checkin_dynamodb(aws_credentials):
             ],
             AttributeDefinitions=[
                 {'AttributeName': 'rideId', 'AttributeType': 'S'},
-                {'AttributeName': 'checkInId', 'AttributeType': 'S'}
+                {'AttributeName': 'checkInId', 'AttributeType': 'S'},
+                {'AttributeName': 'riderId', 'AttributeType': 'S'},
+                {'AttributeName': 'timestamp', 'AttributeType': 'S'}
             ],
+            GlobalSecondaryIndexes=[{
+                'IndexName': 'RiderIdIndex',
+                'KeySchema': [
+                    {'AttributeName': 'riderId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}
+                ],
+                'Projection': {'ProjectionType': 'ALL'}
+            }],
             BillingMode='PAY_PER_REQUEST'
         )
         for checkin in MOCK_CHECKINS:
@@ -189,6 +199,81 @@ def _make_dashboard_event(tour_id, ride_id, headers=None):
         }
     }
     return event
+
+
+def _make_get_rider_checkins_event(tour_id, rider_id):
+    """Helper to create a rider check-ins GET API Gateway event."""
+    return {
+        'version': '2.0',
+        'routeKey': f'GET /v1/tours/{tour_id}/riders/{rider_id}/checkins',
+        'rawPath': f'/v1/tours/{tour_id}/riders/{rider_id}/checkins',
+        'pathParameters': {'tourId': tour_id, 'riderId': rider_id},
+        'requestContext': {
+            'http': {'method': 'GET'},
+            'authorizer': {
+                'jwt': {
+                    'claims': {
+                        'sub': 'test-user-001',
+                        'cognito:groups': 'ADMINISTRATOR'
+                    }
+                }
+            }
+        }
+    }
+
+
+def _make_get_rider_ride_checkins_event(tour_id, rider_id, ride_no):
+    """Helper to create a rider + rideNo check-ins GET API Gateway event."""
+    return {
+        'version': '2.0',
+        'routeKey': f'GET /v1/tours/{tour_id}/riders/{rider_id}/rides/{ride_no}/checkins',
+        'rawPath': f'/v1/tours/{tour_id}/riders/{rider_id}/rides/{ride_no}/checkins',
+        'pathParameters': {
+            'tourId': tour_id,
+            'riderId': rider_id,
+            'rideNo': str(ride_no)
+        },
+        'requestContext': {
+            'http': {'method': 'GET'},
+            'authorizer': {
+                'jwt': {
+                    'claims': {
+                        'sub': 'test-user-001',
+                        'cognito:groups': 'ADMINISTRATOR'
+                    }
+                }
+            }
+        }
+    }
+
+
+def _make_cancel_checkin_event(tour_id, ride_id, checkin_id, body):
+    """Helper to create a cancel check-in POST API Gateway event."""
+    return {
+        'version': '2.0',
+        'routeKey': (
+            f'POST /v1/tours/{tour_id}/rides/{ride_id}/checkins/{checkin_id}/cancel'
+        ),
+        'rawPath': f'/v1/tours/{tour_id}/rides/{ride_id}/checkins/{checkin_id}/cancel',
+        'pathParameters': {
+            'tourId': tour_id,
+            'rideId': ride_id,
+            'checkInId': checkin_id,
+        },
+        'headers': {'content-type': 'application/json'},
+        'requestContext': {
+            'http': {'method': 'POST'},
+            'authorizer': {
+                'jwt': {
+                    'claims': {
+                        'sub': 'test-user-001',
+                        'cognito:groups': 'ADMINISTRATOR'
+                    }
+                }
+            }
+        },
+        'body': json.dumps(body)
+    }
 
 
 # ============================================================================
@@ -797,6 +882,271 @@ class TestClientTimestampValidation:
         assert response['statusCode'] == 201
         body = json.loads(response['body'])
         assert body['data']['timestamp'] == client_ts
+
+
+# ============================================================================
+# TEST: Rider Check-In Query APIs
+# ============================================================================
+
+class TestRiderCheckInQueryApis:
+    """Tests for rider check-in query endpoints."""
+
+    def test_get_all_checkins_for_rider(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_checkins import lambda_handler
+
+        event = _make_get_rider_checkins_event(MOCK_TOUR_ID, 'R1')
+        response = lambda_handler(event, None)
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['riderId'] == 'R1'
+        assert body['data']['count'] >= 1
+
+    def test_get_checkins_for_rider_and_ride_no(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        stack_name = os.environ['STACK_NAME']
+        ride_table = checkin_dynamodb.Table(f'{stack_name}-Ride-{MOCK_TOUR_ID}')
+        ride_table.put_item(Item={
+            'rideId': 'RIDE002',
+            'rideNo': 2,
+            'date': '2026-02-12',
+            'name': 'City B to City C',
+            'startLocation': 'City B',
+            'finishLocation': 'City C',
+            'totalDistance': Decimal('95.0'),
+            'flagOffTime': '08:30',
+            'status': 'ACTIVE',
+            'stages': [
+                {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+                {'stageId': 'S001', 'stageNumber': 1, 'type': 'PIT_STOP', 'name': 'PS1'},
+                {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH', 'name': 'Finish'}
+            ],
+            'createdAt': '2026-02-02T00:00:00Z',
+            'updatedAt': '2026-02-02T00:00:00Z'
+        })
+
+        checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
+        checkin_table.put_item(Item={
+            'rideId': 'RIDE002',
+            'checkInId': 'R1#000#2026-02-12T10:30:00Z',
+            'riderId': 'R1',
+            'stageNumber': 0,
+            'stageId': 'S000',
+            'timestamp': '2026-02-12T10:30:00Z',
+            'checkedInBy': 'system',
+            'method': 'QR_SCAN',
+            'isNotRiding': False,
+            'isQuitRiding': False,
+            'isManualEntry': False,
+            'status': 'CHECKED_IN',
+            'createdAt': '2026-02-12T10:30:00Z'
+        })
+
+        from get_rider_ride_checkins import lambda_handler
+
+        event = _make_get_rider_ride_checkins_event(MOCK_TOUR_ID, 'R1', 2)
+        response = lambda_handler(event, None)
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['rideNo'] == 2
+        assert body['data']['count'] == 1
+        assert body['data']['checkIns'][0]['rideId'] == 'RIDE002'
+
+    def test_get_apis_exclude_cancelled_checkins(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        stack_name = os.environ['STACK_NAME']
+        checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
+        checkin_table.put_item(Item={
+            'rideId': 'RIDE001',
+            'checkInId': 'R2#001#2026-02-11T12:30:00Z',
+            'riderId': 'R2',
+            'stageNumber': 1,
+            'stageId': 'S001',
+            'timestamp': '2026-02-11T12:30:00Z',
+            'checkedInBy': 'system',
+            'method': 'QR_SCAN',
+            'isNotRiding': False,
+            'isQuitRiding': False,
+            'isManualEntry': False,
+            'status': 'CANCELLED',
+            'prevStatus': 'CHECKED_IN',
+            'cancelledBy': 'admin',
+            'cancelledAt': '2026-02-11T13:00:00Z',
+            'createdAt': '2026-02-11T12:30:00Z'
+        })
+
+        from get_ride_checkins import lambda_handler as get_ride_checkins_handler
+        from get_rider_checkins import lambda_handler as get_rider_checkins_handler
+        from get_rider_ride_checkins import lambda_handler as get_rider_ride_checkins_handler
+        from get_dashboard_data import lambda_handler as get_dashboard_handler
+
+        ride_event = {
+            'pathParameters': {'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001'}
+        }
+        ride_response = get_ride_checkins_handler(ride_event, None)
+        ride_body = json.loads(ride_response['body'])
+        assert all(
+            checkin['status'] != 'CANCELLED'
+            for checkin in ride_body['data']['checkIns']
+        )
+
+        rider_event = _make_get_rider_checkins_event(MOCK_TOUR_ID, 'R2')
+        rider_response = get_rider_checkins_handler(rider_event, None)
+        rider_body = json.loads(rider_response['body'])
+        assert rider_body['data']['count'] == 0
+
+        rider_ride_event = _make_get_rider_ride_checkins_event(MOCK_TOUR_ID, 'R2', 1)
+        rider_ride_response = get_rider_ride_checkins_handler(rider_ride_event, None)
+        rider_ride_body = json.loads(rider_ride_response['body'])
+        assert rider_ride_body['data']['count'] == 0
+
+        dashboard_event = _make_dashboard_event(MOCK_TOUR_ID, 'RIDE001')
+        dashboard_response = get_dashboard_handler(dashboard_event, None)
+        dashboard_body = json.loads(dashboard_response['body'])
+        assert all(
+            checkin['status'] != 'CANCELLED'
+            for checkin in dashboard_body['data']['checkIns']
+        )
+
+
+class TestCancelledCheckinValidationExclusion:
+    """Cancelled check-ins should not block new validation decisions."""
+
+    def test_cancelled_duplicate_does_not_block_new_checkin(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        stack_name = os.environ['STACK_NAME']
+        checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
+        checkin_table.put_item(Item={
+            'rideId': 'RIDE001',
+            'checkInId': 'R2#001#2026-02-11T11:00:00Z',
+            'riderId': 'R2',
+            'stageNumber': 1,
+            'stageId': 'S001',
+            'timestamp': '2026-02-11T11:00:00Z',
+            'checkedInBy': 'admin',
+            'method': 'QR_SCAN',
+            'isNotRiding': False,
+            'isQuitRiding': False,
+            'isManualEntry': False,
+            'status': 'CANCELLED',
+            'prevStatus': 'CHECKED_IN',
+            'cancelledBy': 'admin',
+            'cancelledAt': '2026-02-11T11:05:00Z',
+            'createdAt': '2026-02-11T11:00:00Z'
+        })
+
+        from create_checkin import lambda_handler
+
+        event = _make_checkin_event(MOCK_TOUR_ID, {
+            'riderId': 'R2',
+            'rideId': 'RIDE001',
+            'stageNumber': 1,
+            'method': 'QR_SCAN'
+        })
+        response = lambda_handler(event, None)
+
+        assert response['statusCode'] == 201
+
+
+# ============================================================================
+# TEST: Cancel Check-In API
+# ============================================================================
+
+class TestCancelCheckInApi:
+    """Tests for status-driven cancel check-in update flow."""
+
+    def test_cancel_updates_only_cancellation_fields(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        stack_name = os.environ['STACK_NAME']
+        checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
+        key = {
+            'rideId': 'RIDE001',
+            'checkInId': 'R1#000#2026-02-11T10:30:00Z'
+        }
+        original = checkin_table.get_item(Key=key)['Item']
+
+        from cancel_checkin import lambda_handler
+
+        event = _make_cancel_checkin_event(
+            MOCK_TOUR_ID,
+            'RIDE001',
+            'R1#000#2026-02-11T10:30:00Z',
+            {'status': 'CANCELLED', 'prevStatus': 'CHECKED_IN'}
+        )
+        response = lambda_handler(event, None)
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['data']['status'] == 'CANCELLED'
+
+        updated = checkin_table.get_item(Key=key)['Item']
+        assert updated['status'] == 'CANCELLED'
+        assert updated['prevStatus'] == 'CHECKED_IN'
+        assert updated['cancelledBy'] == 'test-user-001'
+        assert 'cancelledAt' in updated
+
+        mutable_fields = {'status', 'prevStatus', 'cancelledBy', 'cancelledAt'}
+        for field_name, field_value in original.items():
+            if field_name in mutable_fields:
+                continue
+            assert updated[field_name] == field_value
+
+    def test_cancel_rejects_non_cancelled_status(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from cancel_checkin import lambda_handler
+
+        event = _make_cancel_checkin_event(
+            MOCK_TOUR_ID,
+            'RIDE001',
+            'R1#000#2026-02-11T10:30:00Z',
+            {'status': 'CHECKED_IN', 'prevStatus': 'CHECKED_IN'}
+        )
+        response = lambda_handler(event, None)
+
+        assert response['statusCode'] == 400
+        body = json.loads(response['body'])
+        assert body['error']['code'] == 'INVALID_CANCEL_INVOCATION'
+
+    def test_cancel_requires_prev_status(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from cancel_checkin import lambda_handler
+
+        event = _make_cancel_checkin_event(
+            MOCK_TOUR_ID,
+            'RIDE001',
+            'R1#000#2026-02-11T10:30:00Z',
+            {'status': 'CANCELLED'}
+        )
+        response = lambda_handler(event, None)
+
+        assert response['statusCode'] == 400
+        body = json.loads(response['body'])
+        assert body['error']['code'] == 'BAD_REQUEST'
 
 
 if __name__ == '__main__':

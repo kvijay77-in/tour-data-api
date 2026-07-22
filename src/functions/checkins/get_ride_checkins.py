@@ -12,6 +12,7 @@ from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from dynamodb_utils import get_tour_item, query_tour_items
+from models import is_cancelled_checkin_item
 
 logger = get_logger(__name__)
 
@@ -64,6 +65,7 @@ def lambda_handler(event, context):
             key_condition_expression='rideId = :rid',
             expression_values={':rid': ride_id}
         )
+        checkins = [checkin for checkin in checkins if not is_cancelled_checkin_item(checkin)]
         
         # Sort check-ins by timestamp
         checkins.sort(key=lambda c: c.get('timestamp', ''))

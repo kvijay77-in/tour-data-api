@@ -35,7 +35,14 @@ from validation import (
     validate_iso_datetime,
     ValidationError
 )
-from models import CheckIn, CheckInMethod, RideStatus, StageType, utc_now_iso
+from models import (
+    CheckIn,
+    CheckInMethod,
+    RideStatus,
+    StageType,
+    is_cancelled_checkin_item,
+    utc_now_iso,
+)
 from rbac import (
     Permission,
     get_user_pit_stop_stage_numbers,
@@ -313,11 +320,15 @@ def lambda_handler(event, context):
                 ':prefix': f'{rider_id}#'
             }
         )
+        active_checkins = [
+            checkin for checkin in existing_checkins
+            if not is_cancelled_checkin_item(checkin)
+        ]
         
         # Check for Not Riding conflicts
         if is_not_riding:
             nr_checkins = [
-                c for c in existing_checkins
+                c for c in active_checkins
                 if _read_value(c, 'isNotRiding', 'is_not_riding', False)
             ]
             if nr_checkins:
@@ -329,7 +340,7 @@ def lambda_handler(event, context):
         # Check if rider already marked as Not Riding (can't check in normally)
         if not is_not_riding and not is_quit_riding:
             nr_checkins = [
-                c for c in existing_checkins
+                c for c in active_checkins
                 if _read_value(c, 'isNotRiding', 'is_not_riding', False)
             ]
             if nr_checkins:
@@ -339,9 +350,9 @@ def lambda_handler(event, context):
                 )
         
         # Check if rider already quit (latest check-in has isQuitRiding=true)
-        if existing_checkins:
+        if active_checkins:
             sorted_checkins = sorted(
-                existing_checkins,
+                active_checkins,
                 key=lambda x: _read_value(x, 'timestamp', default=''),
                 reverse=True
             )
@@ -370,7 +381,7 @@ def lambda_handler(event, context):
         # Check for duplicate check-in (same rider + same stage, normal check-ins only)
         if not is_not_riding and not is_quit_riding:
             duplicate = next(
-                (c for c in existing_checkins
+                (c for c in active_checkins
                  if _read_value(c, 'stageNumber', 'stage_number') == stage_number
                  and not _read_value(c, 'isNotRiding', 'is_not_riding', False)
                  and not _read_value(c, 'isQuitRiding', 'is_quit_riding', False)),

@@ -1091,6 +1091,91 @@ Resources:
             Path: /v1/tours/{tourId}/rides/{rideId}/checkins
             Method: GET
 
+  GetRiderCheckInsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: get_rider_checkins.lambda_handler
+      Description: Get all check-ins for a rider in a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/checkins
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/checkins
+            Method: GET
+
+  GetRiderRideCheckInsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: get_rider_ride_checkins.lambda_handler
+      Description: Get all check-ins for a rider by ride number
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
+            Method: GET
+
+  CancelCheckInFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: cancel_checkin.lambda_handler
+      Description: Cancel an existing check-in record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel
+            Method: POST
+
   GetDashboardDataFunction:
     Type: AWS::Serverless::Function
     Properties:

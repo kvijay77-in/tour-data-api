@@ -21,9 +21,12 @@ tour-data-api/
 │   ├── functions/                     # Lambda function handlers
 │   │   ├── checkins/
 │   │   │   ├── __init__.py
+│   │   │   ├── cancel_checkin.py      # POST /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel
 │   │   │   ├── create_checkin.py      # POST /v1/tours/{tourId}/checkins
 │   │   │   ├── get_dashboard_data.py  # GET /v1/tours/{tourId}/rides/{rideId}/dashboard
-│   │   │   └── get_ride_checkins.py   # GET /v1/tours/{tourId}/rides/{rideId}/checkins
+│   │   │   ├── get_ride_checkins.py   # GET /v1/tours/{tourId}/rides/{rideId}/checkins
+│   │   │   ├── get_rider_checkins.py  # GET /v1/tours/{tourId}/riders/{riderId}/checkins
+│   │   │   └── get_rider_ride_checkins.py # GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
 │   │   ├── riders/
 │   │   │   ├── __init__.py
 │   │   │   ├── create_rider_profile.py # POST /v1/riders/profile
