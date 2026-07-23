@@ -24,6 +24,7 @@ tour-data-api/
 │   │   │   ├── cancel_checkin.py      # POST /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel
 │   │   │   ├── create_checkin.py      # POST /v1/tours/{tourId}/checkins
 │   │   │   ├── get_dashboard_data.py  # GET /v1/tours/{tourId}/rides/{rideId}/dashboard
+│   │   │   ├── get_dashboard_progress.py # GET /v1/tours/{tourId}/rides/{rideId}/dashboard/progress
 │   │   │   ├── get_ride_checkins.py   # GET /v1/tours/{tourId}/rides/{rideId}/checkins
 │   │   │   ├── get_rider_checkins.py  # GET /v1/tours/{tourId}/riders/{riderId}/checkins
 │   │   │   └── get_rider_ride_checkins.py # GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
@@ -33,6 +34,7 @@ tour-data-api/
 │   │   │   ├── get_rider_profile.py   # GET /v1/riders/profile/{profileId}
 │   │   │   ├── get_rider_statistics.py # GET /v1/tours/{tourId}/riders/{riderId}/statistics
 │   │   │   ├── get_tour_rider.py      # GET /v1/tours/{tourId}/riders/{riderId}
+│   │   │   ├── get_rider_ride_details.py # GET /v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details
 │   │   │   ├── get_tour_riders.py     # GET /v1/tours/{tourId}/riders
 │   │   │   ├── register_tour_rider.py # POST /v1/tours/{tourId}/riders
 │   │   │   ├── update_rider_profile.py # PUT /v1/riders/profile/{profileId}

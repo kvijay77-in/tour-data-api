@@ -22,6 +22,7 @@ from decimal import Decimal
 import sys
 sys.path.insert(0, 'src/layers/common')
 sys.path.insert(0, 'src/functions/checkins')
+sys.path.insert(0, 'src/functions/riders')
 
 from tests.fixtures.mock_data import (
     MOCK_TOUR_ID, MOCK_TOURS, MOCK_TOUR_RIDERS, MOCK_RIDES,
@@ -185,6 +186,58 @@ def _make_dashboard_event(tour_id, ride_id, headers=None):
         'routeKey': f'GET /v1/tours/{tour_id}/rides/{ride_id}/dashboard',
         'rawPath': f'/v1/tours/{tour_id}/rides/{ride_id}/dashboard',
         'pathParameters': {'tourId': tour_id, 'rideId': ride_id},
+        'headers': headers or {},
+        'requestContext': {
+            'http': {'method': 'GET'},
+            'authorizer': {
+                'jwt': {
+                    'claims': {
+                        'sub': 'test-user-001',
+                        'cognito:groups': 'ADMINISTRATOR'
+                    }
+                }
+            }
+        }
+    }
+    return event
+
+
+def _make_dashboard_progress_event(tour_id, ride_id, headers=None):
+    """Helper to create dashboard progress GET API Gateway event."""
+    event = {
+        'version': '2.0',
+        'routeKey': f'GET /v1/tours/{tour_id}/rides/{ride_id}/dashboard/progress',
+        'rawPath': f'/v1/tours/{tour_id}/rides/{ride_id}/dashboard/progress',
+        'pathParameters': {'tourId': tour_id, 'rideId': ride_id},
+        'headers': headers or {},
+        'requestContext': {
+            'http': {'method': 'GET'},
+            'authorizer': {
+                'jwt': {
+                    'claims': {
+                        'sub': 'test-user-001',
+                        'cognito:groups': 'ADMINISTRATOR'
+                    }
+                }
+            }
+        }
+    }
+    return event
+
+
+def _make_rider_details_event(tour_id, ride_id, rider_id, headers=None):
+    """Helper to create rider details GET API Gateway event."""
+    event = {
+        'version': '2.0',
+        'routeKey': (
+            f'GET /v1/tours/{tour_id}/rides/{ride_id}/riders/{rider_id}/details'
+        ),
+        'rawPath': f'/v1/tours/{tour_id}/rides/{ride_id}/riders/{rider_id}/details',
+        'pathParameters': {
+            'tourId': tour_id,
+            'rideId': ride_id,
+            'riderId': rider_id,
+        },
         'headers': headers or {},
         'requestContext': {
             'http': {'method': 'GET'},
@@ -833,6 +886,150 @@ class TestDashboardETag:
         assert response2['statusCode'] == 200
         etag2 = response2['headers']['ETag']
         assert etag1 != etag2
+
+
+class TestDashboardProgressEndpoint:
+    """Tests for lightweight dashboard progress endpoint."""
+
+    def test_dashboard_progress_returns_compact_payload(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_dashboard_progress import lambda_handler
+
+        event = _make_dashboard_progress_event(MOCK_TOUR_ID, 'RIDE001')
+        response = lambda_handler(event, None)
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        data = body['data']
+        assert data['rideId'] == 'RIDE001'
+        assert 'checkIns' in data
+        assert 'summary' in data
+        assert 'dataVersion' in data
+        assert 'ride' not in data
+        assert 'riders' not in data
+
+    def test_dashboard_progress_supports_etag_304(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_dashboard_progress import lambda_handler
+
+        first = _make_dashboard_progress_event(MOCK_TOUR_ID, 'RIDE001')
+        first_response = lambda_handler(first, None)
+        etag = first_response['headers']['ETag']
+
+        second = _make_dashboard_progress_event(
+            MOCK_TOUR_ID,
+            'RIDE001',
+            headers={'if-none-match': etag}
+        )
+        second_response = lambda_handler(second, None)
+
+        assert second_response['statusCode'] == 304
+        assert second_response['body'] == ''
+        assert second_response['headers']['ETag'] == etag
+
+
+class TestRiderDetailsEndpoint:
+    """Tests for rider popup details endpoint."""
+
+    def test_rider_details_returns_timeline_and_latest_status(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_ride_details import lambda_handler
+
+        event = _make_rider_details_event(MOCK_TOUR_ID, 'RIDE001', 'R1')
+        response = lambda_handler(event, None)
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        data = body['data']
+        assert data['rider']['riderId'] == 'R1'
+        assert data['rider']['profileId'] == 'P001'
+        assert data['latestStatus'] == 'CHECKED_IN'
+        assert len(data['checkInTimeline']) >= 1
+
+    def test_rider_details_excludes_cancelled_timeline_entries(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        stack_name = os.environ['STACK_NAME']
+        checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
+        checkin_table.put_item(Item={
+            'rideId': 'RIDE001',
+            'checkInId': 'R1#001#2026-02-11T11:30:00Z',
+            'riderId': 'R1',
+            'stageNumber': 1,
+            'stageId': 'S001',
+            'timestamp': '2026-02-11T11:30:00Z',
+            'checkedInBy': 'system',
+            'method': 'QR_SCAN',
+            'isNotRiding': False,
+            'isQuitRiding': False,
+            'isManualEntry': False,
+            'status': 'CANCELLED',
+            'prevStatus': 'CHECKED_IN',
+            'cancelledBy': 'admin',
+            'cancelledAt': '2026-02-11T11:45:00Z',
+            'createdAt': '2026-02-11T11:30:00Z'
+        })
+
+        from get_rider_ride_details import lambda_handler
+
+        event = _make_rider_details_event(MOCK_TOUR_ID, 'RIDE001', 'R1')
+        response = lambda_handler(event, None)
+        body = json.loads(response['body'])
+
+        assert response['statusCode'] == 200
+        assert all(
+            checkin['checkInId'] != 'R1#001#2026-02-11T11:30:00Z'
+            for checkin in body['data']['checkInTimeline']
+        )
+
+    def test_rider_details_returns_404_for_missing_ride_or_rider(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_ride_details import lambda_handler
+
+        missing_ride_event = _make_rider_details_event(MOCK_TOUR_ID, 'RIDE099', 'R1')
+        missing_ride_response = lambda_handler(missing_ride_event, None)
+        assert missing_ride_response['statusCode'] == 404
+
+        missing_rider_event = _make_rider_details_event(MOCK_TOUR_ID, 'RIDE001', 'R99')
+        missing_rider_response = lambda_handler(missing_rider_event, None)
+        assert missing_rider_response['statusCode'] == 404
+
+    def test_rider_details_supports_etag_304(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_ride_details import lambda_handler
+
+        first = _make_rider_details_event(MOCK_TOUR_ID, 'RIDE001', 'R1')
+        first_response = lambda_handler(first, None)
+        etag = first_response['headers']['ETag']
+
+        second = _make_rider_details_event(
+            MOCK_TOUR_ID,
+            'RIDE001',
+            'R1',
+            headers={'If-None-Match': etag}
+        )
+        second_response = lambda_handler(second, None)
+
+        assert second_response['statusCode'] == 304
+        assert second_response['body'] == ''
+        assert second_response['headers']['ETag'] == etag
 
 
 # ============================================================================

@@ -80,6 +80,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | List rider check-ins for a ride number | [Check-Ins](#check-ins) |
 | Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | Cancel check-in (special update) | [Check-Ins](#check-ins) |
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard` | Get dashboard payload | [Check-Ins](#check-ins) |
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | Get lightweight dashboard progress payload | [Check-Ins](#check-ins) |
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | Get rider popup details for selected ride | [Check-Ins](#check-ins) |
 | Users | GET | `/v1/users/me` | Get current user claims | [Users](#users) |
 | Users | GET | `/v1/tours/{tourId}/users` | List tour users | [Users](#users) |
 | Admin UserMgmt | GET | `/v1/admin/usermgmt/roles` | List assignable Cognito groups | [Admin User Management](#admin-user-management) |
@@ -143,6 +145,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | `tourId, riderId, rideNo` (required) | None | None | `tourId` + `riderId` format rules; `rideNo` positive integer; rider must be registered in tour; cancelled check-ins are excluded from the response |
 | `POST /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | `tourId, rideId, checkInId` (required) | None | Required: `status, prevStatus` | Invocation is valid only when `status` contains `CANCELLED` (case-insensitive); updates only `status`, `prevStatus`, `cancelledBy`, and `cancelledAt`; any non-cancel status returns `INVALID_CANCEL_INVOCATION` |
 | `GET /v1/tours/{tourId}/rides/{rideId}/dashboard` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist; supports `If-None-Match` and `304 Not Modified` |
+| `GET /v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | `tourId, rideId` (required) | None | None | Lightweight refresh contract with `rideId`, `checkIns`, `summary`, `dataVersion`; excludes `ride` and `riders`; supports `If-None-Match` and `304 Not Modified` |
+| `GET /v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | `tourId, rideId, riderId` (required) | None | None | Returns popup-focused rider fields plus selected-ride `checkInTimeline`; cancelled entries excluded; returns `404` when ride or rider does not exist; supports `If-None-Match` and `304 Not Modified` |
 
 #### Users
 
@@ -285,6 +289,8 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 | GET riders | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET rides | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET dashboard | ✅ | ✅ | ✅ | ❌ | ✅ |
+| GET dashboard progress | ✅ | ✅ | ✅ | ❌ | ✅ |
+| GET rider details popup | ✅ | ✅ | ✅ | ❌ | ✅ |
 | POST check-in | ✅ | ✅ | Stage-bound regular PIT_STOP check-ins plus any Quit Riding check-in | ✅ | ❌ |
 | POST tours (create/provision) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST archive tour | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -356,7 +362,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 1. Create Tour enforces `endDate >= startDate` and unique `tourId`.
 2. Create Ride enforces positive `totalDistance`, positive integer `rideNo`, and sequential `stages` with `START` first and `FINISH` last.
 3. List filters validate enum values (`status`, `role`, `notification type`).
-4. Dashboard endpoint supports ETag and conditional `304 Not Modified`.
+4. Dashboard, dashboard-progress, and rider-details endpoints support ETag and conditional `304 Not Modified`.
 
 ## Rate Limiting
 

@@ -644,6 +644,32 @@ Resources:
             Path: /v1/tours/{tourId}/riders/{riderId}
             Method: GET
 
+  GetRiderRideDetailsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: get_rider_ride_details.lambda_handler
+      Description: Get rider popup details for a specific ride
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details
+            Method: GET
+
   CreateRiderProfileFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1203,6 +1229,32 @@ Resources:
           Properties:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/rides/{rideId}/dashboard
+            Method: GET
+
+  GetDashboardProgressFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: get_dashboard_progress.lambda_handler
+      Description: Get lightweight dashboard progress payload for a ride
+      Timeout: 60
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/dashboard/progress
             Method: GET
 
   # ============================================================================
