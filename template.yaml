@@ -29,6 +29,7 @@ Globals:
       Variables:
         # Shared table names (SAM-managed)
         RIDER_PROFILE_TABLE: !Ref RiderProfileTable
+        RIDER_COGNITO_USER_TABLE: !Ref RiderCognitoUserTable
         TOUR_MASTER_TABLE: !Ref TourMasterTable
         # Dynamic table name resolution
         STACK_NAME: !Ref AWS::StackName
@@ -735,6 +736,55 @@ Resources:
             ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/riders
             Method: POST
+
+  LinkRiderCognitoUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: link_rider_cognito_user.lambda_handler
+      Description: Create or delete rider Cognito username to profile mapping
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiderCognitoUserTable
+      Events:
+        HttpApiGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/link/{cognitoUserName}
+            Method: GET
+        HttpApiCreate:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/link/{cognitoUserName}
+            Method: POST
+        HttpApiDelete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/link/{cognitoUserName}
+            Method: DELETE
+        RiderHttpApiCreate:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/riders/link/{cognitoUserName}
+            Method: POST
+        RiderHttpApiGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/riders/link/{cognitoUserName}
+            Method: GET
+        RiderHttpApiDelete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/riders/link/{cognitoUserName}
+            Method: DELETE
 
   GetRiderStatisticsFunction:
     Type: AWS::Serverless::Function
@@ -1626,6 +1676,33 @@ Resources:
         - Key: ManagedBy
           Value: SAM
 
+  RiderCognitoUserTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-RiderCognitoUser'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: cognitoUserName
+          AttributeType: S
+      KeySchema:
+        - AttributeName: cognitoUserName
+          KeyType: HASH
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-RiderCognitoUser'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+
   TourMasterTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -1744,6 +1821,12 @@ Outputs:
     Value: !Ref RiderProfileTable
     Export:
       Name: !Sub '${AWS::StackName}-RiderProfileTable'
+
+  RiderCognitoUserTableName:
+    Description: Rider Cognito user mapping DynamoDB table name
+    Value: !Ref RiderCognitoUserTable
+    Export:
+      Name: !Sub '${AWS::StackName}-RiderCognitoUserTable'
 
   TourMasterTableName:
     Description: TourMaster DynamoDB table name

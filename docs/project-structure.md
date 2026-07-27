@@ -38,6 +38,7 @@ tour-data-api/
 │   │   │   ├── get_tour_riders.py     # GET /v1/tours/{tourId}/riders
 │   │   │   ├── register_tour_rider.py # POST /v1/tours/{tourId}/riders
 │   │   │   ├── update_rider_profile.py # PUT /v1/riders/profile/{profileId}
+│   │   │   ├── link_rider_cognito_user.py # GET|POST|DELETE /v1/riders/link/{cognitoUserName}
 │   │   │   └── upload_profile_picture.py # POST /v1/riders/profile/{profileId}/picture
 │   │   ├── rides/
 │   │   │   ├── __init__.py

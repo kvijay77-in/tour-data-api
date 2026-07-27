@@ -115,6 +115,18 @@ def dynamodb_full_mock(aws_credentials):
         for profile in MOCK_RIDER_PROFILES:
             rider_table.put_item(Item=profile)
 
+        # Create shared RiderCognitoUser table
+        dynamodb.create_table(
+            TableName='test-rider-cognito-user-table',
+            KeySchema=[
+                {'AttributeName': 'cognitoUserName', 'KeyType': 'HASH'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'cognitoUserName', 'AttributeType': 'S'}
+            ],
+            BillingMode='PAY_PER_REQUEST'
+        )
+
         # Create tour-specific TourRider table with ProfileIdIndex GSI
         tour_rider_table = dynamodb.create_table(
             TableName=f'test-stack-TourRider-{MOCK_TOUR_ID}',
@@ -247,6 +259,7 @@ def dynamodb_full_mock(aws_credentials):
         # Set environment variables
         os.environ['TOUR_MASTER_TABLE'] = 'test-tour-master-table'
         os.environ['RIDER_PROFILE_TABLE'] = 'test-rider-table'
+        os.environ['RIDER_COGNITO_USER_TABLE'] = 'test-rider-cognito-user-table'
         os.environ['STACK_NAME'] = 'test-stack'
         os.environ['ENVIRONMENT'] = 'test'
         os.environ['SUBSCRIPTION_ID'] = 'test-sub-001'
@@ -333,6 +346,163 @@ class TestCreateRiderProfile:
             method='POST',
             path='/v1/riders/profile',
             body={'name': 'Incomplete'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+
+# ============================================================================
+# LINK RIDER COGNITO USER TESTS
+# ============================================================================
+
+class TestLinkRiderCognitoUser:
+    """Tests for GET/POST/DELETE /v1/riders/link/{cognitoUserName}"""
+
+    def test_create_link_success(self, dynamodb_full_mock):
+        """Successfully create a Cognito username link"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from link_rider_cognito_user import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/link/rider.user',
+            path_params={'cognitoUserName': 'rider.user'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 201
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['cognitoUserName'] == 'rider.user'
+        assert 'profileId' in body['data']
+
+    def test_create_link_conflict(self, dynamodb_full_mock):
+        """Fail when cognitoUserName already exists"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from link_rider_cognito_user import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/link/rider.user',
+            path_params={'cognitoUserName': 'rider.user'}
+        )
+
+        first = lambda_handler(event, None)
+        assert first['statusCode'] == 201
+
+        second = lambda_handler(event, None)
+        assert second['statusCode'] == 409
+        body = json.loads(second['body'])
+        assert body['error']['code'] == 'COGNITO_USER_ALREADY_LINKED'
+
+    def test_get_link_success(self, dynamodb_full_mock):
+        """Return the linked profileId for an existing Cognito username"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from link_rider_cognito_user import lambda_handler
+
+        create_event = _make_event(
+            method='POST',
+            path='/v1/riders/link/rider.lookup',
+            path_params={'cognitoUserName': 'rider.lookup'}
+        )
+        created = lambda_handler(create_event, None)
+        assert created['statusCode'] == 201
+        created_body = json.loads(created['body'])
+        profile_id = created_body['data']['profileId']
+
+        get_event = _make_event(
+            method='GET',
+            path='/v1/riders/link/rider.lookup',
+            path_params={'cognitoUserName': 'rider.lookup'}
+        )
+        response = lambda_handler(get_event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['profileId'] == profile_id
+
+    def test_get_link_not_found(self, dynamodb_full_mock):
+        """Return 404 when the Cognito username is not linked"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from link_rider_cognito_user import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/riders/link/missing.user',
+            path_params={'cognitoUserName': 'missing.user'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 404
+
+    def test_delete_link_success(self, dynamodb_full_mock):
+        """Successfully delete an existing Cognito username link"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from link_rider_cognito_user import lambda_handler
+
+        create_event = _make_event(
+            method='POST',
+            path='/v1/riders/link/rider.delete',
+            path_params={'cognitoUserName': 'rider.delete'}
+        )
+        created = lambda_handler(create_event, None)
+        assert created['statusCode'] == 201
+
+        delete_event = _make_event(
+            method='DELETE',
+            path='/v1/riders/link/rider.delete',
+            path_params={'cognitoUserName': 'rider.delete'}
+        )
+        deleted = lambda_handler(delete_event, None)
+        assert deleted['statusCode'] == 200
+        body = json.loads(deleted['body'])
+        assert body['success'] is True
+        assert body['data']['deleted'] is True
+
+    def test_delete_link_not_found(self, dynamodb_full_mock):
+        """Fail deleting when link is not present"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from link_rider_cognito_user import lambda_handler
+
+        event = _make_event(
+            method='DELETE',
+            path='/v1/riders/link/nonexistent.user',
+            path_params={'cognitoUserName': 'nonexistent.user'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 404
+
+    def test_link_missing_path_parameter(self, dynamodb_full_mock):
+        """Fail when cognitoUserName path parameter is missing"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from link_rider_cognito_user import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/link/'
         )
 
         response = lambda_handler(event, None)

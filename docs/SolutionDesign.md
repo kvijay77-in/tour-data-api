@@ -76,6 +76,7 @@ These tables exist for the lifetime of the deployment and are defined in `templa
 | Table | Purpose |
 |---|---|
 | **RiderProfile** | Master rider data, tour-agnostic |
+| **RiderCognitoUser** | Mapping between Cognito rider username and generated rider profile ID |
 | **TourMaster** | Tour registry — every tour ever created is listed here |
 
 ### Tour-Specific Tables (Provisioned at Runtime)
@@ -95,7 +96,7 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables and `{AWS::StackName}-{TableType}-{tourId}` for tour-specific tables.
 
 Examples (stack name: `dev`, tour ID: `TOT-2026`):
-- Shared: `dev-RiderProfile`, `dev-TourMaster`
+- Shared: `dev-RiderProfile`, `dev-RiderCognitoUser`, `dev-TourMaster`
 - Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
@@ -146,7 +147,23 @@ Both provisioning methods create the same resources: a Tour record in the shared
 - Simple key-value lookups by profile ID
 - Photo stored in S3, only reference stored here
 
-## Shared Table 2: TourMaster
+## Shared Table 2: RiderCognitoUser
+
+**Purpose:** Maintains the relationship between rider Cognito username and rider profile ID.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| cognitoUserName | String | Cognito username (partition key) |
+| profileId | String | Auto-generated UUID for rider profile mapping |
+
+**Indexes:**
+- Primary Key: `cognitoUserName` (partition key only)
+
+**Notes:**
+- One item per Cognito username
+- Used by rider-app link API (`GET`/`POST`/`DELETE /v1/riders/link/{cognitoUserName}`)
+
+## Shared Table 3: TourMaster
 
 **Purpose:** Tour registry — master record for every tour ever created
 
@@ -433,7 +450,7 @@ Given the small data volume, costs will be minimal. However, following best prac
 
 3. **Data Retention:**
    - Archival is per-tour: export tour-specific tables to S3 and delete
-   - Shared tables (RiderProfile, TourMaster) persist for deployment lifetime
+   - Shared tables (RiderProfile, RiderCognitoUser, TourMaster) persist for deployment lifetime
    - No TTL needed — tour table deletion handles cleanup
 
 ## API Gateway Optimization
@@ -524,7 +541,7 @@ tour-data-api/
 ## Key Resources
 
 ### Managed by SAM (template.yaml)
-1. **Shared DynamoDB Tables:** RiderProfile, TourMaster (with GSIs)
+1. **Shared DynamoDB Tables:** RiderProfile, RiderCognitoUser, TourMaster (with GSIs where applicable)
 2. **Lambda Functions:** One per API endpoint
 3. **Lambda Layer:** Common utilities shared across all functions (`dynamodb_utils`, `logger`, `models`, `rbac`, `response`, `tour_provisioning`, `validation`)
 4. **API Gateway (tour-mgmt-app):** HTTP API (`TourDataApi`) with JWT authorizer for the management User Pool

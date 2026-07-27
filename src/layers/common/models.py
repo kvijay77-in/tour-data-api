@@ -5,9 +5,9 @@ These models represent the data structures stored in DynamoDB
 and returned by the API endpoints.
 
 Table Strategy (Hybrid):
-- Shared tables (SAM-managed): RiderProfile, TourMaster
+- Shared tables (SAM-managed): RiderProfile, RiderCognitoUser, TourMaster
 - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
-  CheckIn-{tourId}, User-{tourId}
+    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}
 """
 
 from typing import Optional, List, Dict, Any
@@ -151,6 +151,25 @@ class RiderProfile:
         """Convert to dictionary"""
         return asdict(self)
     
+    def to_dynamodb_item(self) -> Dict[str, Any]:
+        """Convert to DynamoDB item format"""
+        return self.to_dict()
+
+
+@dataclass
+class RiderCognitoUser:
+    """
+    Cognito username to rider profile mapping.
+    Stored in shared RiderCognitoUser table.
+    Partition key: cognitoUserName
+    """
+    cognitoUserName: str
+    profileId: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return asdict(self)
+
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         return self.to_dict()

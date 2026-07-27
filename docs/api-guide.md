@@ -57,6 +57,9 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Tours | POST | `/v1/tours` | Create and provision tour | [Tours](#tours) |
 | Tours | POST | `/v1/tours/{tourId}/archive` | Archive tour | [Tours](#tours) |
 | Riders | POST | `/v1/riders/profile` | Create rider profile | [Riders](#riders) |
+| Riders | GET | `/v1/riders/link/{cognitoUserName}` | Get linked profile ID for a Cognito username | [Riders](#riders) |
+| Riders | POST | `/v1/riders/link/{cognitoUserName}` | Create Cognito username to profile mapping | [Riders](#riders) |
+| Riders | DELETE | `/v1/riders/link/{cognitoUserName}` | Delete Cognito username to profile mapping | [Riders](#riders) |
 | Riders | GET | `/v1/riders/profile/{profileId}` | Get rider profile | [Riders](#riders) |
 | Riders | PUT | `/v1/riders/profile/{profileId}` | Update rider profile | [Riders](#riders) |
 | Riders | POST | `/v1/riders/profile/{profileId}/picture` | Get profile picture upload URL | [Riders](#riders) |
@@ -112,6 +115,9 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
 | `POST /v1/riders/profile` | None | None | Required: `name, email, phone, emergencyContactName, emergencyContactPhone`; Optional: `dateOfBirth, gender, address` | Email format; duplicate email rejected (`EMAIL_ALREADY_EXISTS`) |
+| `GET /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Returns linked `profileId`; `404` if mapping does not exist |
+| `POST /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Creates mapping row with generated `profileId` UUID; duplicate `cognitoUserName` rejected (`COGNITO_USER_ALREADY_LINKED`) |
+| `DELETE /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Deletes mapping row; returns `404` if mapping does not exist |
 | `GET /v1/riders/profile/{profileId}` | `profileId` (required) | None | None | `profileId` must exist |
 | `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | At least one of: `name, email, phone, emergencyContactName, emergencyContactPhone, photoS3Key` | Email validated when provided |
 | `POST /v1/riders/profile/{profileId}/picture` | `profileId` (required) | None | Optional: `contentType` | `profileId` must exist; `contentType` in `image/jpeg, image/png`; default `image/jpeg` |
