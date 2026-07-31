@@ -127,9 +127,11 @@ Authorization: Bearer <jwt-token>
 - `POST /v1/tours/{tourId}/checkins` - Create check-in
 - `GET /v1/tours/{tourId}/rides/{rideId}/checkins` - Get ride check-ins
 - `GET /v1/tours/{tourId}/rides/{rideId}/dashboard` - Get dashboard data for ride
+- `GET /v1/tours/{tourId}/rides/{rideId}/dashboard/progress` - Get lightweight dashboard refresh payload
 
 #### Users
 - `GET /v1/users/me` - Get current user
+- `GET /v1/users/cognito` - List Cognito users with only `sub` and `name`
 - `GET /v1/tours/{tourId}/users` - List tour users
 
 #### Notifications

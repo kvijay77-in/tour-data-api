@@ -1214,6 +1214,15 @@ Resources:
                 - dynamodb:Scan
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:ListUsers
+              Resource:
+                - !If
+                  - CreateCognito
+                  - !GetAtt CognitoUserPool.Arn
+                  - !Ref CognitoUserPoolArn
       Events:
         HttpApi:
           Type: HttpApi
@@ -1326,6 +1335,32 @@ Resources:
           Properties:
             ApiId: !Ref TourDataApi
             Path: /v1/users/me
+            Method: GET
+
+  ListCognitoUsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/users/
+      Handler: list_cognito_users.lambda_handler
+      Description: List Cognito users with minimal attributes for frontend mapping
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:ListUsers
+              Resource:
+                - !If
+                  - CreateCognito
+                  - !GetAtt CognitoUserPool.Arn
+                  - !Ref CognitoUserPoolArn
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/users/cognito
             Method: GET
 
   ListTourUsersFunction:

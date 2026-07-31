@@ -86,6 +86,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | Get lightweight dashboard progress payload | [Check-Ins](#check-ins) |
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | Get rider popup details for selected ride | [Check-Ins](#check-ins) |
 | Users | GET | `/v1/users/me` | Get current user claims | [Users](#users) |
+| Users | GET | `/v1/users/cognito` | List Cognito users with only `sub` and `name` | [Users](#users) |
 | Users | GET | `/v1/tours/{tourId}/users` | List tour users | [Users](#users) |
 | Admin UserMgmt | GET | `/v1/admin/usermgmt/roles` | List assignable Cognito groups | [Admin User Management](#admin-user-management) |
 | Admin UserMgmt | GET | `/v1/admin/usermgmt/users` | List Cognito users with roles | [Admin User Management](#admin-user-management) |
@@ -146,12 +147,12 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
 | `POST /v1/tours/{tourId}/checkins` | `tourId` (required) | None | Required: `riderId, rideId, method`; Conditionally Required: `stageNumber` (normal check-in only); Optional: `isNotRiding, isQuitRiding, timestamp, notes` | `method` in `QR_SCAN, MANUAL, FALLBACK`; MANUAL requires `CHECKIN_MANUAL`; timestamp ISO UTC `Z`; `stageNumber` required only when both `isNotRiding=false` and `isQuitRiding=false`; rider exists in tour; duplicate and status conflict checks enforced (`DUPLICATE_CHECKIN`, `DUPLICATE_NOT_RIDING`, `RIDER_NOT_RIDING`, `RIDER_QUIT_RIDING`, `RIDE_CLOSED`); cancelled check-ins are ignored during these validations |
-| `GET /v1/tours/{tourId}/rides/{rideId}/checkins` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist; cancelled check-ins are excluded from the response |
+| `GET /v1/tours/{tourId}/rides/{rideId}/checkins` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist; cancelled check-ins are excluded from the response; each check-in keeps core audit attribute `checkedInBy` |
 | `GET /v1/tours/{tourId}/riders/{riderId}/checkins` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must be registered in tour; cancelled check-ins are excluded from the response |
 | `GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | `tourId, riderId, rideNo` (required) | None | None | `tourId` + `riderId` format rules; `rideNo` positive integer; rider must be registered in tour; cancelled check-ins are excluded from the response |
 | `POST /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | `tourId, rideId, checkInId` (required) | None | Required: `status, prevStatus` | Invocation is valid only when `status` contains `CANCELLED` (case-insensitive); updates only `status`, `prevStatus`, `cancelledBy`, and `cancelledAt`; any non-cancel status returns `INVALID_CANCEL_INVOCATION` |
 | `GET /v1/tours/{tourId}/rides/{rideId}/dashboard` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist; supports `If-None-Match` and `304 Not Modified` |
-| `GET /v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | `tourId, rideId` (required) | None | None | Lightweight refresh contract with `rideId`, `checkIns`, `summary`, `dataVersion`; excludes `ride` and `riders`; supports `If-None-Match` and `304 Not Modified` |
+| `GET /v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | `tourId, rideId` (required) | None | None | Lightweight refresh contract with `rideId`, `checkIns`, `summary`, `dataVersion`; `checkIns` retains core attribute `checkedInBy`; excludes `ride` and `riders`; supports `If-None-Match` and `304 Not Modified` |
 | `GET /v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | `tourId, rideId, riderId` (required) | None | None | Returns popup-focused rider fields plus selected-ride `checkInTimeline`; cancelled entries excluded; returns `404` when ride or rider does not exist; supports `If-None-Match` and `304 Not Modified` |
 
 #### Users
@@ -159,6 +160,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
 | `GET /v1/users/me` | None | None | None | Requires valid JWT claims; returns 401 for missing/invalid claims |
+| `GET /v1/users/cognito` | None | None | None | Requires a valid authenticated user group; returns only `sub` and `name` per Cognito user from the management user pool |
 | `GET /v1/tours/{tourId}/users` | `tourId` (required) | `role` (optional) | None | `tourId` format; `role` in `ADMINISTRATOR, SUPER_USER, HOTEL_STAFF, GUEST, RIDER`, or `PS_<n>_USER` |
 
 #### Admin User Management
@@ -297,6 +299,7 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 | GET dashboard | ✅ | ✅ | ✅ | ❌ | ✅ |
 | GET dashboard progress | ✅ | ✅ | ✅ | ❌ | ✅ |
 | GET rider details popup | ✅ | ✅ | ✅ | ❌ | ✅ |
+| GET Cognito users (`/v1/users/cognito`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | POST check-in | ✅ | ✅ | Stage-bound regular PIT_STOP check-ins plus any Quit Riding check-in | ✅ | ❌ |
 | POST tours (create/provision) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST archive tour | ✅ | ❌ | ❌ | ❌ | ❌ |

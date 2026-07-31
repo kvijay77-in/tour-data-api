@@ -9,6 +9,8 @@ import re
 import sys
 import uuid
 
+from botocore.exceptions import ClientError
+
 
 sys.path.insert(0, 'src/layers/common')
 sys.path.insert(0, 'src/functions/users')
@@ -25,17 +27,52 @@ class FakeCognitoClient:
             'PS_2_USER',
         }
         self.users = {}
+        self.reject_attributes_to_get = False
 
     def list_groups(self, UserPoolId, Limit=None, NextToken=None):
         return {'Groups': [{'GroupName': g} for g in sorted(self.groups)]}
 
-    def list_users(self, UserPoolId, Limit=None, PaginationToken=None, Filter=None):
+    def list_users(
+        self,
+        UserPoolId,
+        Limit=None,
+        PaginationToken=None,
+        Filter=None,
+        AttributesToGet=None,
+    ):
+        if self.reject_attributes_to_get and AttributesToGet:
+            raise ClientError(
+                {
+                    'Error': {
+                        'Code': 'InvalidParameterException',
+                        'Message': 'Input fails to satisfy the constraints.',
+                    }
+                },
+                'ListUsers',
+            )
+
         users = list(self.users.values())
         if Filter:
             match = re.match(r'^sub = "(.+)"$', Filter)
             if match:
                 sub = match.group(1)
                 users = [u for u in users if _attr_value(u['Attributes'], 'sub') == sub]
+
+        if AttributesToGet:
+            filtered_users = []
+            for user in users:
+                attrs = [
+                    attr for attr in user.get('Attributes', [])
+                    if attr.get('Name') in set(AttributesToGet)
+                ]
+                filtered_users.append({
+                    'Username': user.get('Username'),
+                    'Attributes': attrs,
+                    'Enabled': user.get('Enabled', True),
+                    'UserStatus': user.get('UserStatus', 'CONFIRMED'),
+                })
+            users = filtered_users
+
         if Limit is not None:
             users = users[:Limit]
         return {'Users': users}
@@ -314,3 +351,100 @@ def test_disable_user_accepts_cognito_sub_without_rfc_uuid_bits(monkeypatch):
         'enabled': False,
     }
     assert fake.users['seed-user']['Enabled'] is False
+
+
+def test_list_cognito_users_returns_only_sub_and_name(monkeypatch):
+    fake = FakeCognitoClient()
+    os.environ['MGMT_USER_POOL_ID'] = 'pool-1'
+
+    fake.users['user-one'] = {
+        'Username': 'user-one',
+        'Attributes': [
+            {'Name': 'sub', 'Value': '11111111-1111-1111-1111-111111111111'},
+            {'Name': 'name', 'Value': 'User One'},
+            {'Name': 'email', 'Value': 'one@example.com'},
+        ],
+        'Enabled': True,
+        'UserStatus': 'CONFIRMED',
+        'Groups': {'GUEST'},
+    }
+    fake.users['user-two'] = {
+        'Username': 'user-two',
+        'Attributes': [
+            {'Name': 'sub', 'Value': '22222222-2222-2222-2222-222222222222'},
+            {'Name': 'name', 'Value': 'User Two'},
+            {'Name': 'phone_number', 'Value': '+919999999999'},
+        ],
+        'Enabled': True,
+        'UserStatus': 'CONFIRMED',
+        'Groups': {'PS_1_USER'},
+    }
+
+    list_mod = _load('list_cognito_users')
+    monkeypatch.setattr(list_mod, 'get_cognito_client', lambda: fake)
+
+    response = list_mod.lambda_handler(
+        _event(method='GET', groups=['PS_1_USER']),
+        None,
+    )
+    body = json.loads(response['body'])
+
+    assert response['statusCode'] == 200
+    assert body['data']['count'] == 2
+    assert body['data']['users'] == [
+        {
+            'sub': '11111111-1111-1111-1111-111111111111',
+            'name': 'User One',
+        },
+        {
+            'sub': '22222222-2222-2222-2222-222222222222',
+            'name': 'User Two',
+        },
+    ]
+
+
+def test_list_cognito_users_requires_valid_group(monkeypatch):
+    fake = FakeCognitoClient()
+    os.environ['MGMT_USER_POOL_ID'] = 'pool-1'
+
+    list_mod = _load('list_cognito_users')
+    monkeypatch.setattr(list_mod, 'get_cognito_client', lambda: fake)
+
+    denied = list_mod.lambda_handler(_event(method='GET', groups=None), None)
+    denied_body = json.loads(denied['body'])
+
+    assert denied['statusCode'] == 403
+    assert denied_body['error']['code'] == 'FORBIDDEN'
+
+
+def test_list_cognito_users_fallback_when_projection_rejected(monkeypatch):
+    fake = FakeCognitoClient()
+    os.environ['MGMT_USER_POOL_ID'] = 'pool-1'
+    fake.reject_attributes_to_get = True
+
+    fake.users['user-one'] = {
+        'Username': 'user-one',
+        'Attributes': [
+            {'Name': 'sub', 'Value': '11111111-1111-1111-1111-111111111111'},
+            {'Name': 'name', 'Value': 'User One'},
+            {'Name': 'email', 'Value': 'one@example.com'},
+        ],
+        'Enabled': True,
+        'UserStatus': 'CONFIRMED',
+        'Groups': {'ADMINISTRATOR'},
+    }
+
+    list_mod = _load('list_cognito_users')
+    monkeypatch.setattr(list_mod, 'get_cognito_client', lambda: fake)
+
+    response = list_mod.lambda_handler(_event(method='GET', groups=['ADMINISTRATOR']), None)
+    body = json.loads(response['body'])
+
+    assert response['statusCode'] == 200
+    assert body['data']['count'] == 1
+    assert body['data']['users'] == [
+        {
+            'sub': '11111111-1111-1111-1111-111111111111',
+            'name': 'User One',
+        }
+    ]

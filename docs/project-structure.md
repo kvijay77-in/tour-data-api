@@ -65,6 +65,7 @@ tour-data-api/
 │   │       ├── delete_managed_user.py # DELETE /v1/admin/usermgmt/users/{cognitoUserId}
 │   │       ├── disable_managed_user.py # POST /v1/admin/usermgmt/users/{cognitoUserId}/disable
 │   │       ├── enable_managed_user.py # POST /v1/admin/usermgmt/users/{cognitoUserId}/enable
+│   │       ├── list_cognito_users.py  # GET /v1/users/cognito
 │   │       ├── get_current_user.py    # GET /v1/users/me
 │   │       ├── list_managed_users.py  # GET /v1/admin/usermgmt/users
 │   │       ├── list_role_groups.py    # GET /v1/admin/usermgmt/roles
