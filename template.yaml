@@ -613,6 +613,32 @@ Resources:
             Path: /v1/tours/{tourId}/riders
             Method: GET
 
+  GetTourRiderNamesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: get_tour_rider_names.lambda_handler
+      Description: Get all registered tour riders with names only
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+                - dynamodb:GetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/names
+            Method: GET
+
   GetTourRiderByIdFunction:
     Type: AWS::Serverless::Function
     Properties:

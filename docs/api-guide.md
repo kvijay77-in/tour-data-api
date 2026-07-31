@@ -64,6 +64,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Riders | PUT | `/v1/riders/profile/{profileId}` | Update rider profile | [Riders](#riders) |
 | Riders | POST | `/v1/riders/profile/{profileId}/picture` | Get profile picture upload URL | [Riders](#riders) |
 | Riders | GET | `/v1/tours/{tourId}/riders` | List tour riders | [Riders](#riders) |
+| Riders | GET | `/v1/tours/{tourId}/riders/names` | List tour riders with riderId and name only | [Riders](#riders) |
 | Riders | POST | `/v1/tours/{tourId}/riders` | Register rider for tour | [Riders](#riders) |
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}` | Get tour rider | [Riders](#riders) |
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) |
@@ -123,6 +124,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | At least one of: `name, email, phone, emergencyContactName, emergencyContactPhone, photoS3Key` | Email validated when provided |
 | `POST /v1/riders/profile/{profileId}/picture` | `profileId` (required) | None | Optional: `contentType` | `profileId` must exist; `contentType` in `image/jpeg, image/png`; default `image/jpeg` |
 | `GET /v1/tours/{tourId}/riders` | `tourId` (required) | None | None | `tourId` format rule |
+| `GET /v1/tours/{tourId}/riders/names` | `tourId` (required) | None | None | Returns lightweight list with `riderId` and `name` only; requires authenticated user with `READ` permission |
 | `POST /v1/tours/{tourId}/riders` | `tourId` (required) | None | Required: `profileId`; Optional: `riderId, experienceLevel, medicalConditions, specialRequirements` | Tour exists with status `PLANNING/ACTIVE`; profile exists; duplicate profile registration rejected (`ALREADY_REGISTERED`); generates temp riderId if omitted |
 | `GET /v1/tours/{tourId}/riders/{riderId}` | `tourId, riderId` (required) | None | None | `tourId` format; `riderId` format `R1..R999` |
 | `GET /v1/tours/{tourId}/riders/{riderId}/statistics` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must exist in tour |

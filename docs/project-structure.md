@@ -36,6 +36,7 @@ tour-data-api/
 │   │   │   ├── get_tour_rider.py      # GET /v1/tours/{tourId}/riders/{riderId}
 │   │   │   ├── get_rider_ride_details.py # GET /v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details
 │   │   │   ├── get_tour_riders.py     # GET /v1/tours/{tourId}/riders
+│   │   │   ├── get_tour_rider_names.py # GET /v1/tours/{tourId}/riders/names
 │   │   │   ├── register_tour_rider.py # POST /v1/tours/{tourId}/riders
 │   │   │   ├── update_rider_profile.py # PUT /v1/riders/profile/{profileId}
 │   │   │   ├── link_rider_cognito_user.py # GET|POST|DELETE /v1/riders/link/{cognitoUserName}

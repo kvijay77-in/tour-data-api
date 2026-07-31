@@ -675,6 +675,79 @@ class TestRegisterTourRider:
 
 
 # ============================================================================
+# GET TOUR RIDER NAMES TESTS
+# ============================================================================
+
+class TestGetTourRiderNames:
+    """Tests for GET /v1/tours/{tourId}/riders/names"""
+
+    def test_get_names_success(self, dynamodb_full_mock):
+        """Successfully list riderId and name only"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_tour_rider_names import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path=f'/v1/tours/{MOCK_TOUR_ID}/riders/names',
+            path_params={'tourId': MOCK_TOUR_ID},
+            groups=['GUEST']
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 200
+
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['tourId'] == MOCK_TOUR_ID
+        assert body['data']['count'] == 2
+
+        riders = body['data']['riders']
+        assert riders == [
+            {'riderId': 'R1', 'name': 'John Doe'},
+            {'riderId': 'R2', 'name': 'Jane Smith'}
+        ]
+
+    def test_get_names_forbidden_without_read_permission(self, dynamodb_full_mock):
+        """Reject caller when READ permission is not granted by group mapping"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_tour_rider_names import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path=f'/v1/tours/{MOCK_TOUR_ID}/riders/names',
+            path_params={'tourId': MOCK_TOUR_ID},
+            groups=['NO_SUCH_GROUP']
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 403
+
+    def test_get_names_invalid_tour_id(self, dynamodb_full_mock):
+        """Fail for invalid tour ID format"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_tour_rider_names import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/tours/@/riders/names',
+            path_params={'tourId': '@'},
+            groups=['ADMINISTRATOR']
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+
+# ============================================================================
 # GET RIDER STATISTICS TESTS
 # ============================================================================
 

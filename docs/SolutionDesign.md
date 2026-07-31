@@ -54,6 +54,7 @@ Based on Check-In App requirements, the following access patterns are critical:
    - Get rider profile by Profile ID
    - Get rider profile by Rider ID (requires TourRider lookup)
    - Get all tour riders for a specific tour
+   - Get lightweight rider list (riderId + name) for a specific tour
 
 5. **Historical Data**
    - Query rides by date range
