@@ -31,6 +31,7 @@ Globals:
         RIDER_PROFILE_TABLE: !Ref RiderProfileTable
         RIDER_COGNITO_USER_TABLE: !Ref RiderCognitoUserTable
         TOUR_MASTER_TABLE: !Ref TourMasterTable
+        APP_CONFIG_TABLE: !Ref AppConfigTable
         # Dynamic table name resolution
         STACK_NAME: !Ref AWS::StackName
         # Metadata
@@ -83,6 +84,11 @@ Parameters:
     Type: String
     Description: Unique identifier for this deployment instance (for tracking and cost attribution)
     Default: ''
+
+  ResourceOwner:
+    Type: String
+    Description: Owner tag value for shared resources
+    Default: PlatformTeam
   
 
 
@@ -1698,6 +1704,35 @@ Resources:
             Method: PUT
 
   # ============================================================================
+  # LAMBDA FUNCTIONS - CONFIG
+  # ============================================================================
+
+  GetConfigFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/config/
+      Handler: get_config.lambda_handler
+      Description: Get enabled app configuration entries
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/config
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/config
+            Method: GET
+
+  # ============================================================================
   # DYNAMODB TABLES (Shared - SAM-managed)
   # ============================================================================
   
@@ -1715,6 +1750,8 @@ Resources:
           AttributeType: S
         - AttributeName: email
           AttributeType: S
+        - AttributeName: personalCode
+          AttributeType: S
       KeySchema:
         - AttributeName: profileId
           KeyType: HASH
@@ -1722,6 +1759,12 @@ Resources:
         - IndexName: EmailIndex
           KeySchema:
             - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: PersonalCodeIndex
+          KeySchema:
+            - AttributeName: personalCode
               KeyType: HASH
           Projection:
             ProjectionType: ALL
@@ -1736,6 +1779,39 @@ Resources:
           Value: TourManagement
         - Key: ManagedBy
           Value: SAM
+
+  AppConfigTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-AppConfig'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: configType
+          AttributeType: S
+        - AttributeName: configId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: configType
+          KeyType: HASH
+        - AttributeName: configId
+          KeyType: RANGE
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-AppConfig'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - Key: Owner
+          Value: !Ref ResourceOwner
 
   RiderCognitoUserTable:
     Type: AWS::DynamoDB::Table
@@ -1894,6 +1970,12 @@ Outputs:
     Value: !Ref TourMasterTable
     Export:
       Name: !Sub '${AWS::StackName}-TourMasterTable'
+
+  AppConfigTableName:
+    Description: AppConfig DynamoDB table name
+    Value: !Ref AppConfigTable
+    Export:
+      Name: !Sub '${AWS::StackName}-AppConfigTable'
 
   PhotosBucketName:
     Description: S3 bucket for rider photos

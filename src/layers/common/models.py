@@ -143,6 +143,7 @@ class RiderProfile:
     phone: str
     emergencyContactName: str
     emergencyContactPhone: str
+    personalCode: Optional[str] = None
     photoS3Key: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)

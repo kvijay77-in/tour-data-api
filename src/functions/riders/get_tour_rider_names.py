@@ -74,7 +74,8 @@ def lambda_handler(event, context):
 
             riders.append({
                 'riderId': rider_id,
-                'name': profile.get('name') if profile else None
+                'name': profile.get('name') if profile else None,
+                'personalCode': profile.get('personalCode') if profile else None
             })
 
         riders.sort(key=_rider_sort_key)

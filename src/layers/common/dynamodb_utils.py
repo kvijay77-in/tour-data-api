@@ -124,7 +124,13 @@ def get_tour_item(
         raise
 
 
-def put_item(table_name_env: str, item: Dict[str, Any]) -> None:
+def put_item(
+    table_name_env: str,
+    item: Dict[str, Any],
+    condition_expression: Optional[str] = None,
+    expression_values: Optional[Dict[str, Any]] = None,
+    expression_names: Optional[Dict[str, str]] = None
+) -> None:
     """
     Put item into a shared DynamoDB table (resolved via env var)
     
@@ -135,13 +141,28 @@ def put_item(table_name_env: str, item: Dict[str, Any]) -> None:
     table = get_table(table_name_env)
     
     try:
-        table.put_item(Item=item)
+        kwargs = {'Item': item}
+        if condition_expression:
+            kwargs['ConditionExpression'] = condition_expression
+        if expression_values:
+            kwargs['ExpressionAttributeValues'] = expression_values
+        if expression_names:
+            kwargs['ExpressionAttributeNames'] = expression_names
+
+        table.put_item(**kwargs)
     except ClientError as e:
         print(f"Error putting item to {table_name_env}: {e}")
         raise
 
 
-def put_tour_item(table_type: str, tour_id: str, item: Dict[str, Any]) -> None:
+def put_tour_item(
+    table_type: str,
+    tour_id: str,
+    item: Dict[str, Any],
+    condition_expression: Optional[str] = None,
+    expression_values: Optional[Dict[str, Any]] = None,
+    expression_names: Optional[Dict[str, str]] = None
+) -> None:
     """
     Put item into a tour-specific DynamoDB table
     
@@ -153,7 +174,15 @@ def put_tour_item(table_type: str, tour_id: str, item: Dict[str, Any]) -> None:
     table = get_tour_table(table_type, tour_id)
     
     try:
-        table.put_item(Item=item)
+        kwargs = {'Item': item}
+        if condition_expression:
+            kwargs['ConditionExpression'] = condition_expression
+        if expression_values:
+            kwargs['ExpressionAttributeValues'] = expression_values
+        if expression_names:
+            kwargs['ExpressionAttributeNames'] = expression_names
+
+        table.put_item(**kwargs)
     except ClientError as e:
         print(f"Error putting item to {table_type}-{tour_id}: {e}")
         raise

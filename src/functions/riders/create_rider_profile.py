@@ -11,6 +11,7 @@ sys.path.insert(0, '/opt/python')
 
 import json
 import uuid
+from botocore.exceptions import ClientError
 
 from logger import get_logger, log_event
 from response import (
@@ -19,7 +20,7 @@ from response import (
 )
 from dynamodb_utils import put_item, query_items
 from validation import (
-    validate_email, validate_required_fields, ValidationError
+    validate_email, validate_required_fields, ValidationError, normalize_personal_code
 )
 from models import utc_now_iso
 
@@ -67,6 +68,12 @@ def lambda_handler(event, context):
         except ValidationError as e:
             return bad_request_response(str(e))
 
+        # Normalize optional personal code
+        try:
+            normalized_personal_code = normalize_personal_code(body.get('personalCode'))
+        except ValidationError as e:
+            return bad_request_response(str(e))
+
         # Check for duplicate email
         existing = query_items(
             table_name_env='RIDER_PROFILE_TABLE',
@@ -81,6 +88,20 @@ def lambda_handler(event, context):
                 f"A rider profile with email '{body['email']}' already exists",
                 error_code="EMAIL_ALREADY_EXISTS"
             )
+
+        if normalized_personal_code:
+            existing_code = query_items(
+                table_name_env='RIDER_PROFILE_TABLE',
+                key_condition_expression='personalCode = :personalCode',
+                expression_values={':personalCode': normalized_personal_code},
+                index_name='PersonalCodeIndex',
+                limit=1
+            )
+            if existing_code:
+                return conflict_response(
+                    f"A rider profile with personalCode '{normalized_personal_code}' already exists",
+                    error_code="PERSONAL_CODE_ALREADY_EXISTS"
+                )
 
         # Create profile
         profile_id = str(uuid.uuid4())
@@ -104,9 +125,24 @@ def lambda_handler(event, context):
             item['gender'] = body['gender']
         if body.get('address'):
             item['address'] = body['address']
+        if normalized_personal_code:
+            item['personalCode'] = normalized_personal_code
 
         logger.info(f"Creating rider profile: {profile_id}")
-        put_item(table_name_env='RIDER_PROFILE_TABLE', item=item)
+        try:
+            put_item(
+                table_name_env='RIDER_PROFILE_TABLE',
+                item=item,
+                condition_expression='attribute_not_exists(profileId)'
+            )
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code')
+            if error_code == 'ConditionalCheckFailedException':
+                return conflict_response(
+                    f"Rider profile '{profile_id}' already exists",
+                    error_code="PROFILE_ALREADY_EXISTS"
+                )
+            raise
 
         logger.info(f"Successfully created rider profile: {profile_id}")
         return success_response(item, status_code=201)

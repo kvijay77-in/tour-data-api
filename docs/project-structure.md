@@ -28,6 +28,9 @@ tour-data-api/
 │   │   │   ├── get_ride_checkins.py   # GET /v1/tours/{tourId}/rides/{rideId}/checkins
 │   │   │   ├── get_rider_checkins.py  # GET /v1/tours/{tourId}/riders/{riderId}/checkins
 │   │   │   └── get_rider_ride_checkins.py # GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
+│   │   ├── config/
+│   │   │   ├── __init__.py
+│   │   │   └── get_config.py          # GET /v1/config
 │   │   ├── riders/
 │   │   │   ├── __init__.py
 │   │   │   ├── create_rider_profile.py # POST /v1/riders/profile
@@ -122,6 +125,7 @@ tour-data-api/
     ├── provision_tour.py             # CLI script for tour provisioning (deployment method)
     ├── cleanup_tour_tables.py        # Deletes tour-specific DynamoDB tables not managed by CloudFormation
     ├── load_test_data.py             # Load JSON data into a DynamoDB table
+  ├── seed_app_config.py            # Seed shared AppConfig defaults
     └── simulate/                     # Test data simulation utility
         ├── README.md                 # Simulation utility documentation
         ├── generate_data.py          # Main data generation script
@@ -133,7 +137,7 @@ tour-data-api/
 **Key Structure Notes:**
 
 ### Source Code (`src/`)
-- **`functions/`**: Contains all Lambda function handlers organized by feature domain (checkins, riders, rides, tours, users, notifications). Each domain has an `__init__.py` for package initialization.
+- **`functions/`**: Contains all Lambda function handlers organized by feature domain (checkins, config, riders, rides, tours, users, notifications). Each domain has an `__init__.py` for package initialization.
 - **`layers/common/`**: Shared utilities and dependencies used across all Lambda functions. Python modules (models, validation, database operations, logging, response formatting, RBAC) and `requirements.txt` are at the layer root for correct SAM build packaging.
   - **`rbac.py`**: Server-side RBAC utilities. Defines the `Permission` enum (API-level actions), the `GROUP_PERMISSIONS` mapping for standard Cognito groups, dynamic `PS_<n>_USER` pit-stop role handling, and helper functions (`get_user_groups`, `get_user_permissions`, `require_permission`) used by Lambda handlers to enforce access control without coupling to Cognito group names.
 

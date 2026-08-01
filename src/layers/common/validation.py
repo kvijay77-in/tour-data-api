@@ -198,6 +198,30 @@ def validate_email(email: str) -> None:
         )
 
 
+def normalize_personal_code(personal_code: Any) -> Optional[str]:
+    """Normalize rider personalCode to uppercase.
+
+    Returns None when the field is not supplied.
+    """
+    if personal_code is None:
+        return None
+
+    if not isinstance(personal_code, str):
+        raise ValidationError(
+            "personalCode must be a string when provided",
+            {"field": "personalCode", "value": personal_code}
+        )
+
+    normalized = personal_code.strip().upper()
+    if not normalized:
+        raise ValidationError(
+            "personalCode cannot be empty",
+            {"field": "personalCode", "value": personal_code}
+        )
+
+    return normalized
+
+
 def validate_required_fields(data: Dict[str, Any], required_fields: List[str]) -> None:
     """
     Validate that all required fields are present

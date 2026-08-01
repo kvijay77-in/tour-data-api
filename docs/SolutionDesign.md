@@ -79,6 +79,7 @@ These tables exist for the lifetime of the deployment and are defined in `templa
 | **RiderProfile** | Master rider data, tour-agnostic |
 | **RiderCognitoUser** | Mapping between Cognito rider username and generated rider profile ID |
 | **TourMaster** | Tour registry — every tour ever created is listed here |
+| **AppConfig** | Shared platform configuration for app clients |
 
 ### Tour-Specific Tables (Provisioned at Runtime)
 
@@ -97,7 +98,7 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables and `{AWS::StackName}-{TableType}-{tourId}` for tour-specific tables.
 
 Examples (stack name: `dev`, tour ID: `TOT-2026`):
-- Shared: `dev-RiderProfile`, `dev-RiderCognitoUser`, `dev-TourMaster`
+- Shared: `dev-RiderProfile`, `dev-RiderCognitoUser`, `dev-TourMaster`, `dev-AppConfig`
 - Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
@@ -132,6 +133,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | profileId | String | UUID (partition key) |
 | name | String | Rider's full name |
 | email | String | Email address |
+| personalCode | String | Optional rider personal code (uppercase, globally unique when present) |
 | phone | String | Contact number |
 | emergencyContactName | String | Emergency contact name |
 | emergencyContactPhone | String | Emergency contact number |
@@ -142,6 +144,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 **Indexes:**
 - Primary Key: `profileId` (partition key only)
 - GSI1: `email` (partition key) - For email lookup
+- GSI2: `personalCode` (partition key) - For case-insensitive uniqueness and lookup
 
 **Notes:**
 - Small table (~200-500 profiles over time)
@@ -192,6 +195,28 @@ Both provisioning methods create the same resources: a Tour record in the shared
 - `PROVISIONING` status indicates tour tables are being created
 - `ARCHIVED` status indicates tour data has been exported and/or tour-specific tables deleted
 - Status flow: PLANNING → PROVISIONING → ACTIVE → COMPLETED → ARCHIVED
+
+## Shared Table 4: AppConfig
+
+**Purpose:** Shared read-mostly app configuration values used by multiple clients.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| configType | String | Config partition type (partition key) |
+| configId | String | Config identifier within a type (sort key) |
+| enabled | Boolean | Active marker |
+| config | Map | Config payload |
+| description | String | Human-readable note |
+| version | Number | Incremented on updates |
+| updatedAt | String | ISO 8601 timestamp |
+| updatedBy | String | Actor identifier |
+
+**Indexes:**
+- Primary Key: `configType` (partition key), `configId` (sort key)
+
+**Notes:**
+- API readers consume enabled entries only.
+- Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`.
 
 ## Tour-Specific Table 1: TourRider-{tourId}
 

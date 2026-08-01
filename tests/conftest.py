@@ -62,6 +62,7 @@ def lambda_environment():
     env_vars = {
         'TOUR_MASTER_TABLE': 'test-tour-master-table',
         'RIDER_PROFILE_TABLE': 'test-rider-table',
+        'APP_CONFIG_TABLE': 'test-app-config-table',
         'STACK_NAME': 'test-stack',
         'ENVIRONMENT': 'test',
         'SUBSCRIPTION_ID': 'test-sub-001',

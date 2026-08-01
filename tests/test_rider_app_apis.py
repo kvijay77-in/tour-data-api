@@ -87,7 +87,7 @@ def dynamodb_full_mock(aws_credentials):
         for tour in MOCK_TOURS:
             tour_table.put_item(Item=tour)
 
-        # Create shared RiderProfile table with EmailIndex GSI
+        # Create shared RiderProfile table with EmailIndex and PersonalCodeIndex GSIs
         rider_table = dynamodb.create_table(
             TableName='test-rider-table',
             KeySchema=[
@@ -95,13 +95,25 @@ def dynamodb_full_mock(aws_credentials):
             ],
             AttributeDefinitions=[
                 {'AttributeName': 'profileId', 'AttributeType': 'S'},
-                {'AttributeName': 'email', 'AttributeType': 'S'}
+                {'AttributeName': 'email', 'AttributeType': 'S'},
+                {'AttributeName': 'personalCode', 'AttributeType': 'S'}
             ],
             GlobalSecondaryIndexes=[
                 {
                     'IndexName': 'EmailIndex',
                     'KeySchema': [
                         {'AttributeName': 'email', 'KeyType': 'HASH'}
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'},
+                    'ProvisionedThroughput': {
+                        'ReadCapacityUnits': 1,
+                        'WriteCapacityUnits': 1
+                    }
+                },
+                {
+                    'IndexName': 'PersonalCodeIndex',
+                    'KeySchema': [
+                        {'AttributeName': 'personalCode', 'KeyType': 'HASH'}
                     ],
                     'Projection': {'ProjectionType': 'ALL'},
                     'ProvisionedThroughput': {
@@ -350,6 +362,58 @@ class TestCreateRiderProfile:
 
         response = lambda_handler(event, None)
         assert response['statusCode'] == 400
+
+    def test_create_profile_normalizes_personal_code(self, dynamodb_full_mock):
+        """Normalize personalCode to uppercase when creating profile"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/profile',
+            body={
+                'name': 'Code Rider',
+                'email': 'coderider@example.com',
+                'personalCode': ' d999 ',
+                'phone': '+919999999999',
+                'emergencyContactName': 'Emergency Contact',
+                'emergencyContactPhone': '+911111111111'
+            }
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 201
+        body = json.loads(response['body'])
+        assert body['data']['personalCode'] == 'D999'
+
+    def test_create_profile_duplicate_personal_code(self, dynamodb_full_mock):
+        """Reject duplicate personalCode using case-insensitive check"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/profile',
+            body={
+                'name': 'Duplicate Code Rider',
+                'email': 'duplicatecode@example.com',
+                'personalCode': 'd220',
+                'phone': '+919888888888',
+                'emergencyContactName': 'Emergency Contact',
+                'emergencyContactPhone': '+911212121212'
+            }
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 409
+        body = json.loads(response['body'])
+        assert body['error']['code'] == 'PERSONAL_CODE_ALREADY_EXISTS'
 
 
 # ============================================================================
@@ -706,8 +770,8 @@ class TestGetTourRiderNames:
 
         riders = body['data']['riders']
         assert riders == [
-            {'riderId': 'R1', 'name': 'John Doe'},
-            {'riderId': 'R2', 'name': 'Jane Smith'}
+            {'riderId': 'R1', 'name': 'John Doe', 'personalCode': 'D220'},
+            {'riderId': 'R2', 'name': 'Jane Smith', 'personalCode': 'E221'}
         ]
 
     def test_get_names_forbidden_without_read_permission(self, dynamodb_full_mock):

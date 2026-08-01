@@ -51,6 +51,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Domain | Method | Path | Purpose | Contract |
 |---|---|---|---|---|
+| Config | GET | `/v1/config` | Get enabled app configuration items | [Config](#config) |
 | Tours | GET | `/v1/tours/active` | Get currently active tour | [Tours](#tours) |
 | Tours | GET | `/v1/tours/{tourId}` | Get tour details | [Tours](#tours) |
 | Tours | GET | `/v1/tours` | List tours | [Tours](#tours) |
@@ -64,7 +65,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Riders | PUT | `/v1/riders/profile/{profileId}` | Update rider profile | [Riders](#riders) |
 | Riders | POST | `/v1/riders/profile/{profileId}/picture` | Get profile picture upload URL | [Riders](#riders) |
 | Riders | GET | `/v1/tours/{tourId}/riders` | List tour riders | [Riders](#riders) |
-| Riders | GET | `/v1/tours/{tourId}/riders/names` | List tour riders with riderId and name only | [Riders](#riders) |
+| Riders | GET | `/v1/tours/{tourId}/riders/names` | List tour riders with riderId, name, and personalCode | [Riders](#riders) |
 | Riders | POST | `/v1/tours/{tourId}/riders` | Register rider for tour | [Riders](#riders) |
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}` | Get tour rider | [Riders](#riders) |
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) |
@@ -102,6 +103,12 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 ### Request Contract Tables
 
+#### Config
+
+| Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
+|---|---|---|---|---|
+| `GET /v1/config` | None | `configType` (optional) | None | `configType` supports `ALL`, `ID_CODE_FORMAT`, `ID_CODE_TYPE`, or comma-separated combination of supported values; returns enabled items only; supports `If-None-Match` and `304 Not Modified`; invalid values return `400 INVALID_CONFIG_TYPE` |
+
 #### Tours
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
@@ -116,15 +123,15 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `POST /v1/riders/profile` | None | None | Required: `name, email, phone, emergencyContactName, emergencyContactPhone`; Optional: `dateOfBirth, gender, address` | Email format; duplicate email rejected (`EMAIL_ALREADY_EXISTS`) |
+| `POST /v1/riders/profile` | None | None | Required: `name, email, phone, emergencyContactName, emergencyContactPhone`; Optional: `personalCode, dateOfBirth, gender, address` | Email format; `personalCode` is normalized to uppercase when provided; duplicate email rejected (`EMAIL_ALREADY_EXISTS`); duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
 | `GET /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Returns linked `profileId`; `404` if mapping does not exist |
 | `POST /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Creates mapping row with generated `profileId` UUID; duplicate `cognitoUserName` rejected (`COGNITO_USER_ALREADY_LINKED`) |
 | `DELETE /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Deletes mapping row; returns `404` if mapping does not exist |
 | `GET /v1/riders/profile/{profileId}` | `profileId` (required) | None | None | `profileId` must exist |
-| `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | At least one of: `name, email, phone, emergencyContactName, emergencyContactPhone, photoS3Key` | Email validated when provided |
+| `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | At least one of: `name, email, phone, emergencyContactName, emergencyContactPhone, photoS3Key, personalCode` | Email validated when provided; `personalCode` normalized to uppercase; duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
 | `POST /v1/riders/profile/{profileId}/picture` | `profileId` (required) | None | Optional: `contentType` | `profileId` must exist; `contentType` in `image/jpeg, image/png`; default `image/jpeg` |
 | `GET /v1/tours/{tourId}/riders` | `tourId` (required) | None | None | `tourId` format rule |
-| `GET /v1/tours/{tourId}/riders/names` | `tourId` (required) | None | None | Returns lightweight list with `riderId` and `name` only; requires authenticated user with `READ` permission |
+| `GET /v1/tours/{tourId}/riders/names` | `tourId` (required) | None | None | Returns lightweight list with `riderId`, `name`, and `personalCode`; requires authenticated user with `READ` permission |
 | `POST /v1/tours/{tourId}/riders` | `tourId` (required) | None | Required: `profileId`; Optional: `riderId, experienceLevel, medicalConditions, specialRequirements` | Tour exists with status `PLANNING/ACTIVE`; profile exists; duplicate profile registration rejected (`ALREADY_REGISTERED`); generates temp riderId if omitted |
 | `GET /v1/tours/{tourId}/riders/{riderId}` | `tourId, riderId` (required) | None | None | `tourId` format; `riderId` format `R1..R999` |
 | `GET /v1/tours/{tourId}/riders/{riderId}/statistics` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must exist in tour |
@@ -295,6 +302,7 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 
 | Endpoint | Administrator | Super User | PS_<n>_User | Hotel Staff | Guest |
 |----------|--------------|------------|-------------|-------------|-------|
+| GET config | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET tours | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET riders | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET rides | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -373,7 +381,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 1. Create Tour enforces `endDate >= startDate` and unique `tourId`.
 2. Create Ride enforces positive `totalDistance`, positive integer `rideNo`, and sequential `stages` with `START` first and `FINISH` last.
 3. List filters validate enum values (`status`, `role`, `notification type`).
-4. Dashboard, dashboard-progress, and rider-details endpoints support ETag and conditional `304 Not Modified`.
+4. Dashboard, dashboard-progress, rider-details, and config endpoints support ETag and conditional `304 Not Modified`.
 
 ## Rate Limiting
 

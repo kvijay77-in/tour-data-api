@@ -68,6 +68,7 @@ def lambda_handler(event, context):
             )
             if rider_profile:
                 tour_rider['profile'] = rider_profile
+                tour_rider['personalCode'] = rider_profile.get('personalCode')
         
         logger.info(f"Successfully retrieved tour rider: {tour_id}/{rider_id}")
         return success_response(tour_rider)

@@ -64,6 +64,7 @@ def lambda_handler(event, context):
                 )
                 if profile:
                     tour_rider['profile'] = profile
+                    tour_rider['personalCode'] = profile.get('personalCode')
             
             enriched_riders.append(tour_rider)
         
