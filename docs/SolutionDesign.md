@@ -42,7 +42,7 @@ Based on Check-In App requirements, the following access patterns are critical:
    - Get all check-ins for a rider (tour scope)
    - Update check-in status (Not Riding, Quit Riding)
    - Cancel check-in (special update of cancellation metadata)
-   - Cancelled check-ins are excluded from subsequent validation and read APIs
+   - Cancelled check-ins are excluded from subsequent validation and read APIs, except dashboard progress where they are returned separately as a `cancelled` list
 
 3. **Ride Management**
    - Get all rides for a tour

@@ -4,6 +4,7 @@ Get dashboard progress Lambda function.
 Returns lightweight dashboard refresh payload:
 - rideId
 - checkIns
+- cancelled
 - summary
 - dataVersion
 
@@ -125,20 +126,23 @@ def lambda_handler(event, context):
             tour_id=tour_id,
         )
 
-        check_ins = query_tour_items(
+        all_check_ins = query_tour_items(
             table_type='CheckIn',
             tour_id=tour_id,
             key_condition_expression='rideId = :rid',
             expression_values={':rid': ride_id},
         )
-        check_ins = [checkin for checkin in check_ins if not is_cancelled_checkin_item(checkin)]
+
+        cancelled = [checkin for checkin in all_check_ins if is_cancelled_checkin_item(checkin)]
+        check_ins = [checkin for checkin in all_check_ins if not is_cancelled_checkin_item(checkin)]
 
         summary = _build_summary(tour_riders, check_ins)
-        data_version = _compute_data_version(ride, tour_riders, check_ins)
+        data_version = _compute_data_version(ride, tour_riders, all_check_ins)
 
         payload = {
             'rideId': ride_id,
             'checkIns': check_ins,
+            'cancelled': cancelled,
             'summary': summary,
             'dataVersion': data_version,
         }

@@ -38,6 +38,7 @@ Intent:
 Proposed response shape:
 - rideId
 - checkIns[]
+- cancelled[]
 - summary
 - dataVersion (for diagnostics/cache tracing)
 
@@ -58,6 +59,24 @@ Example:
         "method": "QR_SCAN",
         "timestamp": "2026-07-23T09:31:22Z",
         "checkedInBy": "user-123"
+      }
+    ],
+    "cancelled": [
+      {
+        "checkInId": "R57#002#2026-07-23T10:15:00Z",
+        "riderId": "R57",
+        "rideId": "RIDE005",
+        "stageNumber": 2,
+        "stageId": "S002",
+        "isNotRiding": false,
+        "isQuitRiding": false,
+        "method": "QR_SCAN",
+        "timestamp": "2026-07-23T10:15:00Z",
+        "checkedInBy": "user-123",
+        "status": "CANCELLED",
+        "prevStatus": "CHECKED_IN",
+        "cancelledBy": "admin-001",
+        "cancelledAt": "2026-07-23T10:20:00Z"
       }
     ],
     "summary": {

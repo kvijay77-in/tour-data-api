@@ -906,10 +906,51 @@ class TestDashboardProgressEndpoint:
         data = body['data']
         assert data['rideId'] == 'RIDE001'
         assert 'checkIns' in data
+        assert 'cancelled' in data
         assert 'summary' in data
         assert 'dataVersion' in data
         assert 'ride' not in data
         assert 'riders' not in data
+
+    def test_dashboard_progress_includes_cancelled_list(self, checkin_dynamodb):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        stack_name = os.environ['STACK_NAME']
+        checkin_table = checkin_dynamodb.Table(f'{stack_name}-CheckIn-{MOCK_TOUR_ID}')
+        checkin_table.put_item(Item={
+            'rideId': 'RIDE001',
+            'checkInId': 'R2#001#2026-02-11T12:30:00Z',
+            'riderId': 'R2',
+            'stageNumber': 1,
+            'stageId': 'S001',
+            'timestamp': '2026-02-11T12:30:00Z',
+            'checkedInBy': 'system',
+            'method': 'QR_SCAN',
+            'isNotRiding': False,
+            'isQuitRiding': False,
+            'isManualEntry': False,
+            'status': 'CANCELLED',
+            'prevStatus': 'CHECKED_IN',
+            'cancelledBy': 'admin',
+            'cancelledAt': '2026-02-11T13:00:00Z',
+            'createdAt': '2026-02-11T12:30:00Z'
+        })
+
+        from get_dashboard_progress import lambda_handler
+
+        event = _make_dashboard_progress_event(MOCK_TOUR_ID, 'RIDE001')
+        response = lambda_handler(event, None)
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        data = body['data']
+        assert all(checkin['status'] != 'CANCELLED' for checkin in data['checkIns'])
+        assert any(
+            checkin['checkInId'] == 'R2#001#2026-02-11T12:30:00Z'
+            for checkin in data['cancelled']
+        )
 
     def test_dashboard_progress_supports_etag_304(self, checkin_dynamodb):
         import dynamodb_utils
