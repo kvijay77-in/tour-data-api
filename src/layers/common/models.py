@@ -259,6 +259,17 @@ class Stage:
 
 
 @dataclass
+class RideFloat:
+    """Float vehicle/stage mapping within a ride."""
+    floatNo: int
+    floatToStage: int
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return asdict(self)
+
+
+@dataclass
 class Ride:
     """
     Daily ride configuration.
@@ -275,6 +286,7 @@ class Ride:
     flagOffTime: str
     status: RideStatus
     stages: List[Stage]
+    floats: Optional[List[RideFloat]] = None
     openTime: Optional[str] = None
     closeTime: Optional[str] = None
     description: Optional[str] = None
@@ -290,6 +302,8 @@ class Ride:
         data = asdict(self)
         data['status'] = self.status.value
         data['stages'] = [stage.to_dict() for stage in self.stages]
+        if self.floats is not None:
+            data['floats'] = [ride_float.to_dict() for ride_float in self.floats]
         return {k: v for k, v in data.items() if v is not None}
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
@@ -447,9 +461,18 @@ def create_stage_from_dict(data: Dict[str, Any]) -> Stage:
     )
 
 
+def create_ride_float_from_dict(data: Dict[str, Any]) -> RideFloat:
+    """Create RideFloat object from dictionary"""
+    return RideFloat(
+        floatNo=data['floatNo'],
+        floatToStage=data['floatToStage']
+    )
+
+
 def create_ride_from_dynamodb_item(item: Dict[str, Any]) -> Ride:
     """Create Ride object from DynamoDB item"""
     stages = [create_stage_from_dict(stage) for stage in item.get('stages', [])]
+    floats = [create_ride_float_from_dict(ride_float) for ride_float in item.get('floats', [])]
     
     return Ride(
         rideId=item['rideId'],
@@ -462,6 +485,7 @@ def create_ride_from_dynamodb_item(item: Dict[str, Any]) -> Ride:
         flagOffTime=item['flagOffTime'],
         status=RideStatus(item['status']),
         stages=stages,
+        floats=floats or None,
         openTime=item.get('openTime'),
         closeTime=item.get('closeTime'),
         description=item.get('description'),

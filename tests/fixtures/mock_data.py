@@ -89,6 +89,12 @@ MOCK_RIDES = [
         'flagOffTime': '08:00',
         'openTime': '08:00',
         'closeTime': '13:15',
+        'floats': [
+            {
+                'floatNo': 1,
+                'floatToStage': 1,
+            }
+        ],
         'status': RideStatus.ACTIVE.value,
         'stages': [
             {

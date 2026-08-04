@@ -9,6 +9,7 @@ Supports two table resolution patterns:
 import os
 import boto3
 from typing import Dict, Any, Optional, List
+from decimal import Decimal
 from botocore.exceptions import ClientError
 
 
@@ -17,6 +18,17 @@ dynamodb = boto3.resource('dynamodb')
 
 # Table references (loaded from environment variables or cached by name)
 TABLES = {}
+
+
+def _normalize_dynamodb_numbers(value: Any) -> Any:
+    """Recursively convert Python floats to Decimal for boto3 DynamoDB writes."""
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {key: _normalize_dynamodb_numbers(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_dynamodb_numbers(item) for item in value]
+    return value
 
 
 def get_table(table_name_env: str):
@@ -141,11 +153,11 @@ def put_item(
     table = get_table(table_name_env)
     
     try:
-        kwargs = {'Item': item}
+        kwargs = {'Item': _normalize_dynamodb_numbers(item)}
         if condition_expression:
             kwargs['ConditionExpression'] = condition_expression
         if expression_values:
-            kwargs['ExpressionAttributeValues'] = expression_values
+            kwargs['ExpressionAttributeValues'] = _normalize_dynamodb_numbers(expression_values)
         if expression_names:
             kwargs['ExpressionAttributeNames'] = expression_names
 
@@ -174,11 +186,11 @@ def put_tour_item(
     table = get_tour_table(table_type, tour_id)
     
     try:
-        kwargs = {'Item': item}
+        kwargs = {'Item': _normalize_dynamodb_numbers(item)}
         if condition_expression:
             kwargs['ConditionExpression'] = condition_expression
         if expression_values:
-            kwargs['ExpressionAttributeValues'] = expression_values
+            kwargs['ExpressionAttributeValues'] = _normalize_dynamodb_numbers(expression_values)
         if expression_names:
             kwargs['ExpressionAttributeNames'] = expression_names
 
@@ -229,7 +241,7 @@ def _do_update_item(
         kwargs = {
             'Key': key,
             'UpdateExpression': update_expression,
-            'ExpressionAttributeValues': expression_values,
+            'ExpressionAttributeValues': _normalize_dynamodb_numbers(expression_values),
             'ReturnValues': 'ALL_NEW'
         }
         

@@ -17,7 +17,7 @@ from response import (
 )
 from validation import (
     validate_tour_id, validate_ride_id, validate_required_fields,
-    validate_iso_date, validate_time_hhmm, validate_ride_stages,
+    validate_iso_date, validate_time_hhmm, validate_ride_stages, validate_ride_floats,
     ValidationError
 )
 from dynamodb_utils import get_item, get_tour_item, put_tour_item
@@ -124,6 +124,13 @@ def lambda_handler(event, context):
             normalized_stages = validate_ride_stages(body['stages'])
         except ValidationError as e:
             return bad_request_response(str(e))
+
+        normalized_floats = None
+        if 'floats' in body:
+            try:
+                normalized_floats = validate_ride_floats(body['floats'], len(normalized_stages))
+            except ValidationError as e:
+                return bad_request_response(str(e))
         
         # Check if tour exists and is in the right status
         logger.info(f"Checking if tour exists: {tour_id}")
@@ -166,6 +173,7 @@ def lambda_handler(event, context):
             'totalDistance': body['totalDistance'],
             'flagOffTime': body['flagOffTime'],
             'stages': normalized_stages,
+            'floats': normalized_floats,
             'status': RideStatus.PLANNED.value,
             'openTime': body.get('openTime'),
             'closeTime': body.get('closeTime'),

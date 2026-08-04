@@ -266,6 +266,7 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | closeTime | String | Planned ride closing time |
 | status | String | OPEN, STARTED, PLANNED, ACTIVE, COMPLETED, CLOSED |
 | stages | List | Array of stage objects (see below) |
+| floats | List | Optional array of float objects (see below) |
 | createdAt | String | ISO 8601 timestamp |
 | updatedAt | String | ISO 8601 timestamp |
 | openedAt | String | Ride open timestamp |
@@ -290,10 +291,19 @@ Both provisioning methods create the same resources: a Tour record in the shared
 }
 ```
 
+**Float Object Structure (embedded in floats array):**
+```json
+{
+   "floatNo": 1,
+   "floatToStage": 1
+}
+```
+
 Notes:
 - `estimatedOpenTime` and `pitStopDuration` apply only to `PIT_STOP` stages.
 - `pitStopStatus`, `openedAt`, and `closedAt` are runtime-managed and remain empty when a ride is created.
 - `estimatedTimeFromStart` is removed from the stage contract.
+- `floats` is optional; when present, each `floatNo` must be unique and each `floatToStage` must refer to a non-start stage number in the ride.
 
 **Indexes:**
 - Primary Key: `rideId` (partition key only)

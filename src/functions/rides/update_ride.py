@@ -14,7 +14,7 @@ from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import (
     validate_tour_id, validate_ride_id, validate_iso_date,
-    validate_time_hhmm, validate_ride_stages, ValidationError
+    validate_time_hhmm, validate_ride_stages, validate_ride_floats, ValidationError
 )
 from dynamodb_utils import get_tour_item, put_tour_item
 from models import RideStatus, utc_now_iso
@@ -96,7 +96,7 @@ def lambda_handler(event, context):
         # Validate updatable fields
         updatable_fields = [
             'name', 'date', 'rideNo', 'startLocation', 'finishLocation',
-            'totalDistance', 'flagOffTime', 'stages', 'description', 'status',
+            'totalDistance', 'flagOffTime', 'stages', 'floats', 'description', 'status',
             'openTime', 'closeTime'
         ]
         updates = {k: v for k, v in body.items() if k in updatable_fields}
@@ -152,6 +152,13 @@ def lambda_handler(event, context):
                 existing_ride.get('stages', []),
                 normalized_stages
             )
+
+        if 'floats' in updates:
+            stages_for_float_validation = updates.get('stages', existing_ride.get('stages', []))
+            try:
+                updates['floats'] = validate_ride_floats(updates['floats'], len(stages_for_float_validation))
+            except ValidationError as e:
+                return bad_request_response(str(e))
         
         # Update ride
         updated_ride = {**existing_ride, **updates}

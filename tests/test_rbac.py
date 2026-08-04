@@ -84,6 +84,29 @@ def _convert_floats(obj):
     return obj
 
 
+def test_decimal_encoder_preserves_integer_values():
+    from response import DecimalEncoder
+
+    payload = {
+        'rideNo': Decimal('1'),
+        'stageNumber': Decimal('2'),
+        'floatNo': Decimal('3'),
+        'totalDistance': Decimal('120.5'),
+    }
+
+    encoded = json.dumps(payload, cls=DecimalEncoder)
+    decoded = json.loads(encoded)
+
+    assert decoded['rideNo'] == 1
+    assert isinstance(decoded['rideNo'], int)
+    assert decoded['stageNumber'] == 2
+    assert isinstance(decoded['stageNumber'], int)
+    assert decoded['floatNo'] == 3
+    assert isinstance(decoded['floatNo'], int)
+    assert decoded['totalDistance'] == 120.5
+    assert isinstance(decoded['totalDistance'], float)
+
+
 # ---------------------------------------------------------------------------
 # rbac.py unit tests
 # ---------------------------------------------------------------------------
@@ -655,6 +678,49 @@ class TestCreateRideRBAC:
         response = create_ride.lambda_handler(event, None)
         assert response['statusCode'] != 403
 
+    def test_create_ride_persists_floats(self, rbac_dynamodb):
+        create_ride = _load_handler('rides', 'create_ride')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            body={
+                'rideId': 'RIDE002',
+                'date': '2026-02-12',
+                'rideNo': 2,
+                'name': 'Ride 2',
+                'startLocation': 'City B',
+                'finishLocation': 'City C',
+                'totalDistance': 80.0,
+                'flagOffTime': '08:00',
+                'stages': [
+                    {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+                    {'stageId': 'S001', 'stageNumber': 1, 'type': 'PIT_STOP', 'name': 'PS1'},
+                    {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH', 'name': 'Finish'}
+                ],
+                'floats': [
+                    {'floatNo': 2, 'floatToStage': 2},
+                    {'floatNo': 1, 'floatToStage': 1}
+                ]
+            },
+            method='POST'
+        )
+
+        response = create_ride.lambda_handler(event, None)
+
+        assert response['statusCode'] == 201
+        body = json.loads(response['body'])
+        assert body['data']['floats'] == [
+            {'floatNo': 1, 'floatToStage': 1},
+            {'floatNo': 2, 'floatToStage': 2},
+        ]
+
+        table = rbac_dynamodb.Table(f'test-stack-Ride-{MOCK_TOUR_ID}')
+        item = table.get_item(Key={'rideId': 'RIDE002'})['Item']
+        assert item['floats'] == [
+            {'floatNo': Decimal('1'), 'floatToStage': Decimal('1')},
+            {'floatNo': Decimal('2'), 'floatToStage': Decimal('2')},
+        ]
+
     def test_pit_stop_user_denied(self, rbac_dynamodb):
         create_ride = _load_handler('rides', 'create_ride')
         event = _make_event(
@@ -693,6 +759,24 @@ class TestUpdateRideRBAC:
         )
         response = update_ride.lambda_handler(event, None)
         assert response['statusCode'] == 403
+
+    def test_get_ride_returns_existing_floats(self, rbac_dynamodb):
+        get_ride = _load_handler('rides', 'get_ride')
+        event = _make_event(
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001'}
+        )
+
+        response = get_ride.lambda_handler(event, None)
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['data']['rideNo'] == 1
+        assert isinstance(body['data']['rideNo'], int)
+        assert body['data']['floats'] == [{'floatNo': 1, 'floatToStage': 1}]
+        assert isinstance(body['data']['floats'][0]['floatNo'], int)
+        assert isinstance(body['data']['floats'][0]['floatToStage'], int)
+        assert isinstance(body['data']['stages'][0]['stageNumber'], int)
+        assert isinstance(body['data']['totalDistance'], float)
 
 
 # ---------------------------------------------------------------------------
@@ -905,6 +989,29 @@ class TestPitStopHandlers:
         body = json.loads(response['body'])
         assert body['data']['stages'][1]['pitStopStatus'] == 'OPEN'
         assert body['data']['stages'][1]['openedAt'] == '2026-02-11T09:30:00Z'
+
+    def test_update_ride_updates_floats(self, rbac_dynamodb):
+        update_ride = _load_handler('rides', 'update_ride')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001'},
+            body={
+                'floats': [
+                    {'floatNo': 2, 'floatToStage': 2},
+                    {'floatNo': 1, 'floatToStage': 1}
+                ]
+            },
+            method='PUT'
+        )
+
+        response = update_ride.lambda_handler(event, None)
+
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['data']['floats'] == [
+            {'floatNo': 1, 'floatToStage': 1},
+            {'floatNo': 2, 'floatToStage': 2},
+        ]
 
 
 # ---------------------------------------------------------------------------

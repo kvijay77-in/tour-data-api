@@ -411,3 +411,56 @@ def validate_ride_stages(stages: Any) -> List[Dict[str, Any]]:
             )
 
     return ordered_stages
+
+
+def validate_ride_floats(floats: Any, total_stages: int) -> List[Dict[str, int]]:
+    """Validate and normalize ride floats payload."""
+    if not isinstance(floats, list):
+        raise ValidationError("floats must be an array", {"field": "floats"})
+
+    if total_stages < 2:
+        raise ValidationError(
+            "Ride must define at least start and finish stages before floats can be set",
+            {"field": "floats", "totalStages": total_stages}
+        )
+
+    normalized_floats: List[Dict[str, int]] = []
+    seen_float_numbers = set()
+
+    for index, ride_float in enumerate(floats):
+        if not isinstance(ride_float, dict):
+            raise ValidationError(
+                f"Float at index {index} must be an object",
+                {"field": f"floats[{index}]"}
+            )
+
+        validate_required_fields(ride_float, ['floatNo', 'floatToStage'])
+
+        float_no = ride_float['floatNo']
+        float_to_stage = ride_float['floatToStage']
+
+        if not isinstance(float_no, int) or float_no < 1:
+            raise ValidationError(
+                f"floatNo at index {index} must be a positive integer",
+                {"field": f"floats[{index}].floatNo", "value": float_no}
+            )
+
+        if float_no in seen_float_numbers:
+            raise ValidationError(
+                f"Duplicate floatNo: {float_no}",
+                {"field": f"floats[{index}].floatNo", "value": float_no}
+            )
+        seen_float_numbers.add(float_no)
+
+        if not isinstance(float_to_stage, int) or float_to_stage < 1 or float_to_stage >= total_stages:
+            raise ValidationError(
+                f"floatToStage at index {index} must be an integer between 1 and {total_stages - 1}",
+                {"field": f"floats[{index}].floatToStage", "value": float_to_stage, "maxStageNumber": total_stages - 1}
+            )
+
+        normalized_floats.append({
+            'floatNo': float_no,
+            'floatToStage': float_to_stage,
+        })
+
+    return sorted(normalized_floats, key=lambda ride_float: ride_float['floatNo'])

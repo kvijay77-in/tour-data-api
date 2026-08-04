@@ -75,6 +75,7 @@ This is expected to have info about each day's ride such as date, no. of rides f
 - Description (optional)
 - Date of the ride
 - No. of Stages
+- Floats (optional list of float mappings, each with `floatNo` and `floatToStage`)
 - Distance
 - Ride opening time
 - Flag off time
