@@ -40,6 +40,8 @@ def _timeline_entry(checkin):
         'stageNumber': checkin.get('stageNumber'),
         'stageId': checkin.get('stageId'),
         'isNotRiding': bool(checkin.get('isNotRiding', False)),
+        'isFloat': bool(checkin.get('isFloat', False)),
+        'floatNo': checkin.get('floatNo'),
         'isQuitRiding': bool(checkin.get('isQuitRiding', False)),
         'timestamp': checkin.get('timestamp'),
     }
@@ -54,6 +56,8 @@ def _derive_latest_status(checkin_timeline):
         return 'QUIT_RIDING'
     if latest.get('isNotRiding'):
         return 'NOT_RIDING'
+    if latest.get('isFloat'):
+        return 'FLOAT'
     return 'CHECKED_IN'
 
 

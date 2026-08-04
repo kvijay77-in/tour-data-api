@@ -87,6 +87,7 @@ class CheckInStatus(str, Enum):
     """Check-in status values (derived)"""
     NOT_CHECKED_IN = "NOT_CHECKED_IN"
     CHECKED_IN = "CHECKED_IN"
+    FLOAT = "FLOAT"
     NOT_RIDING = "NOT_RIDING"
     QUIT_RIDING = "QUIT_RIDING"
     CANCELLED = "CANCELLED"
@@ -327,6 +328,8 @@ class CheckIn:
     stageNumber: Optional[int] = None
     stageId: Optional[str] = None
     isNotRiding: bool = False
+    isFloat: bool = False
+    floatNo: Optional[int] = None
     isQuitRiding: bool = False
     isManualEntry: bool = False
     notes: Optional[str] = None
@@ -349,6 +352,8 @@ class CheckIn:
             return CheckInStatus.NOT_RIDING
         elif self.isQuitRiding:
             return CheckInStatus.QUIT_RIDING
+        elif self.isFloat:
+            return CheckInStatus.FLOAT
         else:
             return CheckInStatus.CHECKED_IN
     
@@ -362,6 +367,8 @@ class CheckIn:
             'checkedInBy': self.checkedInBy,
             'method': self.method.value,
             'isNotRiding': self.isNotRiding,
+            'isFloat': self.isFloat,
+            'floatNo': self.floatNo,
             'isQuitRiding': self.isQuitRiding,
             'isManualEntry': self.isManualEntry,
             'createdAt': self.createdAt,

@@ -331,6 +331,8 @@ Notes:
 | checkedInBy | String | User ID who performed check-in |
 | method | String | QR_SCAN, MANUAL, FALLBACK |
 | isNotRiding | Boolean | True if Not Riding |
+| isFloat | Boolean | True if Float check-in |
+| floatNo | Number | Float number when isFloat is true |
 | isQuitRiding | Boolean | True if Quit Riding |
 | isManualEntry | Boolean | True if manual entry |
 | notes | String | Optional notes |
@@ -431,6 +433,7 @@ Status is derived from flags, not stored directly:
 
 | Condition | Status |
 |-----------|--------|
+| `isFloat = true` | FLOAT |
 | `isNotRiding = true` | NOT_RIDING |
 | `isQuitRiding = true` | QUIT_RIDING |
 | Both false/null | CHECKED_IN |

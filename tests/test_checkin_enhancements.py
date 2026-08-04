@@ -596,6 +596,60 @@ class TestStageOptionalForStatusCheckins:
         assert body['data'].get('stageNumber') is None
 
 
+class TestFloatCheckins:
+    """Tests for FLOAT check-in payload and derived status handling."""
+
+    def test_create_float_checkin_sets_float_status(self, checkin_dynamodb):
+        """FLOAT check-in should be accepted and stored with FLOAT status."""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_checkin import lambda_handler
+
+        event = _make_checkin_event(MOCK_TOUR_ID, {
+            'riderId': 'R2',
+            'rideId': 'RIDE001',
+            'stageNumber': 0,
+            'method': 'QR_SCAN',
+            'isFloat': True,
+            'floatNo': 1,
+            'isNotRiding': False,
+            'isQuitRiding': False,
+        })
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 201
+
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['status'] == 'FLOAT'
+        assert body['data']['isFloat'] is True
+        assert body['data']['floatNo'] == 1
+
+    def test_reject_float_checkin_without_float_no(self, checkin_dynamodb):
+        """FLOAT check-in must include a positive floatNo."""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_checkin import lambda_handler
+
+        event = _make_checkin_event(MOCK_TOUR_ID, {
+            'riderId': 'R2',
+            'rideId': 'RIDE001',
+            'stageNumber': 0,
+            'method': 'QR_SCAN',
+            'isFloat': True,
+        })
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+        body = json.loads(response['body'])
+        assert body['success'] is False
+        assert 'floatNo is required when isFloat is true' in body['error']['message']
+
+
 # ============================================================================
 # TEST: Late-Sync for Closed Rides
 # ============================================================================

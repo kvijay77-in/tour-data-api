@@ -104,6 +104,7 @@ This is expected to have each check in captured through QR Code scanning for all
 
 Check-in status should be derived as follows:
 - Normal check-in: Check-in timestamp, Not Riding indicator is null & Quit Riding indicator is null
+- Float check-in: Float indicator is 'Yes' with a valid float number
 - Not Riding: Not Riding indicator is 'Yes'
 - Quit Riding: Quit Riding indicator is 'Yes'.
 

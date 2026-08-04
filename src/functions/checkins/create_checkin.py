@@ -72,6 +72,8 @@ def _normalize_keys_to_camel_case(payload):
         'stage_number': 'stageNumber',
         'stage_id': 'stageId',
         'is_not_riding': 'isNotRiding',
+        'is_float': 'isFloat',
+        'float_no': 'floatNo',
         'is_quit_riding': 'isQuitRiding',
         'is_manual_entry': 'isManualEntry',
         'created_at': 'createdAt',
@@ -148,6 +150,8 @@ def lambda_handler(event, context):
         method: Check-in method (QR_SCAN, MANUAL, FALLBACK)
         stageNumber: Stage number (required for normal check-ins; optional for Not Riding/Quit Riding)
         isNotRiding: Not Riding flag (default: false)
+        isFloat: Float status flag (default: false)
+        floatNo: Float number (required when isFloat=true)
         isQuitRiding: Quit Riding flag (default: false)
         timestamp: Optional ISO 8601 timestamp for offline-synced check-ins
         notes: Optional notes
@@ -187,11 +191,38 @@ def lambda_handler(event, context):
         ride_id = body['rideId']
         method = body['method']
         is_not_riding = body.get('isNotRiding', False)
+        is_float = body.get('isFloat', False)
+        float_no = body.get('floatNo')
         is_quit_riding = body.get('isQuitRiding', False)
         notes = body.get('notes')
         client_timestamp = body.get('timestamp')  # Optional: for offline-synced check-ins
         stage_number = None
         stage_type = None
+
+        if not isinstance(is_float, bool):
+            return bad_request_response("isFloat must be a boolean")
+
+        status_flags = [is_not_riding, is_float, is_quit_riding]
+        if sum(1 for flag in status_flags if bool(flag)) > 1:
+            return bad_request_response(
+                "isNotRiding, isFloat and isQuitRiding are mutually exclusive"
+            )
+
+        if is_float:
+            if float_no is None:
+                return bad_request_response("floatNo is required when isFloat is true")
+
+            try:
+                float_no = int(float_no)
+            except (TypeError, ValueError):
+                return bad_request_response(
+                    f"Invalid floatNo: {body.get('floatNo')}. Must be a valid integer"
+                )
+
+            if float_no <= 0:
+                return bad_request_response("floatNo must be a positive integer")
+        elif float_no is not None:
+            return bad_request_response("floatNo is only allowed when isFloat is true")
         
         # Validate client-supplied timestamp if provided
         if client_timestamp:
@@ -228,7 +259,8 @@ def lambda_handler(event, context):
         
         logger.info(
             f"Creating check-in: rider={rider_id}, ride={ride_id}, "
-            f"isNotRiding={is_not_riding}, isQuitRiding={is_quit_riding}"
+            f"isNotRiding={is_not_riding}, isFloat={is_float}, "
+            f"isQuitRiding={is_quit_riding}"
         )
         
         # Step 1: Get ride details from tour-specific Ride table
@@ -413,6 +445,8 @@ def lambda_handler(event, context):
             stageNumber=stage_number,
             stageId=stage_id,
             isNotRiding=is_not_riding,
+            isFloat=is_float,
+            floatNo=float_no,
             isQuitRiding=is_quit_riding,
             isManualEntry=(method == CheckInMethod.MANUAL.value),
             notes=notes
