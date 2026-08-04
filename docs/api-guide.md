@@ -68,6 +68,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Riders | GET | `/v1/tours/{tourId}/riders/names` | List tour riders with riderId, name, and personalCode | [Riders](#riders) |
 | Riders | POST | `/v1/tours/{tourId}/riders` | Register rider for tour | [Riders](#riders) |
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}` | Get tour rider | [Riders](#riders) |
+| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit` | Mark rider as exited from tour | [Riders](#riders) |
+| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit/cancel` | Cancel rider exit and restore previous status | [Riders](#riders) |
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) |
 | Rides | GET | `/v1/tours/{tourId}/rides/today` | Get today's ride | [Rides](#rides) |
 | Rides | GET | `/v1/tours/{tourId}/rides` | List rides | [Rides](#rides) |
@@ -134,6 +136,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/{tourId}/riders/names` | `tourId` (required) | None | None | Returns lightweight list with `riderId`, `name`, and `personalCode`; requires authenticated user with `READ` permission |
 | `POST /v1/tours/{tourId}/riders` | `tourId` (required) | None | Required: `profileId`; Optional: `riderId, experienceLevel, medicalConditions, specialRequirements` | Tour exists with status `PLANNING/ACTIVE`; profile exists; duplicate profile registration rejected (`ALREADY_REGISTERED`); generates temp riderId if omitted |
 | `GET /v1/tours/{tourId}/riders/{riderId}` | `tourId, riderId` (required) | None | None | `tourId` format; `riderId` format `R1..R999` |
+| `POST /v1/tours/{tourId}/riders/{riderId}/exit` | `tourId, riderId` (required) | None | None | Updates existing row only; sets `status=EXITED`, `prevStatus=<previous status>`, `exitedAt`, `exitedBy`, and `updatedAt`; returns `409 RIDER_ALREADY_EXITED` when already exited; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
+| `POST /v1/tours/{tourId}/riders/{riderId}/exit/cancel` | `tourId, riderId` (required) | None | None | Valid only when current status is `EXITED`; restores `status` from `prevStatus`; removes `prevStatus`, `exitedAt`, `exitedBy`; returns `400 INVALID_EXIT_CANCEL_INVOCATION` for non-EXITED status; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
 | `GET /v1/tours/{tourId}/riders/{riderId}/statistics` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must exist in tour |
 
 #### Rides
@@ -305,6 +309,8 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 | GET config | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET tours | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET riders | ✅ | ✅ | ✅ | ✅ | ✅ |
+| POST rider exit | ✅ | ✅ | ❌ | ❌ | ❌ |
+| POST rider exit cancel | ✅ | ✅ | ❌ | ❌ | ❌ |
 | GET rides | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET dashboard | ✅ | ✅ | ✅ | ❌ | ✅ |
 | GET dashboard progress | ✅ | ✅ | ✅ | ❌ | ✅ |
@@ -340,6 +346,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
    - `TOUR_MANAGE`: create/archive tours
   - `RIDE_MANAGE`: create/update/open/start/close rides
   - `PIT_STOP_MANAGE`: open/close pit-stop stages
+  - `RIDER_EXIT`: mark rider as `EXITED` and cancel rider exit (ADMINISTRATOR and SUPER_USER only)
   - `CHECKIN`: create check-ins, with additional stage-aware enforcement for `PS_<n>_USER` roles on regular pit-stop check-ins
 
 ### Pit Stop Role Rules

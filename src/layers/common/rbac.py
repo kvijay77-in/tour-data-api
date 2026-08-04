@@ -81,6 +81,9 @@ class Permission(str, Enum):
     NOTIFICATION_MANAGE = "NOTIFICATION_MANAGE"
     """Create notifications for tour riders (admin/organizer action)."""
 
+    RIDER_EXIT = "RIDER_EXIT"
+    """Mark a tour rider as EXITED and revert that action when needed."""
+
 
 # ============================================================================
 # GROUP → PERMISSION MAPPING
@@ -100,6 +103,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.USER_LIST,
         Permission.DASHBOARD,
         Permission.NOTIFICATION_MANAGE,
+        Permission.RIDER_EXIT,
     ],
     "SUPER_USER": [
         Permission.READ,
@@ -109,6 +113,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.USER_LIST,
         Permission.DASHBOARD,
         Permission.NOTIFICATION_MANAGE,
+        Permission.RIDER_EXIT,
     ],
     "HOTEL_STAFF": [
         Permission.READ,

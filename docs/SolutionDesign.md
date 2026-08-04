@@ -55,6 +55,8 @@ Based on Check-In App requirements, the following access patterns are critical:
    - Get rider profile by Rider ID (requires TourRider lookup)
    - Get all tour riders for a specific tour
    - Get lightweight rider list (riderId + name) for a specific tour
+   - Exit rider from tour (`status=EXITED` with `prevStatus`, `exitedAt`, `exitedBy`)
+   - Cancel rider exit (restore `status` from `prevStatus` and remove exit metadata)
 
 5. **Historical Data**
    - Query rides by date range
@@ -228,7 +230,10 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | profileId | String | Reference to RiderProfile |
 | registeredAt | String | ISO 8601 timestamp |
 | qrCodeData | String | Encoded QR code data (currently just riderId) |
-| status | String | REGISTERED, ACTIVE, WITHDRAWN |
+| status | String | PENDING, REGISTERED, ACTIVE, WITHDRAWN, EXITED |
+| prevStatus | String | Previous status captured when rider is marked EXITED |
+| exitedAt | String | ISO 8601 timestamp when rider was marked EXITED |
+| exitedBy | String | Cognito `sub` of actor who marked rider as EXITED |
 | createdAt | String | ISO 8601 timestamp |
 | updatedAt | String | ISO 8601 timestamp |
 

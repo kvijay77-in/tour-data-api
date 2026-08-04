@@ -107,6 +107,7 @@ class TourRiderStatus(str, Enum):
     REGISTERED = "REGISTERED"
     ACTIVE = "ACTIVE"
     WITHDRAWN = "WITHDRAWN"
+    EXITED = "EXITED"
 
 
 class NotificationType(str, Enum):
@@ -217,6 +218,8 @@ class TourRider:
     status: TourRiderStatus
     qrCodeData: Optional[str] = None
     registeredAt: str = field(default_factory=utc_now_iso)
+    exitedAt: Optional[str] = None
+    exitedBy: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)
     

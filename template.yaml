@@ -769,6 +769,54 @@ Resources:
             Path: /v1/tours/{tourId}/riders
             Method: POST
 
+  ExitTourRiderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: exit_tour_rider.lambda_handler
+      Description: Mark a tour rider as EXITED and capture exit metadata
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/exit
+            Method: POST
+
+  CancelRiderExitFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: cancel_rider_exit.lambda_handler
+      Description: Revert a rider EXITED status to prevStatus
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/exit/cancel
+            Method: POST
+
   LinkRiderCognitoUserFunction:
     Type: AWS::Serverless::Function
     Properties:

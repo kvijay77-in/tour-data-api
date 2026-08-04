@@ -61,6 +61,8 @@ Scope of this model is to have reference of the photo in S3. Uploading is out of
 ## Tour Riders
 This is expected to have Rider ID allocated to the rider who are registered for the current tour. Rider ID is allocated couple of weeks before the tour commences and will be uploaded by tour organizers to the corresponding table as per the format/model. Rider ID is specific to a tour and will be different for same rider for each tour rider participates. This essentially a mapping between a Tour and Rider profile data.
 
+Tour rider participation status must support an operational exit flow. A rider can leave the tour voluntarily or be forced out by organizers for violations. This action must update the existing TourRider row only by setting `status` to `EXITED`, storing the previous status in `prevStatus`, and capturing audit attributes `exitedAt` and `exitedBy`. A cancellation action must restore `status` from `prevStatus` and remove `prevStatus`, `exitedAt`, and `exitedBy`.
+
 Rider ID should start with character 'R' followed by 2 to 3 digit number. No zero filling required. For example: R1, R2, R10, R57, R87, R102.
 
 QR Code will be generated for each participating riders with Rider ID. There can be more data in the QR code but for now let's go with only Rider ID as this alone can be used to retrieve all other info required about the rider.  Generation of QR code will be out the scope. But Check-in App will have the ability to scan these QR Code and get Rider ID for further processing.
