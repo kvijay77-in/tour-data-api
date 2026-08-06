@@ -104,7 +104,7 @@ A scenario YAML file defines the tour-specific data to simulate. See `scenarios/
 ### Top-level Structure
 
 ```yaml
-scenario:          # Metadata (name, description)
+scenario:          # Metadata and scenario contract (type, mode, name, description)
 aws:               # AWS environment config (stack_name, region)
 tour:              # Tour reference (tour_id, target_status)
 tour_riders:       # Tour rider registration config
@@ -116,9 +116,21 @@ options:           # Script behaviour flags
 
 ```yaml
 scenario:
+  type: "tour_data_generation"       # Required: scenario dispatcher key
+  mode: "create"                     # Required: scenario execution mode
   name: "Descriptive name"
   description: "What this scenario tests"
 ```
+
+Current supported scenario types:
+
+- `tour_data_generation`: creates tour riders, rides, and check-ins for a provisioned tour
+- `personal_code_update`: updates eligible RiderProfile rows with personal codes
+
+Current supported scenario modes:
+
+- `create`: used by generation scenarios
+- `update`: used by shared-table update scenarios
 
 ### `aws`
 
@@ -241,6 +253,48 @@ options:
   update_tour_status: true   # Update TourMaster status to tour.target_status
   seed: 42                   # Random seed for reproducible data
 ```
+
+## Personal Code Update Scenario
+
+The personal code use case now uses the same top-level `scenario` contract and a standard `target` / `selection` / `payload` structure.
+
+```yaml
+scenario:
+  type: personal_code_update
+  mode: update
+  name: "Personal Code Loading"
+  description: "Adds personal codes to eligible RiderProfile rows"
+
+aws:
+  stack_name: dev
+
+target:
+  table_name: RiderProfile
+  attribute_name: personalCode
+
+selection:
+  filter:
+    type: attribute_not_exists
+    attribute: personalCode
+  limit:
+    type: reference_count
+    source: personal_codes
+
+payload:
+  personal_codes:
+    - D101
+    - D102
+  ignored_personal_codes:
+    - D117
+```
+
+Field meanings:
+
+- `target.table_name`: shared DynamoDB table to update
+- `target.attribute_name`: attribute populated by this scenario
+- `selection.filter`: reusable selection rule applied during the scan
+- `selection.limit`: expected payload-driven selection size
+- `payload`: scenario-specific input values used by the handler
 
 ## Data Generation Details
 

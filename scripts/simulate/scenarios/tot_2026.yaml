@@ -11,6 +11,8 @@
 # =============================================================================
 
 scenario:
+  type: tour_data_generation
+  mode: create
   name: "TOT-2026 Full Tour Simulation"
   description: "7-day tour with 70 riders, days 1-3 completed, day 4 active"
 
@@ -28,7 +30,12 @@ tour:
 # Tour rider registration (written to TourRider-{tourId} table)
 # Riders are selected from existing profiles in the RiderProfile table
 tour_riders:
-  count: 70          # Number of riders to register for this tour
+  count: 90          # Number of riders to register for this tour
+  selection:
+    filter:
+      # Only select riders with a personal code (personalCode attribute exists)
+      type: attribute_exists
+      attribute: personalCode
 
 # Ride schedule and check-in distributions
 rides:
@@ -112,6 +119,7 @@ rides:
       distance: 120
       flag_off_time: "08:00"
       rides_count: 1
+      rider_exit: 1
       checkins:
         not_riding: 4
         quit:
@@ -133,6 +141,10 @@ rides:
       distance: 120
       flag_off_time: "08:00"
       rides_count: 1
+      floats:
+        - float: 1
+          float_to_stage: 2
+      rider_exit: 1
       checkins:
         not_riding: 4
         quit:
@@ -159,6 +171,11 @@ rides:
       distance: 75
       flag_off_time: "09:00"
       rides_count: 1
+      floats:
+        - float: 1
+          float_to_stage: 1
+        - float: 2
+          float_to_stage: 2
 
     # Day 6 has 2 rides
     - day: 6

@@ -55,6 +55,215 @@ from decimal import Decimal
 import yaml
 import boto3
 from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Attr
+
+
+SCENARIO_TYPE_TOUR_DATA = 'tour_data_generation'
+SCENARIO_TYPE_PERSONAL_CODE = 'personal_code_update'
+SCENARIO_MODE_CREATE = 'create'
+SCENARIO_MODE_UPDATE = 'update'
+DEBUG_ENABLED = False
+
+# ============================================================================
+# SCENARIO AND DYNAMODB HELPERS
+# ============================================================================
+
+def require_mapping(container, key, context):
+    """Return a required mapping from a parent container."""
+    value = container.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"{context}.{key} must be a mapping")
+    return value
+
+
+def require_list(container, key, context):
+    """Return a required non-empty list from a parent container."""
+    value = container.get(key)
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"{context}.{key} must be a non-empty list")
+    return value
+
+
+def validate_allowed_value(value, allowed_values, label):
+    """Validate that a value is one of the supported options."""
+    if value not in allowed_values:
+        allowed = ', '.join(sorted(allowed_values))
+        raise ValueError(f"{label} must be one of: {allowed}")
+
+
+def get_scenario_metadata(config):
+    """Return the normalized scenario metadata block."""
+    scenario = config.get('scenario')
+    if not isinstance(scenario, dict):
+        raise ValueError('scenario must be a mapping')
+    return scenario
+
+
+def get_scenario_type(config):
+    """Return the explicit scenario type."""
+    scenario = get_scenario_metadata(config)
+    scenario_type = scenario.get('type')
+    validate_allowed_value(
+        scenario_type,
+        {SCENARIO_TYPE_PERSONAL_CODE, SCENARIO_TYPE_TOUR_DATA},
+        'scenario.type',
+    )
+    return scenario_type
+
+
+def get_scenario_mode(config):
+    """Return the explicit scenario mode."""
+    scenario = get_scenario_metadata(config)
+    mode = scenario.get('mode')
+    validate_allowed_value(
+        mode,
+        {SCENARIO_MODE_CREATE, SCENARIO_MODE_UPDATE},
+        'scenario.mode',
+    )
+    return mode
+
+
+def build_table_name(stack_name, table_name, tour_id=None):
+    """Build a shared or tour-specific DynamoDB table name."""
+    if tour_id:
+        return f"{stack_name}-{table_name}-{tour_id}"
+    return f"{stack_name}-{table_name}"
+
+
+def get_table(dynamodb, stack_name, table_name, tour_id=None):
+    """Return a DynamoDB Table resource using project naming rules."""
+    return dynamodb.Table(build_table_name(stack_name, table_name, tour_id=tour_id))
+
+
+def scan_table_items(table, filter_expression=None, projection_expression=None, limit=None):
+    """Scan all matching items from a DynamoDB table with optional filtering."""
+    scan_kwargs = {}
+    if filter_expression is not None:
+        scan_kwargs['FilterExpression'] = filter_expression
+    if projection_expression:
+        scan_kwargs['ProjectionExpression'] = projection_expression
+
+    items = []
+    response = table.scan(**scan_kwargs)
+    items.extend(response.get('Items', []))
+
+    while 'LastEvaluatedKey' in response:
+        response = table.scan(
+            **scan_kwargs,
+            ExclusiveStartKey=response['LastEvaluatedKey'],
+        )
+        items.extend(response.get('Items', []))
+
+    if limit is not None:
+        return items[:limit]
+    return items
+
+
+def fetch_table_items(
+    dynamodb,
+    stack_name,
+    table_name,
+    *,
+    tour_id=None,
+    filter_expression=None,
+    projection_expression=None,
+    limit=None,
+):
+    """Fetch items from a shared or tour-specific table."""
+
+    print(f"Filtering {table_name} items with filter: {filter_expression}")
+    table = get_table(dynamodb, stack_name, table_name, tour_id=tour_id)
+    return scan_table_items(
+        table,
+        filter_expression=filter_expression,
+        projection_expression=projection_expression,
+        limit=limit,
+    )
+
+
+def fetch_table_item(dynamodb, stack_name, table_name, key, tour_id=None):
+    """Fetch a single item from a shared or tour-specific table."""
+    table = get_table(dynamodb, stack_name, table_name, tour_id=tour_id)
+    response = table.get_item(Key=key)
+    return response.get('Item')
+
+
+def resolve_selection_filter(filter_config):
+    """Convert a selection filter config into a DynamoDB condition."""
+    if not filter_config:
+        return None
+
+    filter_type = filter_config.get('type')
+    validate_allowed_value(
+        filter_type,
+        {'attribute_not_exists', 'attribute_exists'},
+        'selection.filter.type',
+    )
+
+    if filter_type == 'attribute_not_exists':
+        attribute_name = filter_config.get('attribute')
+        if not attribute_name:
+            raise ValueError(
+                'selection.filter.attribute is required for attribute_not_exists'
+            )
+        return Attr(attribute_name).not_exists()
+
+    if filter_type == 'attribute_exists':
+        attribute_name = filter_config.get('attribute')
+        if not attribute_name:
+            raise ValueError(
+                'selection.filter.attribute is required for attribute_exists'
+            )
+        return Attr(attribute_name).exists()
+
+    raise ValueError(f"Unsupported selection filter type: {filter_type}")
+
+
+def resolve_selection_limit(limit_config, config):
+    """Resolve a selection limit from a scenario config."""
+    if limit_config is None:
+        return None
+
+    if isinstance(limit_config, int):
+        if limit_config < 1:
+            raise ValueError('selection.limit must be at least 1')
+        return limit_config
+
+    if not isinstance(limit_config, dict):
+        raise ValueError('selection.limit must be an integer or mapping')
+
+    limit_type = limit_config.get('type')
+    validate_allowed_value(limit_type, {'reference_count'}, 'selection.limit.type')
+
+    source = limit_config.get('source')
+    payload = config.get('payload', {})
+    source_values = payload.get(source)
+    if not isinstance(source_values, list):
+        raise ValueError(
+            'selection.limit.source must reference a list under payload'
+        )
+    return len(source_values)
+
+
+def create_dynamodb_session(region=None):
+    """Create a boto3 Session and DynamoDB resource."""
+    session_kwargs = {}
+    if region:
+        session_kwargs['region_name'] = region
+    session = boto3.Session(**session_kwargs)
+    return session, session.resource('dynamodb')
+
+
+def print_run_header(scenario_name, stack_name, seed, dry_run, extra_lines=None):
+    """Print a consistent execution header for any scenario."""
+    print(f"\n{'=' * 60}")
+    print(f"  Scenario : {scenario_name}")
+    print(f"  Stack    : {stack_name}")
+    print(f"  Seed     : {seed}")
+    print(f"  Mode     : {'DRY RUN' if dry_run else 'DynamoDB'}")
+    for line in extra_lines or []:
+        print(f"  {line}")
+    print(f"{'=' * 60}\n")
 
 
 # ============================================================================
@@ -67,18 +276,7 @@ def fetch_rider_profiles(dynamodb, stack_name):
 
     Returns list of profile dicts.
     """
-    table_name = f"{stack_name}-RiderProfile"
-    table = dynamodb.Table(table_name)
-
-    items = []
-    response = table.scan()
-    items.extend(response.get('Items', []))
-
-    while 'LastEvaluatedKey' in response:
-        response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
-        items.extend(response.get('Items', []))
-
-    return items
+    return fetch_table_items(dynamodb, stack_name, 'RiderProfile')
 
 
 def fetch_tour(dynamodb, stack_name, tour_id):
@@ -87,11 +285,224 @@ def fetch_tour(dynamodb, stack_name, tour_id):
 
     Returns tour dict or None if not found.
     """
-    table_name = f"{stack_name}-TourMaster"
-    table = dynamodb.Table(table_name)
+    return fetch_table_item(
+        dynamodb,
+        stack_name,
+        'TourMaster',
+        {'tourId': tour_id},
+    )
 
-    response = table.get_item(Key={'tourId': tour_id})
-    return response.get('Item')
+
+def validate_scenario_contract(config):
+    """Validate the common scenario header shared by all scenario types."""
+    scenario = get_scenario_metadata(config)
+    if not scenario.get('name'):
+        raise ValueError('scenario.name is required')
+    if not scenario.get('description'):
+        raise ValueError('scenario.description is required')
+
+    scenario_type = get_scenario_type(config)
+    mode = get_scenario_mode(config)
+    expected_mode = {
+        SCENARIO_TYPE_PERSONAL_CODE: SCENARIO_MODE_UPDATE,
+        SCENARIO_TYPE_TOUR_DATA: SCENARIO_MODE_CREATE,
+    }[scenario_type]
+    if mode != expected_mode:
+        raise ValueError(
+            f"scenario.mode must be '{expected_mode}' for scenario.type '{scenario_type}'"
+        )
+
+
+def validate_personal_code_scenario(config):
+    """Validate the personal-code loading scenario structure."""
+    validate_scenario_contract(config)
+
+    errors = []
+    target = require_mapping(config, 'target', 'config')
+    payload = require_mapping(config, 'payload', 'config')
+    selection = require_mapping(config, 'selection', 'config')
+    filter_config = require_mapping(selection, 'filter', 'selection')
+
+    if get_scenario_type(config) != SCENARIO_TYPE_PERSONAL_CODE:
+        errors.append(
+            f"scenario.type must be '{SCENARIO_TYPE_PERSONAL_CODE}'"
+        )
+    if target.get('table_name') != 'RiderProfile':
+        errors.append("target.table_name must be 'RiderProfile'")
+    if target.get('attribute_name') != 'personalCode':
+        errors.append("target.attribute_name must be 'personalCode'")
+
+    if filter_config.get('type') != 'attribute_not_exists':
+        errors.append(
+            "selection.filter.type must be 'attribute_not_exists'"
+        )
+    if filter_config.get('attribute') != 'personalCode':
+        errors.append("selection.filter.attribute must be 'personalCode'")
+
+    personal_codes = payload.get('personal_codes')
+    if not isinstance(personal_codes, list) or not personal_codes:
+        errors.append('payload.personal_codes must be a non-empty list')
+
+    limit_config = selection.get('limit')
+    if limit_config is not None:
+        try:
+            resolve_selection_limit(limit_config, config)
+        except ValueError as exc:
+            errors.append(str(exc))
+
+    try:
+        resolve_selection_filter(filter_config)
+    except ValueError as exc:
+        errors.append(str(exc))
+
+    if errors:
+        raise ValueError('Invalid personal code scenario: ' + '; '.join(errors))
+
+
+def validate_tour_data_scenario(config):
+    """Validate the common contract for the tour data generation scenario."""
+    validate_scenario_contract(config)
+    if get_scenario_type(config) != SCENARIO_TYPE_TOUR_DATA:
+        raise ValueError(
+            f"scenario.type must be '{SCENARIO_TYPE_TOUR_DATA}'"
+        )
+    if 'tour' not in config or 'tour_riders' not in config or 'rides' not in config:
+        raise ValueError(
+            'Tour data scenario requires tour, tour_riders, and rides sections'
+        )
+
+
+def _normalize_personal_codes(config):
+    """Return the usable personal codes after removing ignored entries."""
+    ignored = {
+        str(code).strip().upper()
+        for code in config.get('payload', {}).get('ignored_personal_codes', [])
+        if str(code).strip()
+    }
+
+    usable = []
+    for code in config.get('payload', {}).get('personal_codes', []):
+        normalized = str(code).strip().upper()
+        if not normalized or normalized in ignored:
+            continue
+        usable.append(normalized)
+
+    seen = set()
+    duplicates = []
+    for code in usable:
+        if code in seen:
+            duplicates.append(code)
+        seen.add(code)
+
+    if duplicates:
+        raise ValueError(
+            'personal_codes contains duplicate values after normalization: '
+            + ', '.join(sorted(set(duplicates)))
+        )
+
+    return usable, sorted(ignored)
+
+
+def fetch_eligible_rider_profiles(dynamodb, stack_name, config, select_path=None):
+    """Fetch rider profiles as per the filter defined in the scenario selection section."""
+
+    target = 'RiderProfile'
+    if select_path is None:
+        selection = config['selection']
+    else:
+        selection = config[select_path]['selection']
+
+    print(f"Validating selection filter for selection...")
+
+    print('Fetching rider profiles from RiderProfile...')
+    eligible_profiles = fetch_table_items(
+        dynamodb,
+        stack_name,
+        target,
+        filter_expression=resolve_selection_filter(selection.get('filter')),
+    )
+
+    print(f'  Found {len(eligible_profiles)} ')
+    return eligible_profiles
+
+
+def assign_personal_codes(dynamodb, stack_name, config, rng, dry_run=False):
+    """Randomly assign personal codes to eligible RiderProfile items."""
+    validate_personal_code_scenario(config)
+
+    target = config['target']
+    selection = config['selection']
+    attribute_name = target['attribute_name']
+    usable_codes, ignored_codes = _normalize_personal_codes(config)
+    expected_selection_size = resolve_selection_limit(selection.get('limit'), config)
+
+    print('Fetching rider profiles from RiderProfile...')
+    eligible_profiles = fetch_table_items(
+        dynamodb,
+        stack_name,
+        target['table_name'],
+        filter_expression=resolve_selection_filter(selection.get('filter')),
+    )
+    print(f'  Found {len(eligible_profiles)} eligible profiles without {attribute_name}')
+
+    if expected_selection_size is not None and expected_selection_size != len(usable_codes):
+        raise ValueError(
+            'selection.limit resolved to a different size than the usable payload set'
+        )
+
+    if len(usable_codes) > len(eligible_profiles):
+        raise ValueError(
+            f"Scenario needs {len(usable_codes)} eligible riders but only "
+            f"{len(eligible_profiles)} profiles are available without {attribute_name}"
+        )
+
+    selected_profiles = rng.sample(eligible_profiles, len(usable_codes))
+    assignments = [
+        {
+            'profileId': profile['profileId'],
+            'name': profile.get('name'),
+            attribute_name: code,
+        }
+        for profile, code in zip(selected_profiles, usable_codes)
+    ]
+
+    print(f"  Loaded {len(usable_codes)} personal codes")
+    if ignored_codes:
+        print(f"  Ignored {len(ignored_codes)} pre-loaded code(s)")
+
+    if dry_run:
+        return assignments
+
+    table = get_table(dynamodb, stack_name, target['table_name'])
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    loaded = 0
+    failed = 0
+    for assignment in assignments:
+        try:
+            table.update_item(
+                Key={'profileId': assignment['profileId']},
+                UpdateExpression='SET personalCode = :code, updatedAt = :now',
+                ConditionExpression=Attr('personalCode').not_exists(),
+                ExpressionAttributeValues={
+                    ':code': assignment['personalCode'],
+                    ':now': now,
+                },
+            )
+            loaded += 1
+        except ClientError as e:
+            failed += 1
+            print(
+                f"  Failed to update {assignment['profileId']} "
+                f"({assignment.get('name')}): {e.response['Error']['Message']}"
+            )
+
+    print(f"  Updated {loaded} rider profile(s), Failed: {failed}")
+
+    if failed:
+        raise RuntimeError('One or more RiderProfile updates failed')
+
+    return assignments
 
 
 # ============================================================================
@@ -114,6 +525,8 @@ def select_tour_riders(profiles, count, rng):
 
     tour_riders = []
     for i, profile in enumerate(selected, 1):
+        if DEBUG_ENABLED:
+            print(f"  Selected {profile['profileId']} ({profile.get('personalCode')}) as R{i}")
         tour_riders.append({
             'rider_id': f'R{i}',
             'profile_id': profile['profileId'],
@@ -332,7 +745,7 @@ def build_rides(config):
     default_stage_count = int(rides_cfg.get('default_stage_count', 4))
     rides = []
     ride_counter = 1
-
+    
     for day_cfg in config['rides']['schedule']:
         ride_defs = _normalize_day_ride_configs(day_cfg)
         rides_count = len(ride_defs)
@@ -378,6 +791,63 @@ def build_rides(config):
                 day_cfg.get('close_time', _derive_close_time(flag_off, stages_cfg)),
             )
 
+            # Normalize and attach floats if defined at ride or day level.
+            floats_cfg = ride_cfg.get('floats', day_cfg.get('floats'))
+            if floats_cfg is not None:
+                normalized_floats = []
+                total_stages = len(stages_cfg)
+                for f_idx, f in enumerate(floats_cfg):
+                    if not isinstance(f, dict):
+                        raise ValueError(
+                            f"Day {day_cfg.get('day','?')}: floats[{f_idx}] must be a mapping"
+                        )
+
+                    # Accept multiple possible key namings from scenario files
+                    if 'floatNo' in f:
+                        float_no = f['floatNo']
+                    elif 'float_no' in f:
+                        float_no = f['float_no']
+                    elif 'float' in f:
+                        float_no = f['float']
+                    else:
+                        raise ValueError(
+                            f"Day {day_cfg.get('day','?')}: floats[{f_idx}] missing float number key"
+                        )
+
+                    if 'floatToStage' in f:
+                        float_to_stage = f['floatToStage']
+                    elif 'float_to_stage' in f:
+                        float_to_stage = f['float_to_stage']
+                    elif 'float_to' in f:
+                        float_to_stage = f['float_to']
+                    elif 'floatTo' in f:
+                        float_to_stage = f['floatTo']
+                    else:
+                        raise ValueError(
+                            f"Day {day_cfg.get('day','?')}: floats[{f_idx}] missing float-to-stage key"
+                        )
+
+                    try:
+                        float_no = int(float_no)
+                        float_to_stage = int(float_to_stage)
+                    except Exception:
+                        raise ValueError(
+                            f"Day {day_cfg.get('day','?')}: floats[{f_idx}] float values must be integers"
+                        )
+
+                    # Validate target stage is within allowed range (1..total_stages-1)
+                    if total_stages < 2 or float_to_stage < 1 or float_to_stage >= total_stages:
+                        raise ValueError(
+                            f"Day {day_cfg.get('day','?')}: floats[{f_idx}] float_to_stage {float_to_stage} out of range for {total_stages} stages"
+                        )
+
+                    normalized_floats.append({
+                        'float_no': float_no,
+                        'float_to_stage': float_to_stage,
+                    })
+            else:
+                normalized_floats = None
+
             ride = {
                 'ride_id': ride_id,
                 'date': day_cfg['date'],
@@ -397,6 +867,8 @@ def build_rides(config):
                 'close_time': close_time,
                 'status': status,
                 'stages': stages,
+                # Attach floats only when defined in config
+                **({'floats': normalized_floats} if normalized_floats is not None else {}),
                 'created_at': '2026-02-01T00:00:00Z',
                 'updated_at': '2026-02-01T00:00:00Z',
             }
@@ -416,9 +888,70 @@ def build_rides(config):
                     'checkin_cfg': checkin_cfg,
                 }
             )
+
             ride_counter += 1
 
     return rides
+
+
+def apply_rider_exits(rides_data, tour_riders, rng):
+    """
+    Apply `rider_exit` directives from ride/day configs.
+
+    For each ride in `rides_data`, if the ride or its day config has a
+    `rider_exit` value > 0, select that many currently-REGISTERED riders
+    from `tour_riders`, mark them with status 'EXITED' and set
+    `exited_at` to the ride's start timestamp (date + flag_off_time).
+
+    Modifies `tour_riders` in-place and returns a list of exited rider_ids.
+    """
+    exited = []
+
+    for rd in rides_data:
+        ride = rd.get('ride', {})
+        day_cfg = rd.get('day_config', {})
+        ride_cfg = rd.get('ride_config', {}) or {}
+
+        # rider_exit may be specified at ride or day level
+        raw_exit = ride_cfg.get('rider_exit', day_cfg.get('rider_exit'))
+        if raw_exit is None:
+            continue
+
+        try:
+            exit_count = int(raw_exit)
+        except Exception:
+            print(f"  Warning: invalid rider_exit value '{raw_exit}' for {ride.get('ride_id')}")
+            continue
+
+        if exit_count <= 0:
+            continue
+
+        # Select from currently registered riders only
+        registered = [r for r in tour_riders if r.get('status') == 'REGISTERED']
+        if not registered:
+            print(f"  Warning: no REGISTERED riders available to exit for {ride.get('ride_id')}")
+            continue
+
+        if exit_count > len(registered):
+            print(
+                f"  Warning: rider_exit {exit_count} > available REGISTERED riders {len(registered)}; reducing"
+            )
+            exit_count = len(registered)
+
+        rng.shuffle(registered)
+        to_exit = registered[:exit_count]
+
+        # Use ride start timestamp (YYYY-MM-DDTHH:MM:00Z)
+        start_ts = ride.get('started_at') or f"{ride.get('date')}T{ride.get('flag_off_time')}:00Z"
+
+        for r in to_exit:
+            r['status'] = 'EXITED'
+            r['exited_at'] = start_ts
+            exited.append(r['rider_id'])
+
+        print(f"  Marked {len(to_exit)} rider(s) as EXITED at {start_ts} for {ride.get('ride_id')}")
+
+    return exited
 
 
 def _parse_flag_off(flag_off_time):
@@ -520,12 +1053,26 @@ def generate_checkins(
     all_checkins = []
     skipped_today_rides = 0
     skipped_non_today_rides = 0
-    rider_ids = [r['rider_id'] for r in tour_riders]
+
+    # Helper to check if a rider is active for a given ride.
+    def _rider_active_for_ride(rider, ride):
+        # Non-exited riders are active
+        if rider.get('status') != 'EXITED':
+            return True
+        exited_ts = rider.get('exited_at')
+        if not exited_ts:
+            return False
+        # Ride start timestamp (use started_at if present, otherwise derive)
+        ride_start = ride.get('started_at') or f"{ride.get('date')}T{ride.get('flag_off_time')}:00Z"
+        # Exclude rider if they exited at or before ride start
+        return exited_ts > ride_start
 
     if today_iso_date is None:
         today_iso_date = date.today().isoformat()
 
-    print(f"*** Check in created: {len(all_checkins)}")
+    if DEBUG_ENABLED:
+        print(f"*** Check in created: {len(all_checkins)}")
+
     for ride_data in rides_data:
         ride = ride_data['ride']
         checkin_cfg = ride_data.get('checkin_cfg')
@@ -542,7 +1089,8 @@ def generate_checkins(
         if not checkin_cfg:
             continue
 
-        print(f"----------------------------------------------------------------------")
+        if DEBUG_ENABLED:
+            print(f"----------------------------------------------------------------------")
         
 
         ride_id = ride['ride_id']
@@ -553,10 +1101,13 @@ def generate_checkins(
         # Map stage names to indices
         stage_name_to_idx = {s['name']: idx for idx, s in enumerate(stages)}
 
-        available = list(rider_ids)
+        # Build per-ride available rider list excluding those who exited
+        active_rider_ids = [r['rider_id'] for r in tour_riders if _rider_active_for_ride(r, ride)]
+        available = list(active_rider_ids)
         rng.shuffle(available)
 
-        print(f" Available riders before check-in assignment for {ride_id}: {len(available)}")
+        if DEBUG_ENABLED:
+            print(f" Available riders before check-in assignment for {ride_id}: {len(available)}")
         # --- Not Riding ---
         nr_count = checkin_cfg.get('not_riding', 0)
         nr_riders = available[:nr_count]
@@ -572,8 +1123,9 @@ def generate_checkins(
                 status='NOT_RIDING',
             ))
 
-        print(f" Available riders after NOT_RIDING assignment: {len(available)}")
-        print(f"*** Check in created: {len(all_checkins)}")
+        if DEBUG_ENABLED:
+            print(f" Available riders after NOT_RIDING assignment: {len(available)}")
+            print(f"*** Check in created: {len(all_checkins)}")
 
         # --- Quit Riding ---
         for quit_cfg in checkin_cfg.get('quit', []):
@@ -604,8 +1156,9 @@ def generate_checkins(
                     status='QUIT_RIDING',
                 ))
         
-        print(f" Available riders after QUIT_RIDING assignment: {len(available)}")
-        print(f"*** Check in created: {len(all_checkins)}")
+        if DEBUG_ENABLED:
+            print(f" Available riders after QUIT_RIDING assignment: {len(available)}")
+            print(f"*** Check in created: {len(all_checkins)}")
 
         # --- Finished Riding ---
         finished_cfg = checkin_cfg.get('finished', 0)
@@ -624,8 +1177,9 @@ def generate_checkins(
                     ride_id, rid, stage, ts,
                 ))
 
-        print(f" Available riders after FINISHED assignment: {len(available)}")
-        print(f"*** Check in created: {len(all_checkins)}")
+        if DEBUG_ENABLED:
+            print(f" Available riders after FINISHED assignment: {len(available)}")
+            print(f"*** Check in created: {len(all_checkins)}")
 
         temp_checkin_count_last = len(all_checkins)
 
@@ -635,13 +1189,15 @@ def generate_checkins(
             for stage_name, count in in_progress_cfg.items():
                 target_idx = stage_name_to_idx[stage_name]
 
-                print(f"  Generating {count} in-progress riders for {ride_id} up to stage '{stage_name}'")
-                print(f"    Available riders before assignment: {len(available)}")
+                if DEBUG_ENABLED:
+                    print(f"  Generating {count} in-progress riders for {ride_id} up to stage '{stage_name}'")
+                    print(f"    Available riders before assignment: {len(available)}")
 
                 ip_riders = available[:count]
                 available = available[count:]
 
-                print(f"    Assigned {len(ip_riders)} in-progress riders, {len(available)} remaining unassigned")
+                if DEBUG_ENABLED:
+                    print(f"    Assigned {len(ip_riders)} in-progress riders, {len(available)} remaining unassigned")
 
                 for rid in ip_riders:
                     # Checked in at all stages up to and including target
@@ -653,17 +1209,19 @@ def generate_checkins(
                             ride_id, rid, stages[s_idx], ts,
                         ))
                 temp_checkin_count = len(all_checkins)
-                print(f"*** Check in created: {temp_checkin_count} (added {temp_checkin_count - temp_checkin_count_last})")
+                if DEBUG_ENABLED:
+                    print(f"*** Check in created: {temp_checkin_count} (added {temp_checkin_count - temp_checkin_count_last})")
                 temp_checkin_count_last = temp_checkin_count
 
-        print(f" Available riders after IN_PROGRESS assignment for {ride_id}: {len(available)}")
+        if DEBUG_ENABLED:
+            print(f" Available riders after IN_PROGRESS assignment for {ride_id}: {len(available)}")
         
-
         # Printing 10 random Check-in entries.
-        print(f"====================================================================================")
-        for sample_checkin in rng.sample(all_checkins, min(10, len(all_checkins))):
-            print(f"  Sample Check-in: {sample_checkin}")
-        print(f"====================================================================================")
+        if DEBUG_ENABLED:
+            print(f"====================================================================================")
+            for sample_checkin in rng.sample(all_checkins, min(10, len(all_checkins))):
+                print(f"  Sample Check-in: {sample_checkin}")
+            print(f"====================================================================================")
 
         if available:
             print(f"  Warning: {len(available)} riders unassigned for {ride_id}")
@@ -711,7 +1269,7 @@ def _stage_to_dynamodb(stage):
 
 def _tour_rider_to_dynamodb(item):
     """Convert snake_case TourRider attributes to DynamoDB table attribute names."""
-    return {
+    tour_rider = {
         'riderId': item['rider_id'],
         'profileId': item['profile_id'],
         'status': item['status'],
@@ -720,6 +1278,9 @@ def _tour_rider_to_dynamodb(item):
         'createdAt': item['created_at'],
         'updatedAt': item['updated_at'],
     }
+    if item.get('exited_at') is not None:
+        tour_rider['exitedAt'] = item['exited_at']
+    return tour_rider
 
 
 def _ride_to_dynamodb(item):
@@ -737,9 +1298,19 @@ def _ride_to_dynamodb(item):
         'closeTime': item['close_time'],
         'status': item['status'],
         'stages': [_stage_to_dynamodb(s) for s in item['stages']],
-        'createdAt': item['created_at'],
-        'updatedAt': item['updated_at'],
     }
+    # Convert floats, if present, from generator snake_case to API field names
+    if item.get('floats') is not None:
+        ride['floats'] = [
+            {
+                'floatNo': f.get('float_no'),
+                'floatToStage': f.get('float_to_stage'),
+            }
+            for f in item['floats']
+        ]
+    ride['createdAt'] = item['created_at']
+    ride['updatedAt'] = item['updated_at']
+    
     if item.get('started_at'):
         ride['startedAt'] = item['started_at']
     if item.get('completed_at'):
@@ -818,9 +1389,9 @@ def clean_tour_data(dynamodb, stack_name, tour_id):
     table_types = ['TourRider', 'Ride', 'CheckIn']
 
     for table_type in table_types:
-        table_name = f"{stack_name}-{table_type}-{tour_id}"
+        table_name = build_table_name(stack_name, table_type, tour_id=tour_id)
         try:
-            table = dynamodb.Table(table_name)
+            table = get_table(dynamodb, stack_name, table_type, tour_id=tour_id)
             deleted = clean_table(table)
             print(f"  Cleaned {table_name}: {deleted} items deleted")
         except ClientError as e:
@@ -850,8 +1421,7 @@ def load_to_dynamodb(dynamodb, table_name, items):
 
 def update_tour_status(dynamodb, stack_name, tour_id, status):
     """Update the tour status in TourMaster table."""
-    table_name = f"{stack_name}-TourMaster"
-    table = dynamodb.Table(table_name)
+    table = get_table(dynamodb, stack_name, 'TourMaster')
 
     now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
@@ -1073,6 +1643,177 @@ def print_summary(tour_riders, rides_data, checkins):
     print(f"{'─' * 60}\n")
 
 
+def run_personal_code_scenario(args, config, stack_name, region, seed):
+    """Execute the shared-table personal code update scenario."""
+    scenario = get_scenario_metadata(config)
+    validate_personal_code_scenario(config)
+
+    print_run_header(
+        scenario.get('name', 'Unnamed'),
+        stack_name,
+        seed,
+        args.dry_run,
+    )
+
+    _, dynamodb = create_dynamodb_session(region)
+    rng = random.Random(seed)
+
+    assignments = assign_personal_codes(
+        dynamodb,
+        stack_name,
+        config,
+        rng,
+        dry_run=args.dry_run,
+    )
+
+    if args.dry_run:
+        output_file = os.path.join(args.output_dir, 'personal_code_updates.json')
+        print(f"\nWriting JSON file to {output_file}")
+        write_json(assignments, output_file)
+    else:
+        print("\nPersonal code loading complete.")
+
+    print(f"\nAssigned {len(assignments)} personal code(s).")
+
+
+def run_tour_data_scenario(args, config, stack_name, region, seed):
+    """Execute the tour data generation scenario."""
+    scenario = get_scenario_metadata(config)
+    validate_tour_data_scenario(config)
+
+    validate_status_configuration(config)
+    resolve_schedule_dates(config)
+    resolve_schedule_statuses(
+        config,
+        include_today_checkins=args.include_today_checkins,
+    )
+    validate_schedule_dates(config)
+
+    tour_config = config['tour']
+    options = config.get('options', {})
+    tour_id = tour_config['tour_id']
+
+    print_run_header(
+        scenario.get('name', 'Unnamed'),
+        stack_name,
+        seed,
+        args.dry_run,
+        extra_lines=[
+            f"Tour     : {tour_id}",
+            f"Include today's check-ins : {args.include_today_checkins}",
+            f"Today's check-ins only    : {args.today_checkins_only}",
+        ],
+    )
+
+    validate_scenario(config)
+
+    _, dynamodb = create_dynamodb_session(region)
+
+    print('Fetching tour from TourMaster...')
+    tour = fetch_tour(dynamodb, stack_name, tour_id)
+    if not tour:
+        print(f"  Error: Tour '{tour_id}' not found in {build_table_name(stack_name, 'TourMaster')}")
+        sys.exit(1)
+    print(f"  Found: {tour.get('name')} (status: {tour.get('status')})")
+
+    print('Fetching rider profiles from RiderProfile...')
+    # profiles = fetch_rider_profiles(dynamodb, stack_name)
+    profiles = fetch_eligible_rider_profiles(dynamodb, stack_name, config, select_path='tour_riders')
+
+    if not profiles:
+        print(f"  Error: No profiles found in {build_table_name(stack_name, 'RiderProfile')}")
+        sys.exit(1)
+    print(f"  Found {len(profiles)} profiles")
+
+    rider_count = config['tour_riders']['count']
+    if rider_count > len(profiles):
+        print(
+            f"  Error: scenario requests {rider_count} riders but only "
+            f"{len(profiles)} profiles available"
+        )
+        sys.exit(1)
+
+    effective_clean_before_load = (
+        options.get('clean_before_load') and not args.today_checkins_only
+    )
+
+    if (args.clean or args.clean_only or effective_clean_before_load) \
+            and not args.dry_run:
+        print('\nCleaning existing tour data...')
+        clean_tour_data(dynamodb, stack_name, tour_id)
+
+        if args.clean_only:
+            print('\nClean complete.')
+            return
+
+    rng = random.Random(seed)
+
+    print('\nSelecting tour riders from existing profiles...')
+    tour_riders = select_tour_riders(profiles, rider_count, rng)
+    print(f"  Selected {len(tour_riders)} riders (R1-R{len(tour_riders)})")
+
+    print('Building rides...')
+    rides_data = build_rides(config)
+    rides = [rd['ride'] for rd in rides_data]
+    print(f"  Built {len(rides)} rides")
+    # Apply any rider exit directives from the schedule (mark TourRider items)
+    exited = apply_rider_exits(rides_data, tour_riders, rng)
+    if exited:
+        print(f"  Exited riders: {len(exited)}")
+
+    print('Generating check-ins...')
+    checkins = generate_checkins(
+        rides_data,
+        tour_riders,
+        rng,
+        include_today_checkins=args.include_today_checkins,
+        today_checkins_only=args.today_checkins_only,
+    )
+    print(f"  Generated {len(checkins)} check-in records")
+
+    if args.dry_run:
+        print(f"\nWriting JSON files to {args.output_dir}/")
+        if not args.today_checkins_only:
+            write_json(tour_riders, os.path.join(args.output_dir, 'tour_riders.json'))
+            write_json(rides, os.path.join(args.output_dir, 'rides.json'))
+        write_json(checkins, os.path.join(args.output_dir, 'checkins.json'))
+    else:
+        print('\nLoading data to DynamoDB...')
+
+        ddb_checkins = to_dynamodb_items('CheckIn', checkins)
+
+        if not args.today_checkins_only:
+            ddb_tour_riders = to_dynamodb_items('TourRider', tour_riders)
+            ddb_rides = to_dynamodb_items('Ride', rides)
+
+            table_name = build_table_name(stack_name, 'TourRider', tour_id=tour_id)
+            print(f"  Loading {len(tour_riders)} tour riders to {table_name}...")
+            loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_tour_riders)
+            print(f"    Loaded: {loaded}, Failed: {failed}")
+
+            table_name = build_table_name(stack_name, 'Ride', tour_id=tour_id)
+            print(f"  Loading {len(rides)} rides to {table_name}...")
+            loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_rides)
+            print(f"    Loaded: {loaded}, Failed: {failed}")
+        else:
+            print('  Skipping TourRider and Ride writes (--today-checkins-only)')
+
+        table_name = build_table_name(stack_name, 'CheckIn', tour_id=tour_id)
+        print(f"  Loading {len(checkins)} check-ins to {table_name}...")
+        loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_checkins)
+        print(f"    Loaded: {loaded}, Failed: {failed}")
+
+        if options.get('update_tour_status', True):
+            target_status = tour_config.get('target_status')
+            if target_status:
+                print(f"\n  Updating tour status to {target_status}...")
+                update_tour_status(dynamodb, stack_name, tour_id, target_status)
+                print('    Done')
+
+    print_summary(tour_riders, rides_data, checkins)
+    print('Data generation complete!')
+
+
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -1151,7 +1892,13 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
         ),
     )
 
+    parser.add_argument(
+        '--debug-enabled', action='store_true',
+        help='Enable debug outputs for verification.',
+    )
+
     args = parser.parse_args()
+    DEBUG_ENABLED = args.debug_enabled
 
     if args.today_checkins_only and args.clean_only:
         parser.error('--today-checkins-only cannot be combined with --clean-only')
@@ -1166,150 +1913,21 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
     with open(args.scenario) as f:
         config = yaml.safe_load(f)
 
-    # Validate dynamic strategy usage before deriving values.
-    validate_status_configuration(config)
-
-    # Resolve dynamic schedule dates before any validation/build steps.
-    resolve_schedule_dates(config)
-    resolve_schedule_statuses(
-        config,
-        include_today_checkins=args.include_today_checkins,
-    )
-    validate_schedule_dates(config)
-
-    scenario = config.get('scenario', {})
     aws_config = config.get('aws', {})
-    tour_config = config['tour']
-    options = config.get('options', {})
-
     stack_name = aws_config.get('stack_name', 'dev')
-    tour_id = tour_config['tour_id']
     region = args.region or aws_config.get('region')
-    seed = options.get('seed', 42)
+    seed = config.get('options', {}).get('seed', 42)
 
-    print(f"\n{'=' * 60}")
-    print(f"  Scenario : {scenario.get('name', 'Unnamed')}")
-    print(f"  Tour     : {tour_id}")
-    print(f"  Stack    : {stack_name}")
-    print(f"  Seed     : {seed}")
-    print(f"  Mode     : {'DRY RUN' if args.dry_run else 'DynamoDB'}")
-    print(f"  Include today's check-ins : {args.include_today_checkins}")
-    print(f"  Today's check-ins only    : {args.today_checkins_only}")
-    print(f"{'=' * 60}\n")
+    scenario_type = get_scenario_type(config)
+    if scenario_type == SCENARIO_TYPE_PERSONAL_CODE:
+        run_personal_code_scenario(args, config, stack_name, region, seed)
+        return
 
-    # Validate scenario
-    validate_scenario(config)
+    if scenario_type == SCENARIO_TYPE_TOUR_DATA:
+        run_tour_data_scenario(args, config, stack_name, region, seed)
+        return
 
-    # Initialize DynamoDB — always needed to read existing data
-    session_kwargs = {}
-    if region:
-        session_kwargs['region_name'] = region
-    session = boto3.Session(**session_kwargs)
-    dynamodb = session.resource('dynamodb')
-
-    # Validate tour exists in TourMaster
-    print("Fetching tour from TourMaster...")
-    tour = fetch_tour(dynamodb, stack_name, tour_id)
-    if not tour:
-        print(f"  Error: Tour '{tour_id}' not found in {stack_name}-TourMaster")
-        sys.exit(1)
-    print(f"  Found: {tour.get('name')} (status: {tour.get('status')})")
-
-    # Fetch existing rider profiles
-    print("Fetching rider profiles from RiderProfile...")
-    profiles = fetch_rider_profiles(dynamodb, stack_name)
-    if not profiles:
-        print(f"  Error: No profiles found in {stack_name}-RiderProfile")
-        sys.exit(1)
-    print(f"  Found {len(profiles)} profiles")
-
-    rider_count = config['tour_riders']['count']
-    if rider_count > len(profiles):
-        print(
-            f"  Error: scenario requests {rider_count} riders but only "
-            f"{len(profiles)} profiles available"
-        )
-        sys.exit(1)
-
-    # Clean if requested
-    effective_clean_before_load = (
-        options.get('clean_before_load') and not args.today_checkins_only
-    )
-
-    if (args.clean or args.clean_only or effective_clean_before_load) \
-            and not args.dry_run:
-        print("\nCleaning existing tour data...")
-        clean_tour_data(dynamodb, stack_name, tour_id)
-
-        if args.clean_only:
-            print("\nClean complete.")
-            return
-
-    # Generate data
-    rng = random.Random(seed)
-
-    print("\nSelecting tour riders from existing profiles...")
-    tour_riders = select_tour_riders(profiles, rider_count, rng)
-    print(f"  Selected {len(tour_riders)} riders (R1-R{len(tour_riders)})")
-
-    print("Building rides...")
-    rides_data = build_rides(config)
-    rides = [rd['ride'] for rd in rides_data]
-    print(f"  Built {len(rides)} rides")
-
-    print("Generating check-ins...")
-    checkins = generate_checkins(
-        rides_data,
-        tour_riders,
-        rng,
-        include_today_checkins=args.include_today_checkins,
-        today_checkins_only=args.today_checkins_only,
-    )
-    print(f"  Generated {len(checkins)} check-in records")
-
-    # Output
-    if args.dry_run:
-        print(f"\nWriting JSON files to {args.output_dir}/")
-        if not args.today_checkins_only:
-            write_json(tour_riders, os.path.join(args.output_dir, 'tour_riders.json'))
-            write_json(rides, os.path.join(args.output_dir, 'rides.json'))
-        write_json(checkins, os.path.join(args.output_dir, 'checkins.json'))
-    else:
-        print("\nLoading data to DynamoDB...")
-
-        ddb_checkins = to_dynamodb_items('CheckIn', checkins)
-
-        if not args.today_checkins_only:
-            ddb_tour_riders = to_dynamodb_items('TourRider', tour_riders)
-            ddb_rides = to_dynamodb_items('Ride', rides)
-
-            table_name = f"{stack_name}-TourRider-{tour_id}"
-            print(f"  Loading {len(tour_riders)} tour riders to {table_name}...")
-            loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_tour_riders)
-            print(f"    Loaded: {loaded}, Failed: {failed}")
-
-            table_name = f"{stack_name}-Ride-{tour_id}"
-            print(f"  Loading {len(rides)} rides to {table_name}...")
-            loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_rides)
-            print(f"    Loaded: {loaded}, Failed: {failed}")
-        else:
-            print("  Skipping TourRider and Ride writes (--today-checkins-only)")
-
-        table_name = f"{stack_name}-CheckIn-{tour_id}"
-        print(f"  Loading {len(checkins)} check-ins to {table_name}...")
-        loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_checkins)
-        print(f"    Loaded: {loaded}, Failed: {failed}")
-
-        # Update tour status
-        if options.get('update_tour_status', True):
-            target_status = tour_config.get('target_status')
-            if target_status:
-                print(f"\n  Updating tour status to {target_status}...")
-                update_tour_status(dynamodb, stack_name, tour_id, target_status)
-                print("    Done")
-
-    print_summary(tour_riders, rides_data, checkins)
-    print("Data generation complete!")
+    raise ValueError(f"Unsupported scenario.type: {scenario_type}")
 
 
 if __name__ == '__main__':
