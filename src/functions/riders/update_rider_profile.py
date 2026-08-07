@@ -13,7 +13,14 @@ sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response, conflict_response
-from validation import validate_email, validate_required_fields, ValidationError, normalize_personal_code
+from validation import (
+    validate_email,
+    validate_rider_profile_optional_fields,
+    validate_emergency_contact,
+    build_emergency_contact_from_profile,
+    ValidationError,
+    normalize_personal_code,
+)
 from dynamodb_utils import get_item, put_item, query_items
 from models import utc_now_iso
 
@@ -25,7 +32,8 @@ def lambda_handler(event, context):
     Update a rider profile
     
     Path parameter: profileId (UUID)
-    Body: JSON with fields to update (name, email, phone, emergencyContactName, emergencyContactPhone)
+        Body: JSON with fields to update (name, email, phone, emergencyContact,
+            photoS3Key, personalCode, dateOfBirth, gender, address)
     
     Returns:
     - 200: Rider profile updated
@@ -56,13 +64,58 @@ def lambda_handler(event, context):
         if not existing_rider:
             logger.info(f"Rider profile not found: {profile_id}")
             return not_found_response("RiderProfile", profile_id)
+
+        legacy_contact_fields = {'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship', 'Relationship'}
+        legacy_fields_present = any(field in body for field in legacy_contact_fields)
+        if 'emergencyContact' in body and legacy_fields_present:
+            return bad_request_response(
+                "Provide either emergencyContact object or legacy emergency contact fields, not both"
+            )
+
+        if legacy_fields_present:
+            base_contact = build_emergency_contact_from_profile(existing_rider) or {
+                'name': None,
+                'phone': None,
+                'relation': None,
+            }
+            if 'emergencyContactName' in body:
+                base_contact['name'] = body.get('emergencyContactName')
+            if 'emergencyContactPhone' in body:
+                base_contact['phone'] = body.get('emergencyContactPhone')
+            if 'emergencyContactRelationship' in body:
+                base_contact['relation'] = body.get('emergencyContactRelationship')
+            if 'Relationship' in body:
+                base_contact['relation'] = body.get('Relationship')
+            body['emergencyContact'] = base_contact
         
         # Validate updatable fields
-        updatable_fields = ['name', 'email', 'phone', 'emergencyContactName', 'emergencyContactPhone', 'photoS3Key', 'personalCode']
+        updatable_fields = [
+            'name',
+            'email',
+            'phone',
+            'emergencyContact',
+            'photoS3Key',
+            'personalCode',
+            'dateOfBirth',
+            'gender',
+            'address',
+        ]
         updates = {k: v for k, v in body.items() if k in updatable_fields}
         
         if not updates:
             return bad_request_response("No valid fields to update")
+
+        # Validate optional rider profile fields
+        try:
+            validate_rider_profile_optional_fields(updates)
+        except ValidationError as e:
+            return bad_request_response(str(e))
+
+        if 'emergencyContact' in updates:
+            try:
+                validate_emergency_contact(updates['emergencyContact'])
+            except ValidationError as e:
+                return bad_request_response(str(e))
         
         # Validate email if provided
         if 'email' in updates:
@@ -97,6 +150,17 @@ def lambda_handler(event, context):
         updated_rider = {**existing_rider, **updates}
         if 'personalCode' in updates and updates['personalCode'] is None:
             updated_rider.pop('personalCode', None)
+        if 'dateOfBirth' in updates and updates['dateOfBirth'] is None:
+            updated_rider.pop('dateOfBirth', None)
+        if 'gender' in updates and updates['gender'] is None:
+            updated_rider.pop('gender', None)
+        if 'address' in updates and updates['address'] is None:
+            updated_rider.pop('address', None)
+        # Canonicalize to grouped emergencyContact map in storage.
+        updated_rider.pop('emergencyContactName', None)
+        updated_rider.pop('emergencyContactPhone', None)
+        updated_rider.pop('emergencyContactRelationship', None)
+        updated_rider.pop('Relationship', None)
         updated_rider['updatedAt'] = utc_now_iso()
         
         logger.info(f"Updating rider profile: {profile_id}")

@@ -1047,6 +1047,7 @@ class TestRiderDetailsEndpoint:
         data = body['data']
         assert data['rider']['riderId'] == 'R1'
         assert data['rider']['profileId'] == 'P001'
+        assert data['rider']['personalCode'] == 'D220'
         assert data['latestStatus'] == 'CHECKED_IN'
         assert len(data['checkInTimeline']) >= 1
 

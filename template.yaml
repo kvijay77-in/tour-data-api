@@ -727,11 +727,23 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/riders/profile
             Method: POST
+        HttpApiWithProfileId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}
+            Method: POST
         RiderHttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref RiderApi
             Path: /v1/riders/profile
+            Method: POST
+        RiderHttpApiWithProfileId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/riders/profile/{profileId}
             Method: POST
 
   RegisterTourRiderFunction:

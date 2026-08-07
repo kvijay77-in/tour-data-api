@@ -303,7 +303,7 @@ def main() -> int:
     )
     log("")
 
-    # print_exports(export_map)
+    print_exports(export_map)
     return 0
 
 

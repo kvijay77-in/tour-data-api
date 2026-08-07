@@ -38,8 +38,21 @@ MOCK_RIDER_PROFILES = [
         'email': 'john.doe@example.com',
         'personalCode': 'D220',
         'phone': '+1234567890',
-        'emergencyContactName': 'Jane Doe',
-        'emergencyContactPhone': '+0987654321',
+        'emergencyContact': {
+            'name': 'Jane Doe',
+            'phone': '+0987654321',
+            'relation': 'Spouse'
+        },
+        'address': {
+            'line1': '10 Beach Road',
+            'line2': 'Apt 2A',
+            'city': 'Chennai',
+            'state': 'Tamil Nadu',
+            'country': 'India',
+            'postalCode': '600001'
+        },
+        'dateOfBirth': '1990-01-15',
+        'gender': 'Male',
         'createdAt': '2026-01-01T00:00:00Z',
         'updatedAt': '2026-01-01T00:00:00Z'
     },
@@ -49,8 +62,11 @@ MOCK_RIDER_PROFILES = [
         'email': 'jane.smith@example.com',
         'personalCode': 'E221',
         'phone': '+1234567891',
-        'emergencyContactName': 'John Smith',
-        'emergencyContactPhone': '+0987654322',
+        'emergencyContact': {
+            'name': 'John Smith',
+            'phone': '+0987654322',
+            'relation': 'Sibling'
+        },
         'createdAt': '2026-01-01T00:00:00Z',
         'updatedAt': '2026-01-01T00:00:00Z'
     }

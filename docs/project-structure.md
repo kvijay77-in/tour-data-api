@@ -34,7 +34,7 @@ tour-data-api/
 │   │   ├── riders/
 │   │   │   ├── __init__.py
 │   │   │   ├── cancel_rider_exit.py # POST /v1/tours/{tourId}/riders/{riderId}/exit/cancel
-│   │   │   ├── create_rider_profile.py # POST /v1/riders/profile
+│   │   │   ├── create_rider_profile.py # POST /v1/riders/profile and /v1/riders/profile/{profileId}
 │   │   │   ├── exit_tour_rider.py    # POST /v1/tours/{tourId}/riders/{riderId}/exit
 │   │   │   ├── get_rider_profile.py   # GET /v1/riders/profile/{profileId}
 │   │   │   ├── get_rider_statistics.py # GET /v1/tours/{tourId}/riders/{riderId}/statistics

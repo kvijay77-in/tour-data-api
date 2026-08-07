@@ -137,8 +137,10 @@ Both provisioning methods create the same resources: a Tour record in the shared
 | email | String | Email address |
 | personalCode | String | Optional rider personal code (uppercase, globally unique when present) |
 | phone | String | Contact number |
-| emergencyContactName | String | Emergency contact name |
-| emergencyContactPhone | String | Emergency contact number |
+| emergencyContact | Map | Emergency contact map with string fields `name`, `phone`, `relation` |
+| address | Map | Optional address map with string fields `Line 1`, `Line 2`, `City`, `State`, `Postal Code` |
+| dateOfBirth | String | Optional ISO date (`YYYY-MM-DD`) |
+| gender | String | Optional one of `Male`, `Female`, `Other`, `Prefer not to say` |
 | photoS3Key | String | S3 object key for photo |
 | createdAt | String | ISO 8601 timestamp |
 | updatedAt | String | ISO 8601 timestamp |

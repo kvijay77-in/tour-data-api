@@ -9,6 +9,9 @@ from datetime import datetime
 
 STAGE_TYPES = {"START", "PIT_STOP", "FINISH"}
 PIT_STOP_RUNTIME_FIELDS = ('pitStopStatus', 'openedAt', 'closedAt')
+RIDER_GENDER_VALUES = {"Male", "Female", "Other", "Prefer not to say"}
+RIDER_ADDRESS_FIELDS = ('line1', 'line2', 'city', 'state', 'country', 'postalCode')
+EMERGENCY_CONTACT_FIELDS = ('name', 'phone', 'relation')
 
 
 class ValidationError(Exception):
@@ -240,6 +243,121 @@ def validate_required_fields(data: Dict[str, Any], required_fields: List[str]) -
             f"Missing required fields: {', '.join(missing_fields)}",
             {"missing_fields": missing_fields}
         )
+
+
+def validate_rider_profile_optional_fields(data: Dict[str, Any]) -> None:
+    """Validate optional rider profile fields when present in payload."""
+    if 'dateOfBirth' in data and data.get('dateOfBirth') is not None:
+        date_of_birth = data.get('dateOfBirth')
+        if not isinstance(date_of_birth, str):
+            raise ValidationError(
+                "dateOfBirth must be a string in YYYY-MM-DD format",
+                {"field": "dateOfBirth", "value": date_of_birth}
+            )
+        validate_iso_date(date_of_birth, field_name='dateOfBirth')
+
+    if 'gender' in data and data.get('gender') is not None:
+        gender = data.get('gender')
+        if not isinstance(gender, str):
+            raise ValidationError(
+                "gender must be a string",
+                {"field": "gender", "value": gender}
+            )
+        if gender not in RIDER_GENDER_VALUES:
+            raise ValidationError(
+                "Invalid gender. Supported values: Male, Female, Other, Prefer not to say",
+                {"field": "gender", "value": gender}
+            )
+
+    if 'emergencyContact' in data:
+        validate_emergency_contact(data.get('emergencyContact'))
+
+    if 'address' in data and data.get('address') is not None:
+        address = data.get('address')
+        if not isinstance(address, dict):
+            raise ValidationError(
+                "address must be an object with line1, line2, city, state, country, and postalCode",
+                {"field": "address", "value": address}
+            )
+
+        missing_fields = [field for field in RIDER_ADDRESS_FIELDS if field not in address]
+        if missing_fields:
+            raise ValidationError(
+                f"address is missing required fields: {', '.join(missing_fields)}",
+                {"field": "address", "missing_fields": missing_fields}
+            )
+
+        extra_fields = [field for field in address.keys() if field not in RIDER_ADDRESS_FIELDS]
+        if extra_fields:
+            raise ValidationError(
+                f"address has unsupported fields: {', '.join(extra_fields)}",
+                {"field": "address", "unsupported_fields": extra_fields}
+            )
+
+        for field_name in RIDER_ADDRESS_FIELDS:
+            value = address.get(field_name)
+            if not isinstance(value, str):
+                raise ValidationError(
+                    f"address['{field_name}'] must be a string",
+                    {"field": f"address.{field_name}", "value": value}
+                )
+
+
+def validate_emergency_contact(emergency_contact: Any) -> None:
+    """Validate emergencyContact map payload."""
+    if not isinstance(emergency_contact, dict):
+        raise ValidationError(
+            "emergencyContact must be an object with name, phone, and relation",
+            {"field": "emergencyContact", "value": emergency_contact}
+        )
+
+    missing_fields = [field for field in EMERGENCY_CONTACT_FIELDS if field not in emergency_contact]
+    if missing_fields:
+        raise ValidationError(
+            f"emergencyContact is missing required fields: {', '.join(missing_fields)}",
+            {"field": "emergencyContact", "missing_fields": missing_fields}
+        )
+
+    extra_fields = [field for field in emergency_contact.keys() if field not in EMERGENCY_CONTACT_FIELDS]
+    if extra_fields:
+        raise ValidationError(
+            f"emergencyContact has unsupported fields: {', '.join(extra_fields)}",
+            {"field": "emergencyContact", "unsupported_fields": extra_fields}
+        )
+
+    for field_name in EMERGENCY_CONTACT_FIELDS:
+        value = emergency_contact.get(field_name)
+        if not isinstance(value, str):
+            raise ValidationError(
+                f"emergencyContact['{field_name}'] must be a string",
+                {"field": f"emergencyContact.{field_name}", "value": value}
+            )
+
+
+def build_emergency_contact_from_profile(profile: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """Return emergencyContact map from canonical field or legacy flat fields."""
+    if not isinstance(profile, dict):
+        return None
+
+    emergency_contact = profile.get('emergencyContact')
+    if isinstance(emergency_contact, dict):
+        return {
+            'name': emergency_contact.get('name'),
+            'phone': emergency_contact.get('phone'),
+            'relation': emergency_contact.get('relation'),
+        }
+
+    name = profile.get('emergencyContactName')
+    phone = profile.get('emergencyContactPhone')
+    relation = profile.get('emergencyContactRelationship', profile.get('Relationship'))
+    if name is None and phone is None and relation is None:
+        return None
+
+    return {
+        'name': name,
+        'phone': phone,
+        'relation': relation,
+    }
 
 
 def validate_stage_number(stage_number: int, total_stages: int) -> None:

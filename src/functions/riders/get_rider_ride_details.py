@@ -130,6 +130,7 @@ def lambda_handler(event, context):
                 'profileId': profile_id,
                 'name': profile.get('name'),
                 'phone': profile.get('phone'),
+                'personalCode': profile.get('personalCode'),
                 'photoS3Key': profile.get('photoS3Key'),
             },
             'checkInTimeline': checkin_timeline,

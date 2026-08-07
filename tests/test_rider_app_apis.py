@@ -333,8 +333,11 @@ class TestCreateRiderProfile:
                 'name': 'New Rider',
                 'email': 'newrider@example.com',
                 'phone': '+9876543210',
-                'emergencyContactName': 'Emergency Contact',
-                'emergencyContactPhone': '+1234567890'
+                'emergencyContact': {
+                    'name': 'Emergency Contact',
+                    'phone': '+1234567890',
+                    'relation': 'Friend'
+                }
             }
         )
 
@@ -345,6 +348,65 @@ class TestCreateRiderProfile:
         assert body['data']['name'] == 'New Rider'
         assert body['data']['email'] == 'newrider@example.com'
         assert 'profileId' in body['data']
+
+    def test_create_profile_uses_profile_id_from_path(self, dynamodb_full_mock):
+        """Use path profileId when provided instead of auto-generating UUID"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/profile/CUSTOM-PROFILE-001',
+            path_params={'profileId': 'CUSTOM-PROFILE-001'},
+            body={
+                'name': 'Path Profile Rider',
+                'email': 'pathprofile@example.com',
+                'phone': '+9876500000',
+                'emergencyContact': {
+                    'name': 'Emergency Contact',
+                    'phone': '+1234500000',
+                    'relation': 'Friend'
+                }
+            }
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 201
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['profileId'] == 'CUSTOM-PROFILE-001'
+
+    def test_create_profile_rejects_existing_path_profile_id(self, dynamodb_full_mock):
+        """Reject create when provided path profileId already exists"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/profile/P001',
+            path_params={'profileId': 'P001'},
+            body={
+                'name': 'Duplicate ProfileId Rider',
+                'email': 'duplicate-profile-id@example.com',
+                'phone': '+9876500001',
+                'emergencyContact': {
+                    'name': 'Emergency Contact',
+                    'phone': '+1234500001',
+                    'relation': 'Friend'
+                }
+            }
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 409
+        body = json.loads(response['body'])
+        assert body['error']['code'] == 'PROFILE_ALREADY_EXISTS'
 
     def test_create_profile_missing_fields(self, dynamodb_full_mock):
         """Fail with missing required fields"""
@@ -379,8 +441,11 @@ class TestCreateRiderProfile:
                 'email': 'coderider@example.com',
                 'personalCode': ' d999 ',
                 'phone': '+919999999999',
-                'emergencyContactName': 'Emergency Contact',
-                'emergencyContactPhone': '+911111111111'
+                'emergencyContact': {
+                    'name': 'Emergency Contact',
+                    'phone': '+911111111111',
+                    'relation': 'Sibling'
+                }
             }
         )
 
@@ -405,8 +470,11 @@ class TestCreateRiderProfile:
                 'email': 'duplicatecode@example.com',
                 'personalCode': 'd220',
                 'phone': '+919888888888',
-                'emergencyContactName': 'Emergency Contact',
-                'emergencyContactPhone': '+911212121212'
+                'emergencyContact': {
+                    'name': 'Emergency Contact',
+                    'phone': '+911212121212',
+                    'relation': 'Parent'
+                }
             }
         )
 
@@ -414,6 +482,191 @@ class TestCreateRiderProfile:
         assert response['statusCode'] == 409
         body = json.loads(response['body'])
         assert body['error']['code'] == 'PERSONAL_CODE_ALREADY_EXISTS'
+
+    def test_create_profile_with_extended_attributes(self, dynamodb_full_mock):
+        """Create profile with address/dateOfBirth/gender/emergencyContact fields"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/profile',
+            body={
+                'name': 'Extended Rider',
+                'email': 'extended@example.com',
+                'phone': '+919191919191',
+                'emergencyContact': {
+                    'name': 'Primary Contact',
+                    'phone': '+918181818181',
+                    'relation': 'Sibling'
+                },
+                'dateOfBirth': '1991-05-21',
+                'gender': 'Female',
+                'address': {
+                    'line1': '221B Baker Street',
+                    'line2': 'Floor 2',
+                    'city': 'Chennai',
+                    'state': 'Tamil Nadu',
+                    'country': 'India',
+                    'postalCode': '600002'
+                }
+            }
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 201
+        body = json.loads(response['body'])
+        assert body['data']['emergencyContact']['relation'] == 'Sibling'
+        assert body['data']['dateOfBirth'] == '1991-05-21'
+        assert body['data']['gender'] == 'Female'
+        assert body['data']['address']['city'] == 'Chennai'
+
+    def test_create_profile_rejects_invalid_gender(self, dynamodb_full_mock):
+        """Reject unsupported gender values"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/profile',
+            body={
+                'name': 'Invalid Gender Rider',
+                'email': 'invalidgender@example.com',
+                'phone': '+919191919192',
+                'emergencyContact': {
+                    'name': 'Primary Contact',
+                    'phone': '+918181818182',
+                    'relation': 'Sibling'
+                },
+                'gender': 'Unknown'
+            }
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+    def test_create_profile_rejects_invalid_address_shape(self, dynamodb_full_mock):
+        """Reject address map that misses required keys"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from create_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='POST',
+            path='/v1/riders/profile',
+            body={
+                'name': 'Invalid Address Rider',
+                'email': 'invalidaddress@example.com',
+                'phone': '+919191919193',
+                'emergencyContact': {
+                    'name': 'Primary Contact',
+                    'phone': '+918181818183',
+                    'relation': 'Cousin'
+                },
+                'address': {
+                    'line1': '123 Main Street',
+                    'city': 'Chennai'
+                }
+            }
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+
+# ============================================================================
+# GET/UPDATE RIDER PROFILE TESTS
+# ============================================================================
+
+class TestGetAndUpdateRiderProfile:
+    """Tests for GET/PUT /v1/riders/profile/{profileId}"""
+
+    def test_get_profile_returns_extended_attributes(self, dynamodb_full_mock):
+        """Get profile returns all stored optional profile fields"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/riders/profile/P001',
+            path_params={'profileId': 'P001'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['data']['dateOfBirth'] == '1990-01-15'
+        assert body['data']['gender'] == 'Male'
+        assert body['data']['emergencyContact']['relation'] == 'Spouse'
+        assert body['data']['address']['postalCode'] == '600001'
+
+    def test_update_profile_with_extended_attributes(self, dynamodb_full_mock):
+        """Update supports dateOfBirth/gender/address/emergencyContact"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from update_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='PUT',
+            path='/v1/riders/profile/P002',
+            path_params={'profileId': 'P002'},
+            body={
+                'dateOfBirth': '1993-09-10',
+                'gender': 'Other',
+                'emergencyContact': {
+                    'name': 'Updated Contact',
+                    'phone': '+917700112233',
+                    'relation': 'Parent'
+                },
+                'address': {
+                    'line1': '77 Lake View',
+                    'line2': 'Near Park',
+                    'city': 'Coimbatore',
+                    'state': 'Tamil Nadu',
+                    'country': 'India',
+                    'postalCode': '641001'
+                }
+            }
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['data']['dateOfBirth'] == '1993-09-10'
+        assert body['data']['gender'] == 'Other'
+        assert body['data']['emergencyContact']['relation'] == 'Parent'
+        assert body['data']['address']['city'] == 'Coimbatore'
+
+    def test_update_profile_rejects_invalid_date_of_birth(self, dynamodb_full_mock):
+        """Update rejects invalid dateOfBirth format"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from update_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='PUT',
+            path='/v1/riders/profile/P001',
+            path_params={'profileId': 'P001'},
+            body={'dateOfBirth': '10-09-1993'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
 
 
 # ============================================================================
@@ -587,8 +840,11 @@ class TestLinkRiderCognitoUser:
                 'name': 'Duplicate Rider',
                 'email': 'john.doe@example.com',  # Already exists in mock data
                 'phone': '+9876543210',
-                'emergencyContactName': 'Contact',
-                'emergencyContactPhone': '+1234567890'
+                'emergencyContact': {
+                    'name': 'Contact',
+                    'phone': '+1234567890',
+                    'relation': 'Friend'
+                }
             }
         )
 
@@ -612,8 +868,11 @@ class TestLinkRiderCognitoUser:
                 'name': 'Bad Email',
                 'email': 'not-an-email',
                 'phone': '+9876543210',
-                'emergencyContactName': 'Contact',
-                'emergencyContactPhone': '+1234567890'
+                'emergencyContact': {
+                    'name': 'Contact',
+                    'phone': '+1234567890',
+                    'relation': 'Friend'
+                }
             }
         )
 
@@ -644,8 +903,11 @@ class TestRegisterTourRider:
             'name': 'New Rider',
             'email': 'newrider@example.com',
             'phone': '+111',
-            'emergencyContactName': 'Contact',
-            'emergencyContactPhone': '+222'
+            'emergencyContact': {
+                'name': 'Contact',
+                'phone': '+222',
+                'relation': 'Sibling'
+            }
         })
 
         event = _make_event(

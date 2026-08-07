@@ -121,6 +121,14 @@ class NotificationType(str, Enum):
     REGISTRATION_STATUS = "REGISTRATION_STATUS"
 
 
+class RiderGender(str, Enum):
+    """Supported rider gender values"""
+    MALE = "Male"
+    FEMALE = "Female"
+    OTHER = "Other"
+    PREFER_NOT_TO_SAY = "Prefer not to say"
+
+
 # ============================================================================
 # TOUR-SPECIFIC TABLE TYPES (for dynamic table name resolution)
 # ============================================================================
@@ -143,16 +151,23 @@ class RiderProfile:
     name: str
     email: str
     phone: str
-    emergencyContactName: str
-    emergencyContactPhone: str
+    emergencyContact: Dict[str, str]
+    address: Optional[Dict[str, str]] = None
+    dateOfBirth: Optional[str] = None
+    gender: Optional[str] = None
     personalCode: Optional[str] = None
     photoS3Key: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
-        return asdict(self)
+        """Convert to dictionary with normalized optional personalCode."""
+        data = asdict(self)
+        personal_code = data.get('personalCode')
+        if isinstance(personal_code, str):
+            normalized_personal_code = personal_code.strip().upper()
+            data['personalCode'] = normalized_personal_code if normalized_personal_code else None
+        return {k: v for k, v in data.items() if v is not None}
     
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""

@@ -48,7 +48,10 @@ Following data are required to begin with.
 - Contact no
 - Email ID
 - Photo 
-- Emergency Contact name & No.
+- Emergency Contact map with `name`, `phone`, `relation`
+- Date of Birth (ISO date format, `YYYY-MM-DD`)
+- Gender (`Male`, `Female`, `Other`, `Prefer not to say`)
+- Address map with string fields `Line 1`, `Line 2`, `City`, `State`, `Postal Code`
 
 Other info about the riders may also be included depending on requirements. This can be taken up during the course of the development.
 

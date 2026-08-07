@@ -30,6 +30,7 @@ from dynamodb_utils import (
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from rbac import require_permission, Permission
 from models import is_cancelled_checkin_item
+from validation import build_emergency_contact_from_profile
 
 logger = get_logger(__name__)
 
@@ -102,6 +103,7 @@ def lambda_handler(event, context):
         for tr in tour_riders:
             profile_id = tr.get('profileId')
             profile = profile_map.get(profile_id, {})
+            emergency_contact = build_emergency_contact_from_profile(profile)
             
             riders_with_profiles.append({
                 'riderId': tr.get('riderId'),
@@ -110,8 +112,7 @@ def lambda_handler(event, context):
                 'name': profile.get('name'),
                 'email': profile.get('email'),
                 'phone': profile.get('phone'),
-                'emergencyContactName': profile.get('emergencyContactName'),
-                'emergencyContactPhone': profile.get('emergencyContactPhone'),
+                'emergencyContact': emergency_contact,
                 'photoS3Key': profile.get('photoS3Key')
             })
         

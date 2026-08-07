@@ -11,6 +11,7 @@ sys.path.insert(0, '/opt/python')
 from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from dynamodb_utils import get_item
+from validation import build_emergency_contact_from_profile
 
 logger = get_logger(__name__)
 
@@ -44,6 +45,15 @@ def lambda_handler(event, context):
         if not rider:
             logger.info(f"Rider profile not found: {profile_id}")
             return not_found_response("RiderProfile", profile_id)
+
+        emergency_contact = build_emergency_contact_from_profile(rider)
+        if emergency_contact is not None:
+            rider['emergencyContact'] = emergency_contact
+
+        rider.pop('emergencyContactName', None)
+        rider.pop('emergencyContactPhone', None)
+        rider.pop('emergencyContactRelationship', None)
+        rider.pop('Relationship', None)
         
         logger.info(f"Successfully retrieved rider profile: {profile_id}")
         return success_response(rider)

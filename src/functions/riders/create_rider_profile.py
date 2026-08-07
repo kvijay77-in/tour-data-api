@@ -3,7 +3,7 @@ Create rider profile Lambda function
 
 Creates a new rider profile in the shared RiderProfile table.
 Used during rider sign-up in the Tour Rider App.
-Route: POST /v1/riders/profile
+Routes: POST /v1/riders/profile and POST /v1/riders/profile/{profileId}
 """
 
 import sys
@@ -20,7 +20,13 @@ from response import (
 )
 from dynamodb_utils import put_item, query_items
 from validation import (
-    validate_email, validate_required_fields, ValidationError, normalize_personal_code
+    validate_email,
+    validate_required_fields,
+    validate_rider_profile_optional_fields,
+    validate_emergency_contact,
+    ValidationError,
+    build_emergency_contact_from_profile,
+    normalize_personal_code,
 )
 from models import utc_now_iso
 
@@ -31,12 +37,18 @@ def lambda_handler(event, context):
     """
     Create a new rider profile
 
+    Path parameter (optional):
+        profileId: Profile ID to use for creation
+
     Body:
         name: Full name (required)
         email: Email address (required)
         phone: Phone number (required)
-        emergencyContactName: Emergency contact name (required)
-        emergencyContactPhone: Emergency contact phone (required)
+        emergencyContact: Map with fields name, phone, relation (required)
+        personalCode: Rider personal code (optional, normalized to uppercase)
+        address: Map with fields line1, line2, city, state, country, postalCode (optional)
+        dateOfBirth: ISO date string YYYY-MM-DD (optional)
+        gender: Male|Female|Other|Prefer not to say (optional)
 
     Returns:
     - 201: Rider profile created
@@ -53,12 +65,32 @@ def lambda_handler(event, context):
         except json.JSONDecodeError:
             return bad_request_response("Invalid JSON in request body")
 
+        # Optional path override for profileId: use provided value when present.
+        profile_id = (event.get('pathParameters') or {}).get('profileId')
+
+        # Backward compatibility: map legacy emergency contact attributes to emergencyContact.
+        if 'emergencyContact' not in body:
+            derived_emergency_contact = build_emergency_contact_from_profile(body)
+            if derived_emergency_contact is not None:
+                body['emergencyContact'] = derived_emergency_contact
+
         # Validate required fields
         try:
             validate_required_fields(body, [
                 'name', 'email', 'phone',
-                'emergencyContactName', 'emergencyContactPhone'
+                'emergencyContact'
             ])
+        except ValidationError as e:
+            return bad_request_response(str(e))
+
+        try:
+            validate_emergency_contact(body.get('emergencyContact'))
+        except ValidationError as e:
+            return bad_request_response(str(e))
+
+        # Validate optional rider profile fields
+        try:
+            validate_rider_profile_optional_fields(body)
         except ValidationError as e:
             return bad_request_response(str(e))
 
@@ -104,7 +136,8 @@ def lambda_handler(event, context):
                 )
 
         # Create profile
-        profile_id = str(uuid.uuid4())
+        if not profile_id:
+            profile_id = str(uuid.uuid4())
         now = utc_now_iso()
 
         item = {
@@ -112,18 +145,17 @@ def lambda_handler(event, context):
             'name': body['name'],
             'email': body['email'],
             'phone': body['phone'],
-            'emergencyContactName': body['emergencyContactName'],
-            'emergencyContactPhone': body['emergencyContactPhone'],
+            'emergencyContact': body['emergencyContact'],
             'createdAt': now,
             'updatedAt': now
         }
 
         # Optional fields
-        if body.get('dateOfBirth'):
+        if body.get('dateOfBirth') is not None:
             item['dateOfBirth'] = body['dateOfBirth']
-        if body.get('gender'):
+        if body.get('gender') is not None:
             item['gender'] = body['gender']
-        if body.get('address'):
+        if body.get('address') is not None:
             item['address'] = body['address']
         if normalized_personal_code:
             item['personalCode'] = normalized_personal_code
