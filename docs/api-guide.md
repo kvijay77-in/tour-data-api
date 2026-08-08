@@ -58,6 +58,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Tours | POST | `/v1/tours` | Create and provision tour | [Tours](#tours) |
 | Tours | POST | `/v1/tours/{tourId}/archive` | Archive tour | [Tours](#tours) |
 | Riders | POST | `/v1/riders/profile` | Create rider profile | [Riders](#riders) |
+| Riders | POST | `/v1/riders/profile/{profileId}` | Create rider profile | [Riders](#riders) |
 | Riders | GET | `/v1/riders/link/{cognitoUserName}` | Get linked profile ID for a Cognito username | [Riders](#riders) |
 | Riders | POST | `/v1/riders/link/{cognitoUserName}` | Create Cognito username to profile mapping | [Riders](#riders) |
 | Riders | DELETE | `/v1/riders/link/{cognitoUserName}` | Delete Cognito username to profile mapping | [Riders](#riders) |

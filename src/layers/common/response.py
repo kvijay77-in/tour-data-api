@@ -138,6 +138,14 @@ def forbidden_response(message: str = "Forbidden") -> Dict[str, Any]:
         status_code=403
     )
 
+def unprocessable_content_response(message: str = "Validation Failed", details: Optional[Dict] = None) -> Dict[str, Any]:
+    """Create a 422 unprocessable content response"""
+    return error_response(
+        error_code="UNPROCESSABLE_CONTENT",
+        message=message,
+        status_code=422,
+        details=details
+    )
 
 def conflict_response(
     message: str,

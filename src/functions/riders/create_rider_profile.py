@@ -16,7 +16,7 @@ from botocore.exceptions import ClientError
 from logger import get_logger, log_event
 from response import (
     success_response, bad_request_response, conflict_response,
-    internal_error_response
+    internal_error_response, unprocessable_content_response
 )
 from dynamodb_utils import put_item, query_items
 from validation import (
@@ -81,30 +81,30 @@ def lambda_handler(event, context):
                 'emergencyContact'
             ])
         except ValidationError as e:
-            return bad_request_response(str(e))
+            return unprocessable_content_response(str(e))
 
         try:
             validate_emergency_contact(body.get('emergencyContact'))
         except ValidationError as e:
-            return bad_request_response(str(e))
+            return unprocessable_content_response(str(e))
 
         # Validate optional rider profile fields
         try:
             validate_rider_profile_optional_fields(body)
         except ValidationError as e:
-            return bad_request_response(str(e))
+            return unprocessable_content_response(str(e))
 
         # Validate email
         try:
             validate_email(body['email'])
         except ValidationError as e:
-            return bad_request_response(str(e))
+            return unprocessable_content_response(str(e))
 
         # Normalize optional personal code
         try:
             normalized_personal_code = normalize_personal_code(body.get('personalCode'))
         except ValidationError as e:
-            return bad_request_response(str(e))
+            return unprocessable_content_response(str(e))
 
         # Check for duplicate email
         existing = query_items(
