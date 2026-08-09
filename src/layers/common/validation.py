@@ -10,7 +10,9 @@ from datetime import datetime
 STAGE_TYPES = {"START", "PIT_STOP", "FINISH"}
 PIT_STOP_RUNTIME_FIELDS = ('pitStopStatus', 'openedAt', 'closedAt')
 RIDER_GENDER_VALUES = {"Male", "Female", "Other", "Prefer not to say"}
-RIDER_ADDRESS_FIELDS = ('line1', 'line2', 'city', 'state', 'country', 'postalCode')
+RIDER_ADDRESS_REQUIRED_FIELDS = ('line1', 'city', 'country', 'postalCode')
+RIDER_ADDRESS_OPTIONAL_FIELDS = ('line2', 'state')
+RIDER_ADDRESS_ALLOWED_FIELDS = RIDER_ADDRESS_REQUIRED_FIELDS + RIDER_ADDRESS_OPTIONAL_FIELDS
 EMERGENCY_CONTACT_FIELDS = ('name', 'phone', 'relation')
 
 
@@ -245,8 +247,14 @@ def validate_required_fields(data: Dict[str, Any], required_fields: List[str]) -
         )
 
 
-def validate_rider_profile_optional_fields(data: Dict[str, Any]) -> None:
-    """Validate optional rider profile fields when present in payload."""
+def validate_rider_profile_optional_fields(
+    data: Dict[str, Any],
+    require_mandatory_fields: bool = False,
+) -> None:
+    """Validate rider profile optional/mandatory fields based on endpoint context."""
+    if require_mandatory_fields:
+        validate_required_fields(data, ['dateOfBirth', 'gender', 'address'])
+
     if 'dateOfBirth' in data and data.get('dateOfBirth') is not None:
         date_of_birth = data.get('dateOfBirth')
         if not isinstance(date_of_birth, str):
@@ -280,21 +288,31 @@ def validate_rider_profile_optional_fields(data: Dict[str, Any]) -> None:
                 {"field": "address", "value": address}
             )
 
-        missing_fields = [field for field in RIDER_ADDRESS_FIELDS if field not in address]
+        missing_fields = [field for field in RIDER_ADDRESS_REQUIRED_FIELDS if field not in address]
         if missing_fields:
             raise ValidationError(
                 f"address is missing required fields: {', '.join(missing_fields)}",
                 {"field": "address", "missing_fields": missing_fields}
             )
 
-        extra_fields = [field for field in address.keys() if field not in RIDER_ADDRESS_FIELDS]
+        extra_fields = [field for field in address.keys() if field not in RIDER_ADDRESS_ALLOWED_FIELDS]
         if extra_fields:
             raise ValidationError(
                 f"address has unsupported fields: {', '.join(extra_fields)}",
                 {"field": "address", "unsupported_fields": extra_fields}
             )
 
-        for field_name in RIDER_ADDRESS_FIELDS:
+        for field_name in RIDER_ADDRESS_REQUIRED_FIELDS:
+            value = address.get(field_name)
+            if not isinstance(value, str):
+                raise ValidationError(
+                    f"address['{field_name}'] must be a string",
+                    {"field": f"address.{field_name}", "value": value}
+                )
+
+        for field_name in RIDER_ADDRESS_OPTIONAL_FIELDS:
+            if field_name not in address:
+                continue
             value = address.get(field_name)
             if not isinstance(value, str):
                 raise ValidationError(

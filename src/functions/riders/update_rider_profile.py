@@ -15,6 +15,7 @@ from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response, conflict_response
 from validation import (
     validate_email,
+    validate_required_fields,
     validate_rider_profile_optional_fields,
     validate_emergency_contact,
     build_emergency_contact_from_profile,
@@ -33,7 +34,7 @@ def lambda_handler(event, context):
     
     Path parameter: profileId (UUID)
         Body: JSON with fields to update (name, email, phone, emergencyContact,
-            photoS3Key, personalCode, dateOfBirth, gender, address)
+            dateOfBirth, gender, address are mandatory; photoS3Key and personalCode are optional)
     
     Returns:
     - 200: Rider profile updated
@@ -105,9 +106,23 @@ def lambda_handler(event, context):
         if not updates:
             return bad_request_response("No valid fields to update")
 
+        mandatory_profile_fields = [
+            'name',
+            'email',
+            'phone',
+            'emergencyContact',
+            'dateOfBirth',
+            'gender',
+            'address',
+        ]
+        try:
+            validate_required_fields(updates, mandatory_profile_fields)
+        except ValidationError as e:
+            return bad_request_response(str(e))
+
         # Validate optional rider profile fields
         try:
-            validate_rider_profile_optional_fields(updates)
+            validate_rider_profile_optional_fields(updates, require_mandatory_fields=True)
         except ValidationError as e:
             return bad_request_response(str(e))
 

@@ -126,13 +126,13 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `POST /v1/riders/profile` | None | None | Required: `name, email, phone, emergencyContact`; Optional: `personalCode, dateOfBirth, gender, address` | Creates profile with auto-generated `profileId`; Email format; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD`; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with string fields `line1, line2, city, state, country, postalcode`; `personalCode` is normalized to uppercase when provided; duplicate email rejected (`EMAIL_ALREADY_EXISTS`); duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
+| `POST /v1/riders/profile` | None | None | Required: `name, email, phone, emergencyContact`; Optional: `personalCode, dateOfBirth, gender, address` | Creates profile with auto-generated `profileId`; Email format; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD`; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with string fields `line1, line2, city, state, country, postalCode`; `personalCode` is normalized to uppercase when provided; duplicate email rejected (`EMAIL_ALREADY_EXISTS`); duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
 | `POST /v1/riders/profile/{profileId}` | `profileId` (optional override route) | None | Required: `name, email, phone, emergencyContact`; Optional: `personalCode, dateOfBirth, gender, address` | Same validation as profile create; uses provided path `profileId` instead of auto-generating one; conflict on existing `profileId` returns `PROFILE_ALREADY_EXISTS` |
 | `GET /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Returns linked `profileId`; `404` if mapping does not exist |
 | `POST /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Creates mapping row with generated `profileId` UUID; duplicate `cognitoUserName` rejected (`COGNITO_USER_ALREADY_LINKED`) |
 | `DELETE /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Deletes mapping row; returns `404` if mapping does not exist |
 | `GET /v1/riders/profile/{profileId}` | `profileId` (required) | None | None | `profileId` must exist |
-| `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | At least one of: `name, email, phone, emergencyContact, photoS3Key, personalCode, dateOfBirth, gender, address` | Email validated when provided; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD` when provided; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with string fields `line1, line2, city, state, country, postalcode`; `personalCode` normalized to uppercase; duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
+| `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | At least one of: `name, email, phone, emergencyContact, photoS3Key, personalCode, dateOfBirth, gender, address` | Email validated when provided; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD` when provided; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with string fields `line1, line2, city, state, country, postalCode`; `personalCode` normalized to uppercase; duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
 | `POST /v1/riders/profile/{profileId}/picture` | `profileId` (required) | None | Optional: `contentType` | `profileId` must exist; `contentType` in `image/jpeg, image/png`; default `image/jpeg` |
 | `GET /v1/tours/{tourId}/riders` | `tourId` (required) | None | None | `tourId` format rule |
 | `GET /v1/tours/{tourId}/riders/names` | `tourId` (required) | None | None | Returns lightweight list with `riderId`, `name`, and `personalCode`; requires authenticated user with `READ` permission |
@@ -232,7 +232,7 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
     "city": "Chennai",
     "state": "Tamil Nadu",
     "country": "India",
-    "postalcode": "600001"
+    "postalCode": "600001"
   }
 }
 ```

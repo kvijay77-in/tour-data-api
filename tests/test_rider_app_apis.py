@@ -337,6 +337,14 @@ class TestCreateRiderProfile:
                     'name': 'Emergency Contact',
                     'phone': '+1234567890',
                     'relation': 'Friend'
+                },
+                'dateOfBirth': '1991-05-21',
+                'gender': 'Female',
+                'address': {
+                    'line1': '1 New Street',
+                    'city': 'Chennai',
+                    'country': 'India',
+                    'postalCode': '600100'
                 }
             }
         )
@@ -369,6 +377,14 @@ class TestCreateRiderProfile:
                     'name': 'Emergency Contact',
                     'phone': '+1234500000',
                     'relation': 'Friend'
+                },
+                'dateOfBirth': '1992-04-01',
+                'gender': 'Male',
+                'address': {
+                    'line1': '12 North Avenue',
+                    'city': 'Bengaluru',
+                    'country': 'India',
+                    'postalCode': '560001'
                 }
             }
         )
@@ -399,6 +415,14 @@ class TestCreateRiderProfile:
                     'name': 'Emergency Contact',
                     'phone': '+1234500001',
                     'relation': 'Friend'
+                },
+                'dateOfBirth': '1992-04-02',
+                'gender': 'Male',
+                'address': {
+                    'line1': '13 North Avenue',
+                    'city': 'Bengaluru',
+                    'country': 'India',
+                    'postalCode': '560002'
                 }
             }
         )
@@ -423,7 +447,7 @@ class TestCreateRiderProfile:
         )
 
         response = lambda_handler(event, None)
-        assert response['statusCode'] == 400
+        assert response['statusCode'] == 422
 
     def test_create_profile_normalizes_personal_code(self, dynamodb_full_mock):
         """Normalize personalCode to uppercase when creating profile"""
@@ -445,6 +469,14 @@ class TestCreateRiderProfile:
                     'name': 'Emergency Contact',
                     'phone': '+911111111111',
                     'relation': 'Sibling'
+                },
+                'dateOfBirth': '1990-03-10',
+                'gender': 'Other',
+                'address': {
+                    'line1': '44 Garden Street',
+                    'city': 'Hyderabad',
+                    'country': 'India',
+                    'postalCode': '500001'
                 }
             }
         )
@@ -474,6 +506,14 @@ class TestCreateRiderProfile:
                     'name': 'Emergency Contact',
                     'phone': '+911212121212',
                     'relation': 'Parent'
+                },
+                'dateOfBirth': '1989-12-11',
+                'gender': 'Female',
+                'address': {
+                    'line1': '55 East Road',
+                    'city': 'Pune',
+                    'country': 'India',
+                    'postalCode': '411001'
                 }
             }
         )
@@ -544,12 +584,19 @@ class TestCreateRiderProfile:
                     'phone': '+918181818182',
                     'relation': 'Sibling'
                 },
-                'gender': 'Unknown'
+                'dateOfBirth': '1995-06-12',
+                'gender': 'Unknown',
+                'address': {
+                    'line1': '98 Market Road',
+                    'city': 'Madurai',
+                    'country': 'India',
+                    'postalCode': '625001'
+                }
             }
         )
 
         response = lambda_handler(event, None)
-        assert response['statusCode'] == 400
+        assert response['statusCode'] == 422
 
     def test_create_profile_rejects_invalid_address_shape(self, dynamodb_full_mock):
         """Reject address map that misses required keys"""
@@ -571,6 +618,8 @@ class TestCreateRiderProfile:
                     'phone': '+918181818183',
                     'relation': 'Cousin'
                 },
+                'dateOfBirth': '1994-08-20',
+                'gender': 'Male',
                 'address': {
                     'line1': '123 Main Street',
                     'city': 'Chennai'
@@ -579,8 +628,7 @@ class TestCreateRiderProfile:
         )
 
         response = lambda_handler(event, None)
-        assert response['statusCode'] == 400
-
+        assert response['statusCode'] == 422
 
 # ============================================================================
 # GET/UPDATE RIDER PROFILE TESTS
@@ -624,6 +672,9 @@ class TestGetAndUpdateRiderProfile:
             path='/v1/riders/profile/P002',
             path_params={'profileId': 'P002'},
             body={
+                'name': 'Jane Smith Updated',
+                'email': 'jane.smith@example.com',
+                'phone': '+1234567891',
                 'dateOfBirth': '1993-09-10',
                 'gender': 'Other',
                 'emergencyContact': {
@@ -663,6 +714,27 @@ class TestGetAndUpdateRiderProfile:
             path='/v1/riders/profile/P001',
             path_params={'profileId': 'P001'},
             body={'dateOfBirth': '10-09-1993'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+    def test_update_profile_requires_all_mandatory_fields(self, dynamodb_full_mock):
+        """Update fails when mandatory profile fields are omitted"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from update_rider_profile import lambda_handler
+
+        event = _make_event(
+            method='PUT',
+            path='/v1/riders/profile/P001',
+            path_params={'profileId': 'P001'},
+            body={
+                'name': 'Partial Update',
+                'email': 'john.doe@example.com'
+            }
         )
 
         response = lambda_handler(event, None)
@@ -844,6 +916,14 @@ class TestLinkRiderCognitoUser:
                     'name': 'Contact',
                     'phone': '+1234567890',
                     'relation': 'Friend'
+                },
+                'dateOfBirth': '1990-01-15',
+                'gender': 'Male',
+                'address': {
+                    'line1': '10 Beach Road',
+                    'city': 'Chennai',
+                    'country': 'India',
+                    'postalCode': '600001'
                 }
             }
         )
@@ -872,12 +952,20 @@ class TestLinkRiderCognitoUser:
                     'name': 'Contact',
                     'phone': '+1234567890',
                     'relation': 'Friend'
+                },
+                'dateOfBirth': '1991-10-10',
+                'gender': 'Female',
+                'address': {
+                    'line1': '100 Elm Street',
+                    'city': 'Madurai',
+                    'country': 'India',
+                    'postalCode': '625010'
                 }
             }
         )
 
         response = lambda_handler(event, None)
-        assert response['statusCode'] == 400
+        assert response['statusCode'] == 422
 
 
 # ============================================================================

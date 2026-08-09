@@ -45,10 +45,11 @@ def lambda_handler(event, context):
         email: Email address (required)
         phone: Phone number (required)
         emergencyContact: Map with fields name, phone, relation (required)
+        dateOfBirth: ISO date string YYYY-MM-DD (required)
+        gender: Male|Female|Other|Prefer not to say (required)
+        address: Map with fields line1, city, country, postalCode (required)
         personalCode: Rider personal code (optional, normalized to uppercase)
-        address: Map with fields line1, line2, city, state, country, postalCode (optional)
-        dateOfBirth: ISO date string YYYY-MM-DD (optional)
-        gender: Male|Female|Other|Prefer not to say (optional)
+        address.line2 and address.state are optional
 
     Returns:
     - 201: Rider profile created
@@ -78,7 +79,8 @@ def lambda_handler(event, context):
         try:
             validate_required_fields(body, [
                 'name', 'email', 'phone',
-                'emergencyContact'
+                'emergencyContact', 'dateOfBirth',
+                'gender', 'address'
             ])
         except ValidationError as e:
             return unprocessable_content_response(str(e))
@@ -90,7 +92,7 @@ def lambda_handler(event, context):
 
         # Validate optional rider profile fields
         try:
-            validate_rider_profile_optional_fields(body)
+            validate_rider_profile_optional_fields(body, require_mandatory_fields=True)
         except ValidationError as e:
             return unprocessable_content_response(str(e))
 
@@ -146,17 +148,14 @@ def lambda_handler(event, context):
             'email': body['email'],
             'phone': body['phone'],
             'emergencyContact': body['emergencyContact'],
+            'dateOfBirth': body['dateOfBirth'],
+            'gender': body['gender'],
+            'address': body['address'],
             'createdAt': now,
             'updatedAt': now
         }
 
         # Optional fields
-        if body.get('dateOfBirth') is not None:
-            item['dateOfBirth'] = body['dateOfBirth']
-        if body.get('gender') is not None:
-            item['gender'] = body['gender']
-        if body.get('address') is not None:
-            item['address'] = body['address']
         if normalized_personal_code:
             item['personalCode'] = normalized_personal_code
 
