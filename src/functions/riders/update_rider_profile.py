@@ -12,7 +12,11 @@ from botocore.exceptions import ClientError
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, not_found_response, bad_request_response, internal_error_response, conflict_response
+from response import (
+    success_response, not_found_response, 
+    bad_request_response, internal_error_response, 
+    conflict_response, unprocessable_content_response
+)
 from validation import (
     validate_email,
     validate_required_fields,
@@ -106,44 +110,37 @@ def lambda_handler(event, context):
         if not updates:
             return bad_request_response("No valid fields to update")
 
-        mandatory_profile_fields = [
-            'name',
-            'email',
-            'phone',
-            'emergencyContact',
-            'dateOfBirth',
-            'gender',
-            'address',
-        ]
+        # Validate mandatory fields if they are being updated to ensure they are not set to None or empty.
+        mandatory_profile_fields = [k for k in updatable_fields if k in updates]
         try:
             validate_required_fields(updates, mandatory_profile_fields)
         except ValidationError as e:
-            return bad_request_response(str(e))
+            return unprocessable_content_response(str(e))
 
         # Validate optional rider profile fields
         try:
-            validate_rider_profile_optional_fields(updates, require_mandatory_fields=True)
+            validate_rider_profile_optional_fields(updates, require_mandatory_fields=FalseuP)
         except ValidationError as e:
-            return bad_request_response(str(e))
+            return unprocessable_content_response(str(e))
 
         if 'emergencyContact' in updates:
             try:
                 validate_emergency_contact(updates['emergencyContact'])
             except ValidationError as e:
-                return bad_request_response(str(e))
+                return unprocessable_content_response(str(e))
         
         # Validate email if provided
         if 'email' in updates:
             try:
                 validate_email(updates['email'])
             except ValidationError as e:
-                return bad_request_response(f"Invalid email: {str(e)}")
+                return unprocessable_content_response(f"Invalid email: {str(e)}")
 
         if 'personalCode' in updates:
             try:
                 normalized_personal_code = normalize_personal_code(updates.get('personalCode'))
             except ValidationError as e:
-                return bad_request_response(str(e))
+                return unprocessable_content_response(str(e))
 
             if normalized_personal_code:
                 existing_code = query_items(
