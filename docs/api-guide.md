@@ -49,60 +49,60 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 ### Endpoint Catalog
 
-| Domain | Method | Path | Purpose | Contract |
-|---|---|---|---|---|
-| Config | GET | `/v1/config` | Get enabled app configuration items | [Config](#config) |
-| Tours | GET | `/v1/tours/active` | Get currently active tour | [Tours](#tours) |
-| Tours | GET | `/v1/tours/{tourId}` | Get tour details | [Tours](#tours) |
-| Tours | GET | `/v1/tours` | List tours | [Tours](#tours) |
-| Tours | POST | `/v1/tours` | Create and provision tour | [Tours](#tours) |
-| Tours | POST | `/v1/tours/{tourId}/archive` | Archive tour | [Tours](#tours) |
-| Riders | POST | `/v1/riders/profile` | Create rider profile | [Riders](#riders) |
-| Riders | POST | `/v1/riders/profile/{profileId}` | Create rider profile | [Riders](#riders) |
-| Riders | GET | `/v1/riders/link/{cognitoUserName}` | Get linked profile ID for a Cognito username | [Riders](#riders) |
-| Riders | POST | `/v1/riders/link/{cognitoUserName}` | Create Cognito username to profile mapping | [Riders](#riders) |
-| Riders | DELETE | `/v1/riders/link/{cognitoUserName}` | Delete Cognito username to profile mapping | [Riders](#riders) |
-| Riders | GET | `/v1/riders/profile/{profileId}` | Get rider profile | [Riders](#riders) |
-| Riders | PUT | `/v1/riders/profile/{profileId}` | Update rider profile | [Riders](#riders) |
-| Riders | POST | `/v1/riders/profile/{profileId}/picture` | Get profile picture upload URL | [Riders](#riders) |
-| Riders | GET | `/v1/tours/{tourId}/riders` | List tour riders | [Riders](#riders) |
-| Riders | GET | `/v1/tours/{tourId}/riders/names` | List tour riders with riderId, name, and personalCode | [Riders](#riders) |
-| Riders | POST | `/v1/tours/{tourId}/riders` | Register rider for tour | [Riders](#riders) |
-| Riders | GET | `/v1/tours/{tourId}/riders/{riderId}` | Get tour rider | [Riders](#riders) |
-| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit` | Mark rider as exited from tour | [Riders](#riders) |
-| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit/cancel` | Cancel rider exit and restore previous status | [Riders](#riders) |
-| Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) |
-| Rides | GET | `/v1/tours/{tourId}/rides/today` | Get today's ride | [Rides](#rides) |
-| Rides | GET | `/v1/tours/{tourId}/rides` | List rides | [Rides](#rides) |
-| Rides | GET | `/v1/tours/{tourId}/rides/{rideId}` | Get ride | [Rides](#rides) |
-| Rides | POST | `/v1/tours/{tourId}/rides` | Create ride | [Rides](#rides) |
-| Rides | PUT | `/v1/tours/{tourId}/rides/{rideId}` | Update ride | [Rides](#rides) |
-| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/open` | Open pit stop stage | [Rides](#rides) |
-| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/close` | Close pit stop stage | [Rides](#rides) |
-| Rides | POST | `/v1/tours/{tourId}/rides/open` | Open today's ride | [Rides](#rides) |
-| Rides | POST | `/v1/tours/{tourId}/rides/start` | Start today's ride | [Rides](#rides) |
-| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/close` | Close ride | [Rides](#rides) |
-| Check-Ins | POST | `/v1/tours/{tourId}/checkins` | Create check-in | [Check-Ins](#check-ins) |
-| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/checkins` | List ride check-ins | [Check-Ins](#check-ins) |
-| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/checkins` | List all check-ins for a rider | [Check-Ins](#check-ins) |
-| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | List rider check-ins for a ride number | [Check-Ins](#check-ins) |
-| Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | Cancel check-in (special update) | [Check-Ins](#check-ins) |
-| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard` | Get dashboard payload | [Check-Ins](#check-ins) |
-| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | Get lightweight dashboard progress payload | [Check-Ins](#check-ins) |
-| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | Get rider popup details for selected ride | [Check-Ins](#check-ins) |
-| Users | GET | `/v1/users/me` | Get current user claims | [Users](#users) |
-| Users | GET | `/v1/users/cognito` | List Cognito users with only `sub` and `name` | [Users](#users) |
-| Users | GET | `/v1/tours/{tourId}/users` | List tour users | [Users](#users) |
-| Admin UserMgmt | GET | `/v1/admin/usermgmt/roles` | List assignable Cognito groups | [Admin User Management](#admin-user-management) |
-| Admin UserMgmt | GET | `/v1/admin/usermgmt/users` | List Cognito users with roles | [Admin User Management](#admin-user-management) |
-| Admin UserMgmt | POST | `/v1/admin/usermgmt/users` | Create Cognito user and assign roles | [Admin User Management](#admin-user-management) |
-| Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/enable` | Enable Cognito user | [Admin User Management](#admin-user-management) |
-| Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/disable` | Disable Cognito user | [Admin User Management](#admin-user-management) |
-| Admin UserMgmt | DELETE | `/v1/admin/usermgmt/users/{cognitoUserId}` | Delete Cognito user | [Admin User Management](#admin-user-management) |
-| Admin UserMgmt | PUT | `/v1/admin/usermgmt/users/{cognitoUserId}` | Update Cognito profile and roles | [Admin User Management](#admin-user-management) |
-| Notifications | GET | `/v1/tours/{tourId}/notifications` | List notifications | [Notifications](#notifications) |
-| Notifications | POST | `/v1/tours/{tourId}/notifications` | Create notification | [Notifications](#notifications) |
-| Notifications | PUT | `/v1/tours/{tourId}/notifications/{notificationId}` | Mark notification as read | [Notifications](#notifications) |
+| Domain | Method | Path | Purpose | Contract | Mgmt App | Rider App
+|---|---|---|---|---|---|---|
+| Config | GET | `/v1/config` | Get enabled app configuration items | [Config](#config) |  ✅ | ✅
+| Tours | GET | `/v1/tours/active` | Get currently active tour | [Tours](#tours) | ✅ | ✅
+| Tours | GET | `/v1/tours/{tourId}` | Get tour details | [Tours](#tours) | ✅ | ✅
+| Tours | GET | `/v1/tours` | List tours | [Tours](#tours) | ✅ | ✅
+| Tours | POST | `/v1/tours` | Create and provision tour | [Tours](#tours) | ✅ | ❌
+| Tours | POST | `/v1/tours/{tourId}/archive` | Archive tour | [Tours](#tours) | ✅ | ❌
+| Riders | POST | `/v1/riders/profile` | Create rider profile | [Riders](#riders) | ❌ | ✅
+| Riders | POST | `/v1/riders/profile/{profileId}` | Create rider profile | [Riders](#riders) | ❌ | ✅
+| Riders | GET | `/v1/riders/link/{cognitoUserName}` | Get linked profile ID for a Cognito username | [Riders](#riders) | ❌ | ✅
+| Riders | POST | `/v1/riders/link/{cognitoUserName}` | Create Cognito username to profile mapping | [Riders](#riders) | ❌ | ✅
+| Riders | DELETE | `/v1/riders/link/{cognitoUserName}` | Delete Cognito username to profile mapping | [Riders](#riders) | ❌ | ✅
+| Riders | GET | `/v1/riders/profile/{profileId}` | Get rider profile | [Riders](#riders) | ✅ | ✅
+| Riders | PUT | `/v1/riders/profile/{profileId}` | Update rider profile | [Riders](#riders) | ❌ | ✅
+| Riders | POST | `/v1/riders/profile/{profileId}/picture` | Get profile picture upload URL | [Riders](#riders) | ❌ | ✅
+| Riders | GET | `/v1/tours/{tourId}/riders` | List tour riders | [Riders](#riders) | ✅ | ❌
+| Riders | GET | `/v1/tours/{tourId}/riders/names` | List tour riders with riderId, name, and personalCode | [Riders](#riders) | ✅ | ❌
+| Riders | POST | `/v1/tours/{tourId}/riders` | Register rider for tour | [Riders](#riders) | ✅ | ❌
+| Riders | GET | `/v1/tours/{tourId}/riders/{riderId}` | Get tour rider | [Riders](#riders) | ✅ | ❌
+| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit` | Mark rider as exited from tour | [Riders](#riders) | ✅ | ❌
+| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit/cancel` | Cancel rider exit and restore previous status | [Riders](#riders) | ✅ | ❌
+| Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) | ✅ | ❌
+| Rides | GET | `/v1/tours/{tourId}/rides/today` | Get today's ride | [Rides](#rides) | ✅ | ✅
+| Rides | GET | `/v1/tours/{tourId}/rides` | List rides | [Rides](#rides) | ✅ | ✅
+| Rides | GET | `/v1/tours/{tourId}/rides/{rideId}` | Get ride | [Rides](#rides) | ✅ | ✅
+| Rides | POST | `/v1/tours/{tourId}/rides` | Create ride | [Rides](#rides) | ✅ | ❌
+| Rides | PUT | `/v1/tours/{tourId}/rides/{rideId}` | Update ride | [Rides](#rides) | ✅ | ❌
+| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/open` | Open pit stop stage | [Rides](#rides) | ✅ | ❌
+| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/close` | Close pit stop stage | [Rides](#rides) | ✅ | ❌
+| Rides | POST | `/v1/tours/{tourId}/rides/open` | Open today's ride | [Rides](#rides) | ✅ | ❌
+| Rides | POST | `/v1/tours/{tourId}/rides/start` | Start today's ride | [Rides](#rides) | ✅ | ❌
+| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/close` | Close ride | [Rides](#rides) | ✅ | ❌
+| Check-Ins | POST | `/v1/tours/{tourId}/checkins` | Create check-in | [Check-Ins](#check-ins) | ✅ | ❌
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/checkins` | List ride check-ins | [Check-Ins](#check-ins) | ✅ | ❌
+| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/checkins` | List all check-ins for a rider | [Check-Ins](#check-ins) | ✅ | ❌
+| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | List rider check-ins for a ride number | [Check-Ins](#check-ins) | ✅ | ❌
+| Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | Cancel check-in (special update) | [Check-Ins](#check-ins) | ✅ | ❌
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard` | Get dashboard payload | [Check-Ins](#check-ins) | ✅ | ❌
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | Get lightweight dashboard progress payload | [Check-Ins](#check-ins) | ✅ | ❌
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | Get rider popup details for selected ride | [Check-Ins](#check-ins) |✅ | ❌
+| Users | GET | `/v1/users/me` | Get current user claims | [Users](#users) | ✅ | ✅
+| Users | GET | `/v1/users/cognito` | List Cognito users with only `sub` and `name` | [Users](#users) | ✅ | ❌
+| Users | GET | `/v1/tours/{tourId}/users` | List tour users | [Users](#users) | ✅ | ❌
+| Admin UserMgmt | GET | `/v1/admin/usermgmt/roles` | List assignable Cognito groups | [Admin User Management](#admin-user-management) | ✅ | ❌
+| Admin UserMgmt | GET | `/v1/admin/usermgmt/users` | List Cognito users with roles | [Admin User Management](#admin-user-management) | ✅ | ❌
+| Admin UserMgmt | POST | `/v1/admin/usermgmt/users` | Create Cognito user and assign roles | [Admin User Management](#admin-user-management) | ✅ | ❌
+| Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/enable` | Enable Cognito user | [Admin User Management](#admin-user-management) | ✅ | ❌
+| Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/disable` | Disable Cognito user | [Admin User Management](#admin-user-management) | ✅ | ❌
+| Admin UserMgmt | DELETE | `/v1/admin/usermgmt/users/{cognitoUserId}` | Delete Cognito user | [Admin User Management](#admin-user-management) | ✅ | ❌
+| Admin UserMgmt | PUT | `/v1/admin/usermgmt/users/{cognitoUserId}` | Update Cognito profile and roles | [Admin User Management](#admin-user-management)| ✅ | ❌ |
+| Notifications | GET | `/v1/tours/{tourId}/notifications` | List notifications | [Notifications](#notifications) | ✅ | ✅
+| Notifications | POST | `/v1/tours/{tourId}/notifications` | Create notification | [Notifications](#notifications) | ✅ | ✅
+| Notifications | PUT | `/v1/tours/{tourId}/notifications/{notificationId}` | Mark notification as read | [Notifications](#notifications) | ✅ | ✅
 
 ### Request Contract Tables
 

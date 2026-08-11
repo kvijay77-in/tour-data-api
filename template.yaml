@@ -362,6 +362,7 @@ Resources:
           - GET
           - POST
           - PUT
+          - DELETE
           - OPTIONS
         MaxAge: 600
       Tags:
@@ -474,6 +475,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours
+            Method: GET
 
   CreateTourFunction:
     Type: AWS::Serverless::Function
@@ -578,12 +585,6 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref RiderProfileTable
       Events:
-        HttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref TourDataApi
-            Path: /v1/riders/profile/{profileId}
-            Method: PUT
         RiderHttpApi:
           Type: HttpApi
           Properties:
@@ -670,12 +671,6 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/riders/{riderId}
             Method: GET
-        RiderHttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RiderApi
-            Path: /v1/tours/{tourId}/riders/{riderId}
-            Method: GET
 
   GetRiderRideDetailsFunction:
     Type: AWS::Serverless::Function
@@ -721,18 +716,6 @@ Resources:
               Resource:
                 - !Sub '${RiderProfileTable.Arn}/index/*'
       Events:
-        HttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref TourDataApi
-            Path: /v1/riders/profile
-            Method: POST
-        HttpApiWithProfileId:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref TourDataApi
-            Path: /v1/riders/profile/{profileId}
-            Method: POST
         RiderHttpApi:
           Type: HttpApi
           Properties:
@@ -772,12 +755,6 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/tours/{tourId}/riders
-            Method: POST
-        RiderHttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/riders
             Method: POST
 
@@ -841,24 +818,6 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref RiderCognitoUserTable
       Events:
-        HttpApiGet:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref TourDataApi
-            Path: /v1/riders/link/{cognitoUserName}
-            Method: GET
-        HttpApiCreate:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref TourDataApi
-            Path: /v1/riders/link/{cognitoUserName}
-            Method: POST
-        HttpApiDelete:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref TourDataApi
-            Path: /v1/riders/link/{cognitoUserName}
-            Method: DELETE
         RiderHttpApiCreate:
           Type: HttpApi
           Properties:
@@ -902,12 +861,6 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/riders/{riderId}/statistics
             Method: GET
-        RiderHttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RiderApi
-            Path: /v1/tours/{tourId}/riders/{riderId}/statistics
-            Method: GET
 
   UploadProfilePictureFunction:
     Type: AWS::Serverless::Function
@@ -927,12 +880,6 @@ Resources:
               Resource:
                 - !Sub '${PhotosBucket.Arn}/profiles/*'
       Events:
-        HttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref TourDataApi
-            Path: /v1/riders/profile/{profileId}/picture
-            Method: POST
         RiderHttpApi:
           Type: HttpApi
           Properties:
@@ -1024,6 +971,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/rides
             Method: GET
 
@@ -1252,12 +1205,6 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/rides/{rideId}/checkins
             Method: GET
-        RiderHttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RiderApi
-            Path: /v1/tours/{tourId}/rides/{rideId}/checkins
-            Method: GET
 
   GetRiderCheckInsFunction:
     Type: AWS::Serverless::Function
@@ -1280,12 +1227,6 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/tours/{tourId}/riders/{riderId}/checkins
-            Method: GET
-        RiderHttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/riders/{riderId}/checkins
             Method: GET
 
@@ -1320,12 +1261,6 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
-            Path: /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
-            Method: GET
-        RiderHttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
             Method: GET
 
@@ -1426,6 +1361,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/users/me
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/users/me
             Method: GET
 
@@ -1730,6 +1671,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/notifications
+            Method: POST
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/notifications
             Method: POST
 
