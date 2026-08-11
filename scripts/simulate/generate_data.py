@@ -1471,30 +1471,48 @@ def resolve_schedule_dates(config, anchor_today=None):
         return
 
     mode = strategy.get('mode', 'ride_number_anchor')
-    if mode != 'ride_number_anchor':
+    if mode not in ('ride_number_anchor', 'historical'):
         raise ValueError(f"Unsupported date strategy mode: {mode}")
 
-    anchor_ride = int(strategy.get('anchor_ride_number', 3))
-    anchor_date_cfg = strategy.get('anchor_date', 'today')
+    if mode == 'ride_number_anchor':
+        anchor_ride = int(strategy.get('anchor_ride_number', 3))
+        anchor_date_cfg = strategy.get('anchor_date', 'today')
 
-    if anchor_today is None:
-        anchor_today = date.today()
+        if anchor_today is None:
+            anchor_today = date.today()
 
-    if isinstance(anchor_date_cfg, str) and anchor_date_cfg.lower() == 'today':
-        anchor_dt = anchor_today
-    else:
-        anchor_dt = date.fromisoformat(str(anchor_date_cfg))
+        if isinstance(anchor_date_cfg, str) and anchor_date_cfg.lower() == 'today':
+            anchor_dt = anchor_today
+        else:
+            anchor_dt = date.fromisoformat(str(anchor_date_cfg))
 
-    print("Resolving dynamic schedule dates...")
-    print(
-        f"  Strategy: ride_number_anchor "
-        f"(ride {anchor_ride} -> {anchor_dt.isoformat()})"
-    )
+        print("Resolving dynamic schedule dates...")
+        print(
+            f"  Strategy: ride_number_anchor "
+            f"(ride {anchor_ride} -> {anchor_dt.isoformat()})"
+        )
 
-    for idx, day_cfg in enumerate(schedule, 1):
-        ride_day_number = int(day_cfg.get('day', idx))
-        resolved = anchor_dt + timedelta(days=ride_day_number - anchor_ride)
-        day_cfg['date'] = resolved.isoformat()
+        for idx, day_cfg in enumerate(schedule, 1):
+            ride_day_number = int(day_cfg.get('day', idx))
+            resolved = anchor_dt + timedelta(days=ride_day_number - anchor_ride)
+            day_cfg['date'] = resolved.isoformat()
+
+
+    if mode == 'historical':
+        # Just use the explicit dates in the schedule; no dynamic resolution needed.
+        print("Using historical schedule dates...")
+        hist_start_date = strategy.get('start_date')
+        if hist_start_date:
+            hist_start_dt = date.fromisoformat(str(hist_start_date))
+            print(f"  Historical start date: {hist_start_dt.isoformat()}")
+        else:
+            print("  Fatal: start_date not provided; using explicit schedule dates")
+            exit(1)
+
+        for idx, day_cfg in enumerate(schedule, 1):
+            ride_day_number = int(day_cfg.get('day', idx))
+            resolved = hist_start_dt + timedelta(days=ride_day_number - 1)
+            day_cfg['date'] = resolved.isoformat()
 
 
 def resolve_schedule_statuses(config, include_today_checkins=False):
@@ -1511,15 +1529,21 @@ def resolve_schedule_statuses(config, include_today_checkins=False):
     strategy = rides_cfg.get('date_strategy') or {}
     schedule = rides_cfg.get('schedule', [])
 
-    anchor_ride = int(strategy.get('anchor_ride_number', 3))
+    strategy_mode = strategy.get('mode')
+    if strategy_mode == 'ride_number_anchor':
+        anchor_ride = int(strategy.get('anchor_ride_number', 3))
+        print(f" Anchor Ride Number mode is used")
+        print("Resolving schedule statuses from anchor ride...")
+        
+        today_status = 'STARTED' if include_today_checkins else 'PLANNED'
+        print(f"  Status strategy: ride {anchor_ride} is {today_status}")
+    elif strategy_mode == 'historical':
+        print(f" Resolving schedule statuses from historical dates...")
 
-    print("Resolving schedule statuses from anchor ride...")
-    today_status = 'STARTED' if include_today_checkins else 'PLANNED'
-    print(f"  Status strategy: ride {anchor_ride} is {today_status}")
 
     for idx, day_cfg in enumerate(schedule, 1):
         ride_day_number = int(day_cfg.get('day', idx))
-        if ride_day_number < anchor_ride:
+        if strategy_mode == 'historical' or ride_day_number < anchor_ride:
             day_cfg['status'] = 'CLOSED'
         elif ride_day_number == anchor_ride:
             day_cfg['status'] = 'STARTED' if include_today_checkins else 'PLANNED'

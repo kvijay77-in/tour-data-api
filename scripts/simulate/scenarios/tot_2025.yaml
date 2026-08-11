@@ -1,0 +1,216 @@
+# =============================================================================
+# Test Data Scenario Configuration
+# =============================================================================
+# This template defines the tour-specific data to simulate for testing.
+# Rider profiles and tour master data are read from existing DynamoDB tables.
+# Only tour-specific data (TourRider, Ride, CheckIn) is generated.
+#
+# Usage:
+#   python scripts/simulate/generate_data.py --scenario scripts/simulate/scenarios/tot_2025.yaml
+#   python scripts/simulate/generate_data.py --scenario scripts/simulate/scenarios/tot_2025.yaml --dry-run
+# =============================================================================
+
+scenario:
+  type: tour_data_generation
+  mode: create
+  name: "TOT-2025 Full Tour Simulation"
+  description: "7-day tour with 90 riders - Historical data"
+
+# AWS environment configuration
+aws:
+  stack_name: dev
+  # region: ap-south-1  # Uncomment to override AWS config default
+
+# Tour reference (must already exist in TourMaster table)
+tour:
+  tour_id: TOT-2025
+  # Status to set on TourMaster after data generation (optional)
+  target_status: COMPLETED
+
+# Tour rider registration (written to TourRider-{tourId} table)
+# Riders are selected from existing profiles in the RiderProfile table
+tour_riders:
+  count: 90          # Number of riders to register for this tour
+  selection:
+    filter:
+      # Only select riders with a personal code (personalCode attribute exists)
+      type: attribute_exists
+      attribute: personalCode
+
+# Ride schedule and check-in distributions
+rides:
+  # Dynamic date generation:
+  # - anchor_ride_number is treated as today's ride
+  # - Each day's date is derived relative to that anchor
+  date_strategy:
+    mode: historical
+    start_date: 2025-12-21
+
+  # Default stage layout for all rides (override per-day with 'stages' key)
+  # Stage types: START, PIT_STOP, FINISH
+  # default_stage_count includes START and FINISH.
+  # Example: 4 -> START + 2 PIT_STOP + FINISH.
+  default_stage_count: 4
+  default_stages:
+    - { type: START, name: Start }
+    - { type: PIT_STOP, name: PS1, estimated_open_time: 90, pit_stop_duration: 45 }
+    - { type: PIT_STOP, name: PS2, estimated_open_time: 210, pit_stop_duration: 60 }
+    - { type: PIT_STOP, name: PS3, estimated_open_time: 300, pit_stop_duration: 60 }
+    - { type: FINISH, name: Finish }
+
+  schedule:
+    # -------------------------------------------------------------------------
+    # Day 1 - COMPLETED
+    # -------------------------------------------------------------------------
+    - day: 1
+      name: "Day 1 - Ponmudi Loop"
+      pit_stop_distances_from_start:
+        PS1: 40
+        PS2: 84
+      start_location: "Trivandrum"
+      finish_location: "Trivandrum"
+      distance: 125
+      flag_off_time: "08:00"
+      rides_count: 1
+      checkins:
+        not_riding: 0
+        quit:
+          - { after_stage: Start, count: 0 }
+          - { after_stage: PS1, count: 0 }
+          - { after_stage: PS2, count: 0 }
+        finished: all_remaining
+
+    # -------------------------------------------------------------------------
+    # Day 2 - COMPLETED
+    # -------------------------------------------------------------------------
+    - day: 2
+      name: "Day 2 - Trivandrum to Nagercoil"
+      pit_stop_distances_from_start:
+        PS1: 45
+        PS2: 80
+      start_location: "Trivandrum"
+      finish_location: "Nagercoil"
+      distance: 106
+      flag_off_time: "08:00"
+      rides_count: 1
+      checkins:
+        not_riding: 0
+        quit:
+          - { after_stage: Start, count: 0 }
+          - { after_stage: PS1, count: 1 }
+          - { after_stage: PS2, count: 7 }
+        finished: all_remaining
+
+    # -------------------------------------------------------------------------
+    # Day 3 - COMPLETED
+    # -------------------------------------------------------------------------
+    - day: 3
+      name: "Day 3 - Chitar Lake Loop"
+      pit_stop_distances_from_start:
+        PS1: 30
+        PS2: 55
+      start_location: "Nagercoil"
+      finish_location: "Nagercoil"
+      distance: 91
+      flag_off_time: "08:00"
+      rides_count: 1
+      checkins:
+        not_riding: 4
+        quit:
+          - { after_stage: Start, count: 0 }
+          - { after_stage: PS1, count: 0 }
+          - { after_stage: PS2, count: 8 }
+        finished: all_remaining
+
+    # -------------------------------------------------------------------------
+    # Day 4 - COMPLETED
+    # -------------------------------------------------------------------------
+    - day: 4
+      name: "Day 4 - Nagercoil to Tirunelveli"
+      pit_stop_distances_from_start:
+        PS1: 42
+        PS2: 78
+      start_location: "Nagercoil"
+      finish_location: "Tirunelveli"
+      distance: 107
+      flag_off_time: "08:00"
+      rides_count: 1
+      checkins:
+        not_riding: 2
+        quit:
+          - { after_stage: Start, count: 0 }
+          - { after_stage: PS1, count: 0 }
+          - { after_stage: PS2, count: 5 }
+        finished: all_remaining
+
+# -------------------------------------------------------------------------
+# Day 5 - COMPLETED
+# ------------------------------------------------------------------------- 
+    - day: 5
+      name: "Day 5 - Therikadu Loop"
+      stage_count: 5
+      pit_stop_distances_from_start:
+        PS1: 30
+        PS2: 52
+        PS3: 80
+      start_location: "Tirunelveli"
+      finish_location: "Tirunelveli"
+      distance: 115
+      flag_off_time: "08:00"
+      rides_count: 1
+      checkins:
+        not_riding: 3
+        quit:
+          - { after_stage: Start, count: 0 }
+          - { after_stage: PS1, count: 0 }
+          - { after_stage: PS2, count: 2 }
+          - { after_stage: PS3, count: 15 }
+        finished: all_remaining
+
+# -------------------------------------------------------------------------
+# Day 6 - COMPLETED
+# -------------------------------------------------------------------------
+    - day: 6
+      name: "Day 6 - Tirunelveli to Courtrallam"
+      pit_stop_distances_from_start:
+        PS1: 30
+        PS2: 52
+      start_location: "Tirunelveli"
+      finish_location: "Courtrallam"
+      distance: 105
+      flag_off_time: "08:00"
+      rides_count: 1
+      checkins:
+        not_riding: 5
+        quit:
+          - { after_stage: Start, count: 0 }
+          - { after_stage: PS1, count: 2 }
+          - { after_stage: PS2, count: 6 }
+        finished: all_remaining
+
+# -------------------------------------------------------------------------
+# Day 7 - COMPLETED
+# -------------------------------------------------------------------------
+    - day: 7
+      name: "Day 7 - Courtrallam to Trivandrum"
+      pit_stop_distances_from_start:
+        PS1: 45
+        PS2: 83
+      start_location: "Courtrallam"
+      finish_location: "Trivandrum"
+      distance: 117
+      flag_off_time: "08:00"
+      rides_count: 1
+      checkins:
+        not_riding: 9
+        quit:
+          - { after_stage: Start, count: 0 }
+          - { after_stage: PS1, count: 5 }
+          - { after_stage: PS2, count: 16 }
+        finished: all_remaining
+
+# Script behaviour options
+options:
+  clean_before_load: true    # Delete existing data from tour tables before loading
+  update_tour_status: true   # Update TourMaster status to tour.target_status
+  seed: 22                   # Random seed for reproducible data generation

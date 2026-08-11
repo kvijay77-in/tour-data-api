@@ -169,7 +169,10 @@ def main() -> int:
     except (BotoCoreError, ClientError, RuntimeError) as exc:
         return fail(f"  Error: Failed to fetch stack outputs.\n  Details: {exc}")
 
+    print("echo \"After stack outputs are retrieved......\"")
+    
     user_pool = args.user_pool
+    print(f"echo \"{'User pool selection: ' + repr(user_pool) if user_pool else 'No user pool selected.'}\"")
     if not user_pool:
         if sys.stdin.isatty():
             user_pool = choose_user_pool_interactive()
