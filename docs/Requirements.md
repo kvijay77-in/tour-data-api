@@ -61,6 +61,24 @@ Rider profile or data should be kept separately from tour data since tour data i
 
 Scope of this model is to have reference of the photo in S3. Uploading is out of scope. S3 references are expected to be uploaded by tour organizers.
 
+## Rider Tour Participation
+This is expected to maintain a rider's participation lifecycle for each tour using `profileId + tourId` as a unique key.
+
+The data model must support incremental evolution as roadmap features are added. New optional attributes are expected over time and must be supported without breaking existing records.
+
+Following data are required to begin with.
+- profileId
+- tourId
+- appliedOn
+- confirmedOn
+- tourFeePaidOn
+- registredOn
+- riderId
+- status
+- updatedAt
+
+The `RiderTours` dataset is separate from `TourRider`. `RiderTours` tracks profile-level participation states per tour (application, confirmation, fee, registration milestones), while `TourRider` tracks operational rider state for active tour execution.
+
 ## Tour Riders
 This is expected to have Rider ID allocated to the rider who are registered for the current tour. Rider ID is allocated couple of weeks before the tour commences and will be uploaded by tour organizers to the corresponding table as per the format/model. Rider ID is specific to a tour and will be different for same rider for each tour rider participates. This essentially a mapping between a Tour and Rider profile data.
 

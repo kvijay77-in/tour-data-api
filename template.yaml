@@ -29,6 +29,7 @@ Globals:
       Variables:
         # Shared table names (SAM-managed)
         RIDER_PROFILE_TABLE: !Ref RiderProfileTable
+        RIDER_TOURS_TABLE: !Ref RiderToursTable
         RIDER_COGNITO_USER_TABLE: !Ref RiderCognitoUserTable
         TOUR_MASTER_TABLE: !Ref TourMasterTable
         APP_CONFIG_TABLE: !Ref AppConfigTable
@@ -296,6 +297,7 @@ Resources:
   TourDataApi:
     Type: AWS::Serverless::HttpApi
     Properties:
+      Description: API Gateway for Tour Management App
       StageName: !Ref Environment
       # JWT authentication via Cognito.
       # When CognitoUserPoolArn is empty (default), a User Pool is auto-created.
@@ -343,6 +345,7 @@ Resources:
   RiderApi:
     Type: AWS::Serverless::HttpApi
     Properties:
+      Description: API Gateway for Tour Rider App
       StageName: !Ref Environment
       Auth:
         DefaultAuthorizer: RiderCognitoAuthorizer
@@ -571,6 +574,56 @@ Resources:
           Properties:
             ApiId: !Ref RiderApi
             Path: /v1/riders/profile/{profileId}
+            Method: GET
+
+  GetRiderTourParticipationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: get_rider_tour.lambda_handler
+      Description: Get rider participation details for a tour by profile ID and tour ID
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderToursTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/profile/{profileId}/tours/{tourId}
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/profile/{profileId}/tours/{tourId}
+            Method: GET
+
+  ListRiderTourParticipationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: get_rider_tours.lambda_handler
+      Description: List rider participation details for all tours by profile ID
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderToursTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/profile/{profileId}/tours
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/profile/{profileId}/tours
             Method: GET
 
   UpdateRiderProfileFunction:
@@ -1229,13 +1282,19 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/riders/{riderId}/checkins
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/checkins
+            Method: GET
 
   GetRiderRideCheckInsFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/functions/checkins/
       Handler: get_rider_ride_checkins.lambda_handler
-      Description: Get all check-ins for a rider by ride number
+      Description: Get all check-ins for a rider by ride number in a tour
       Layers:
         - !Ref CommonLayer
       Policies:
@@ -1261,6 +1320,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
             Method: GET
 
@@ -1787,6 +1852,39 @@ Resources:
         - Key: ManagedBy
           Value: SAM
 
+  RiderToursTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-RiderTours'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: profileId
+          AttributeType: S
+        - AttributeName: tourId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: profileId
+          KeyType: HASH
+        - AttributeName: tourId
+          KeyType: RANGE
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-RiderTours'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - Key: Owner
+          Value: !Ref ResourceOwner
+
   AppConfigTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -1971,6 +2069,12 @@ Outputs:
     Value: !Ref RiderCognitoUserTable
     Export:
       Name: !Sub '${AWS::StackName}-RiderCognitoUserTable'
+
+  RiderToursTableName:
+    Description: Rider tour participation DynamoDB table name
+    Value: !Ref RiderToursTable
+    Export:
+      Name: !Sub '${AWS::StackName}-RiderToursTable'
 
   TourMasterTableName:
     Description: TourMaster DynamoDB table name

@@ -63,6 +63,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Riders | POST | `/v1/riders/link/{cognitoUserName}` | Create Cognito username to profile mapping | [Riders](#riders) | ❌ | ✅
 | Riders | DELETE | `/v1/riders/link/{cognitoUserName}` | Delete Cognito username to profile mapping | [Riders](#riders) | ❌ | ✅
 | Riders | GET | `/v1/riders/profile/{profileId}` | Get rider profile | [Riders](#riders) | ✅ | ✅
+| Riders | GET | `/v1/profile/{profileId}/tours` | List rider tour participation info across all tours for a profile | [Riders](#riders) | ✅ | ✅
+| Riders | GET | `/v1/profile/{profileId}/tours/{tourId}` | Get rider tour participation info | [Riders](#riders) | ✅ | ✅
 | Riders | PUT | `/v1/riders/profile/{profileId}` | Update rider profile | [Riders](#riders) | ❌ | ✅
 | Riders | POST | `/v1/riders/profile/{profileId}/picture` | Get profile picture upload URL | [Riders](#riders) | ❌ | ✅
 | Riders | GET | `/v1/tours/{tourId}/riders` | List tour riders | [Riders](#riders) | ✅ | ❌
@@ -84,8 +86,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/close` | Close ride | [Rides](#rides) | ✅ | ❌
 | Check-Ins | POST | `/v1/tours/{tourId}/checkins` | Create check-in | [Check-Ins](#check-ins) | ✅ | ❌
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/checkins` | List ride check-ins | [Check-Ins](#check-ins) | ✅ | ❌
-| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/checkins` | List all check-ins for a rider | [Check-Ins](#check-ins) | ✅ | ❌
-| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | List rider check-ins for a ride number | [Check-Ins](#check-ins) | ✅ | ❌
+| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/checkins` | List all check-ins for a rider | [Check-Ins](#check-ins) | ✅ | ✅
+| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | List rider check-ins for a ride number | [Check-Ins](#check-ins) | ✅ | ✅
 | Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | Cancel check-in (special update) | [Check-Ins](#check-ins) | ✅ | ❌
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard` | Get dashboard payload | [Check-Ins](#check-ins) | ✅ | ❌
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | Get lightweight dashboard progress payload | [Check-Ins](#check-ins) | ✅ | ❌
@@ -132,6 +134,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `POST /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Creates mapping row with generated `profileId` UUID; duplicate `cognitoUserName` rejected (`COGNITO_USER_ALREADY_LINKED`) |
 | `DELETE /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Deletes mapping row; returns `404` if mapping does not exist |
 | `GET /v1/riders/profile/{profileId}` | `profileId` (required) | None | None | `profileId` must exist |
+| `GET /v1/profile/{profileId}/tours` | `profileId` (required) | None | None | Returns all RiderTours records for the profileId using partition key query (no `tourId` filter) |
+| `GET /v1/profile/{profileId}/tours/{tourId}` | `profileId, tourId` (required) | None | None | `tourId` format: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]`; returns one RiderTours record for the key pair |
 | `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | At least one of: `name, email, phone, emergencyContact, photoS3Key, personalCode, dateOfBirth, gender, address` | Email validated when provided; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD` when provided; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with string fields `line1, line2, city, state, country, postalCode`; `personalCode` normalized to uppercase; duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
 | `POST /v1/riders/profile/{profileId}/picture` | `profileId` (required) | None | Optional: `contentType` | `profileId` must exist; `contentType` in `image/jpeg, image/png`; default `image/jpeg` |
 | `GET /v1/tours/{tourId}/riders` | `tourId` (required) | None | None | `tourId` format rule |

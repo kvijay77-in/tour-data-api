@@ -3,6 +3,8 @@ Unit tests for new rider-app API Lambda functions
 
 Tests the new Lambda functions added for tour-rider-app integration:
 - Create Rider Profile (POST /v1/riders/profile)
+- List Rider Tour Participations (GET /v1/profile/{profileId}/tours)
+- Get Rider Tour Participation (GET /v1/profile/{profileId}/tours/{tourId})
 - Register Tour Rider (POST /v1/tours/{tourId}/riders)
 - Get Rider Statistics (GET /v1/tours/{tourId}/riders/{riderId}/statistics)
 - Upload Profile Picture (POST /v1/riders/profile/{profileId}/picture)
@@ -139,6 +141,33 @@ def dynamodb_full_mock(aws_credentials):
             BillingMode='PAY_PER_REQUEST'
         )
 
+        # Create shared RiderTours table
+        rider_tours_table = dynamodb.create_table(
+            TableName='test-rider-tours-table',
+            KeySchema=[
+                {'AttributeName': 'profileId', 'KeyType': 'HASH'},
+                {'AttributeName': 'tourId', 'KeyType': 'RANGE'}
+            ],
+            AttributeDefinitions=[
+                {'AttributeName': 'profileId', 'AttributeType': 'S'},
+                {'AttributeName': 'tourId', 'AttributeType': 'S'}
+            ],
+            BillingMode='PAY_PER_REQUEST'
+        )
+        rider_tours_table.put_item(
+            Item={
+                'profileId': 'P001',
+                'tourId': MOCK_TOUR_ID,
+                'appliedOn': '2025-12-30T13:51:05Z',
+                'confirmedOn': '2026-03-22T13:51:05Z',
+                'tourFeePaidOn': '2026-04-08T13:51:05Z',
+                'registredOn': '',
+                'riderId': '',
+                'status': 'CONFIRMED',
+                'updatedAt': '2026-04-08T13:51:05Z'
+            }
+        )
+
         # Create tour-specific TourRider table with ProfileIdIndex GSI
         tour_rider_table = dynamodb.create_table(
             TableName=f'test-stack-TourRider-{MOCK_TOUR_ID}',
@@ -271,6 +300,7 @@ def dynamodb_full_mock(aws_credentials):
         # Set environment variables
         os.environ['TOUR_MASTER_TABLE'] = 'test-tour-master-table'
         os.environ['RIDER_PROFILE_TABLE'] = 'test-rider-table'
+        os.environ['RIDER_TOURS_TABLE'] = 'test-rider-tours-table'
         os.environ['RIDER_COGNITO_USER_TABLE'] = 'test-rider-cognito-user-table'
         os.environ['STACK_NAME'] = 'test-stack'
         os.environ['ENVIRONMENT'] = 'test'
@@ -714,6 +744,170 @@ class TestGetAndUpdateRiderProfile:
             path='/v1/riders/profile/P001',
             path_params={'profileId': 'P001'},
             body={'dateOfBirth': '10-09-1993'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+
+# ============================================================================
+# LIST RIDER TOUR PARTICIPATIONS TESTS
+# ============================================================================
+
+class TestListRiderTourParticipations:
+    """Tests for GET /v1/profile/{profileId}/tours"""
+
+    def test_list_rider_tour_participations_success(self, dynamodb_full_mock):
+        """Return all RiderTours rows for the given profileId"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        # Seed one additional tour for same profile and one for another profile.
+        table = dynamodb_full_mock.Table('test-rider-tours-table')
+        table.put_item(
+            Item={
+                'profileId': 'P001',
+                'tourId': 'TOT-2027',
+                'appliedOn': '2026-12-30T13:51:05Z',
+                'confirmedOn': '2027-03-22T13:51:05Z',
+                'tourFeePaidOn': '2027-04-08T13:51:05Z',
+                'registredOn': '',
+                'riderId': '',
+                'status': 'CONFIRMED',
+                'updatedAt': '2027-04-08T13:51:05Z'
+            }
+        )
+        table.put_item(
+            Item={
+                'profileId': 'P002',
+                'tourId': 'TOT-2028',
+                'appliedOn': '2027-12-30T13:51:05Z',
+                'confirmedOn': '',
+                'tourFeePaidOn': '',
+                'registredOn': '',
+                'riderId': '',
+                'status': 'APPLIED',
+                'updatedAt': '2027-12-30T13:51:05Z'
+            }
+        )
+
+        from get_rider_tours import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/profile/P001/tours',
+            path_params={'profileId': 'P001'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['profileId'] == 'P001'
+        assert body['data']['count'] == 2
+
+        returned_tours = {item['tourId'] for item in body['data']['tours']}
+        assert returned_tours == {MOCK_TOUR_ID, 'TOT-2027'}
+
+    def test_list_rider_tour_participations_empty(self, dynamodb_full_mock):
+        """Return 200 with empty list when profile has no RiderTours rows"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_tours import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/profile/P999/tours',
+            path_params={'profileId': 'P999'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['profileId'] == 'P999'
+        assert body['data']['count'] == 0
+        assert body['data']['tours'] == []
+
+    def test_list_rider_tour_participations_missing_profile_id(self, dynamodb_full_mock):
+        """Return 400 when profileId is missing"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_tours import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/profile//tours',
+            path_params={'profileId': ''}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+
+# ============================================================================
+# GET RIDER TOUR PARTICIPATION TESTS
+# ============================================================================
+
+class TestGetRiderTourParticipation:
+    """Tests for GET /v1/profile/{profileId}/tours/{tourId}"""
+
+    def test_get_rider_tour_success(self, dynamodb_full_mock):
+        """Return rider tour participation for an existing profileId/tourId pair"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_tour import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path=f'/v1/profile/P001/tours/{MOCK_TOUR_ID}',
+            path_params={'profileId': 'P001', 'tourId': MOCK_TOUR_ID}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['profileId'] == 'P001'
+        assert body['data']['tourId'] == MOCK_TOUR_ID
+        assert body['data']['status'] == 'CONFIRMED'
+
+    def test_get_rider_tour_not_found(self, dynamodb_full_mock):
+        """Return 404 for a missing profileId/tourId pair"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_tour import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/profile/P001/tours/TOT-2099',
+            path_params={'profileId': 'P001', 'tourId': 'TOT-2099'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 404
+
+    def test_get_rider_tour_invalid_tour_id(self, dynamodb_full_mock):
+        """Return 400 for invalid tourId format"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_rider_tour import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/profile/P001/tours/??',
+            path_params={'profileId': 'P001', 'tourId': '??'}
         )
 
         response = lambda_handler(event, None)

@@ -52,6 +52,7 @@ Based on Check-In App requirements, the following access patterns are critical:
 
 4. **Rider Management**
    - Get rider profile by Profile ID
+   - Get rider tour participation by Profile ID + Tour ID
    - Get rider profile by Rider ID (requires TourRider lookup)
    - Get all tour riders for a specific tour
    - Get lightweight rider list (riderId + name) for a specific tour
@@ -79,6 +80,7 @@ These tables exist for the lifetime of the deployment and are defined in `templa
 | Table | Purpose |
 |---|---|
 | **RiderProfile** | Master rider data, tour-agnostic |
+| **RiderTours** | Rider participation lifecycle by `profileId + tourId` |
 | **RiderCognitoUser** | Mapping between Cognito rider username and generated rider profile ID |
 | **TourMaster** | Tour registry — every tour ever created is listed here |
 | **AppConfig** | Shared platform configuration for app clients |
@@ -100,7 +102,7 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables and `{AWS::StackName}-{TableType}-{tourId}` for tour-specific tables.
 
 Examples (stack name: `dev`, tour ID: `TOT-2026`):
-- Shared: `dev-RiderProfile`, `dev-RiderCognitoUser`, `dev-TourMaster`, `dev-AppConfig`
+- Shared: `dev-RiderProfile`, `dev-RiderTours`, `dev-RiderCognitoUser`, `dev-TourMaster`, `dev-AppConfig`
 - Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
@@ -108,7 +110,7 @@ Lambda functions resolve shared table names via environment variables (set by SA
 ### Tour Lifecycle and Table Management
 
 1. **Provisioning:** Tour-specific tables are created when a new tour is provisioned. Two methods are available:
-   - **CLI Script (Deployment Method):** `scripts/provision_tour.py` or `make provision-tour` — runs locally or in CI/CD pipelines, creates Tour record + 4 tables via boto3 directly
+   - **CLI Script (Deployment Method):** `scripts/provision_tour.py` or `make provision-tour` — runs locally or in CI/CD pipelines, creates Tour record + 5 tables via boto3 directly
    - **API Endpoint (Runtime Method):** `POST /v1/tours` — used by external apps (e.g., Check-In App) to create tours programmatically. The actual integration from external apps is out of scope for this project; this API capability is provided for their use.
 2. **Active use:** Lambda functions resolve tour-specific table names using `{STACK_NAME}-{TableType}-{tourId}`
 3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
@@ -221,6 +223,29 @@ Both provisioning methods create the same resources: a Tour record in the shared
 **Notes:**
 - API readers consume enabled entries only.
 - Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`.
+
+## Shared Table 5: RiderTours
+
+**Purpose:** Track rider participation lifecycle per tour using `profileId + tourId`.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| profileId | String | Rider profile identifier (partition key) |
+| tourId | String | Tour identifier (sort key) |
+| appliedOn | String | ISO 8601 timestamp when rider applied |
+| confirmedOn | String | ISO 8601 timestamp when rider was confirmed |
+| tourFeePaidOn | String | ISO 8601 timestamp when tour fee payment was confirmed |
+| registredOn | String | Registration completion timestamp (current field spelling retained for compatibility) |
+| riderId | String | Tour rider ID when allocated |
+| status | String | Participation status (for example `APPLIED`, `CONFIRMED`, `REGISTERED`) |
+| updatedAt | String | ISO 8601 timestamp |
+
+**Indexes:**
+- Primary Key: `profileId` (partition key), `tourId` (sort key)
+
+**Notes:**
+- Supports one participation record per `profileId + tourId` pair.
+- Additional optional attributes can be added incrementally as roadmap features evolve.
 
 ## Tour-Specific Table 1: TourRider-{tourId}
 
@@ -496,7 +521,7 @@ Given the small data volume, costs will be minimal. However, following best prac
 
 3. **Data Retention:**
    - Archival is per-tour: export tour-specific tables to S3 and delete
-   - Shared tables (RiderProfile, RiderCognitoUser, TourMaster) persist for deployment lifetime
+   - Shared tables (RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig) persist for deployment lifetime
    - No TTL needed — tour table deletion handles cleanup
 
 ## API Gateway Optimization
@@ -587,7 +612,7 @@ tour-data-api/
 ## Key Resources
 
 ### Managed by SAM (template.yaml)
-1. **Shared DynamoDB Tables:** RiderProfile, RiderCognitoUser, TourMaster (with GSIs where applicable)
+1. **Shared DynamoDB Tables:** RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig (with GSIs where applicable)
 2. **Lambda Functions:** One per API endpoint
 3. **Lambda Layer:** Common utilities shared across all functions (`dynamodb_utils`, `logger`, `models`, `rbac`, `response`, `tour_provisioning`, `validation`)
 4. **API Gateway (tour-mgmt-app):** HTTP API (`TourDataApi`) with JWT authorizer for the management User Pool

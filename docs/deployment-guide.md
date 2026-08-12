@@ -178,7 +178,7 @@ Creates or updates all required resources in your AWS account.
 | Cognito User Pool + App Client | 1 | User authentication (auto-created) |
 | Lambda Functions | 20 | Business logic for each API endpoint |
 | Lambda Layer | 1 | Shared utilities across all functions |
-| DynamoDB Tables (shared) | 2 | RiderProfile and Tour data |
+| DynamoDB Tables (shared) | 5 | RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig |
 | S3 Bucket | 1 | Rider photos and archived tour data |
 | IAM Roles | 20 | Security permissions per function |
 | CloudWatch Log Groups | 20 | Monitoring and debugging logs |
@@ -234,7 +234,7 @@ make provision-tour \
   ENV=prod
 ```
 
-The script creates the Tour record in the shared TourMaster table and provisions 4 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User).
+The script creates the Tour record in the shared TourMaster table and provisions 5 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification).
 
 ### Method 2: API Endpoint (Runtime Method)
 
@@ -253,7 +253,7 @@ curl -X POST https://<api-url>/v1/tours \
   }'
 ```
 
-Both methods produce the same result: a Tour record and 4 tour-specific DynamoDB tables.
+Both methods produce the same result: a Tour record and 5 tour-specific DynamoDB tables.
 
 > **Note**: The API method is designed for use by external apps like the Check-In App. The actual integration from these apps is out of scope for this project — this API capability is provided for their use.
 
@@ -303,7 +303,7 @@ An "Unauthorized" response means the API is running and authentication is workin
 
 Detailed inventory of everything deployment creates in your AWS account.
 
-### Lambda Functions (All 23)
+### Lambda Functions (All 25)
 
 | Function | Endpoint | Purpose |
 |---|---|---|
@@ -313,6 +313,8 @@ Detailed inventory of everything deployment creates in your AWS account.
 | CreateTourFunction | `POST /v1/tours` | Create tour and provision tables |
 | ArchiveTourFunction | `POST /v1/tours/{tourId}/archive` | Archive completed tour |
 | GetRiderProfileFunction | `GET /v1/riders/profile/{profileId}` | Get rider profile |
+| ListRiderTourParticipationsFunction | `GET /v1/profile/{profileId}/tours` | List rider participation details across all tours for a profile |
+| GetRiderTourParticipationFunction | `GET /v1/profile/{profileId}/tours/{tourId}` | Get rider participation details for one tour |
 | UpdateRiderProfileFunction | `PUT /v1/riders/profile/{profileId}` | Update rider profile |
 | GetTourRidersFunction | `GET /v1/tours/{tourId}/riders` | List tour riders |
 | GetTourRiderNamesFunction | `GET /v1/tours/{tourId}/riders/names` | List tour riders with riderId and name only |
@@ -338,7 +340,10 @@ Detailed inventory of everything deployment creates in your AWS account.
 | Table | Full Table Name | Stores | Persists Across Tours? |
 |---|---|---|---|
 | RiderProfile | `dev-RiderProfile` | Rider personal info (name, email, emergency contacts) | Yes |
+| RiderTours | `dev-RiderTours` | Rider participation lifecycle keyed by profileId + tourId | Yes |
+| RiderCognitoUser | `dev-RiderCognitoUser` | Mapping from Cognito username to profileId | Yes |
 | TourMaster | `dev-TourMaster` | Tour details (name, dates, status) | Yes |
+| AppConfig | `dev-AppConfig` | Shared app configuration values | Yes |
 
 **Tour-specific tables (created per tour via API):**
 

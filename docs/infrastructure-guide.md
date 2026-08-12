@@ -329,7 +329,7 @@ Expected monthly costs for typical usage (100 riders, 7-8 rides per tour, 5-year
 - **On-demand pricing**: Pay only for actual reads/writes
 - **Storage**: $0.25/GB per month
 - **Typical usage**: 10k reads, 5k writes per month across all tables
-- **Hybrid table strategy**: Shared tables (RiderProfile, TourMaster) are always active; tour-specific tables only exist during active tours, reducing idle costs
+- **Hybrid table strategy**: Shared tables (RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig) are always active; tour-specific tables only exist during active tours, reducing idle costs
 - **Cost optimization**: Use on-demand mode for variable workloads; archive completed tours to delete unused tables
 
 #### Lambda Costs
@@ -422,10 +422,10 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 
 ### Lambda Functions
 
-- **Total Functions**: 22
+- **Total Functions**: 23
 - **Categories**:
   - Tours: 5 functions (get_active, get_tour, list_tours, create_tour, archive_tour)
-  - Riders: 4 functions (get_rider_profile, update_rider_profile, get_tour_riders, get_tour_rider)
+  - Riders: 5 functions (get_rider_profile, get_rider_tour, update_rider_profile, get_tour_riders, get_tour_rider)
   - Rides: 8 functions (get_todays_ride, get_ride, list_rides, create_ride, update_ride, open_ride, start_ride, close_ride)
   - Check-ins: 3 functions (create_checkin, get_ride_checkins, get_dashboard_data)
   - Users: 2 functions (get_current_user, list_tour_users)
@@ -433,18 +433,22 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 ### Data Storage
 
 - **DynamoDB Tables (Hybrid Strategy)**:
-  - **Shared (SAM-managed, 2 tables)**:
+  - **Shared (SAM-managed, 5 tables)**:
     - RiderProfile (with EmailIndex GSI)
+    - RiderTours (composite key: profileId + tourId)
+    - RiderCognitoUser
     - TourMaster (with StatusIndex GSI)
-  - **Tour-specific (runtime-provisioned per tour, 4 tables each)**:
+    - AppConfig
+  - **Tour-specific (runtime-provisioned per tour, 5 tables each)**:
     - TourRider-{tourId}
     - Ride-{tourId} (with DateIndex, StatusIndex GSIs)
     - CheckIn-{tourId} (with RideIndex GSI)
     - User-{tourId}
+    - Notification-{tourId}
 
 ### API Endpoints
 
-- **Total Endpoints**: 22
+- **Total Endpoints**: 23
 - **HTTP Methods**: GET, POST, PUT
 - **Authentication**: JWT via AWS Cognito (conditional, enabled when CognitoUserPoolArn is provided)
 - **API Prefix**: `/v1/`
