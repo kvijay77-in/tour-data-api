@@ -161,7 +161,7 @@ def dynamodb_full_mock(aws_credentials):
                 'appliedOn': '2025-12-30T13:51:05Z',
                 'confirmedOn': '2026-03-22T13:51:05Z',
                 'tourFeePaidOn': '2026-04-08T13:51:05Z',
-                'registredOn': '',
+                'registeredOn': '',
                 'riderId': '',
                 'status': 'CONFIRMED',
                 'updatedAt': '2026-04-08T13:51:05Z'
@@ -772,7 +772,7 @@ class TestListRiderTourParticipations:
                 'appliedOn': '2026-12-30T13:51:05Z',
                 'confirmedOn': '2027-03-22T13:51:05Z',
                 'tourFeePaidOn': '2027-04-08T13:51:05Z',
-                'registredOn': '',
+                'registeredOn': '',
                 'riderId': '',
                 'status': 'CONFIRMED',
                 'updatedAt': '2027-04-08T13:51:05Z'
@@ -785,7 +785,7 @@ class TestListRiderTourParticipations:
                 'appliedOn': '2027-12-30T13:51:05Z',
                 'confirmedOn': '',
                 'tourFeePaidOn': '',
-                'registredOn': '',
+                'registeredOn': '',
                 'riderId': '',
                 'status': 'APPLIED',
                 'updatedAt': '2027-12-30T13:51:05Z'
