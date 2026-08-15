@@ -940,6 +940,37 @@ Resources:
             Path: /v1/riders/profile/{profileId}/picture
             Method: POST
 
+  GetProfilePictureFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: get_profile_picture.lambda_handler
+      Description: Generate presigned URL for profile picture download
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub '${PhotosBucket.Arn}/profiles/*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/riders/profile/{profileId}/picture
+            Method: GET
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}/picture
+            Method: GET
+
   # ============================================================================
   # LAMBDA FUNCTIONS - RIDES
   # ============================================================================

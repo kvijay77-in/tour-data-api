@@ -25,6 +25,7 @@ New API endpoints required by the Tour Rider App (tour-rider-app repository):
 | `POST /v1/tours/{tourId}/riders` | `register_tour_rider.py` | ✅ Implemented |
 | `GET /v1/tours/{tourId}/riders/{riderId}/statistics` | `get_rider_statistics.py` | ✅ Implemented |
 | `POST /v1/riders/profile/{profileId}/picture` | `upload_profile_picture.py` | ✅ Implemented |
+| `GET /v1/riders/profile/{profileId}/picture` | `get_profile_picture.py` | ✅ Implemented |
 | `GET /v1/tours/{tourId}/notifications` | `list_notifications.py` | ✅ Implemented |
 | `POST /v1/tours/{tourId}/notifications` | `create_notification.py` | ✅ Implemented |
 | `PUT /v1/tours/{tourId}/notifications/{notificationId}` | `update_notification.py` | ✅ Implemented |

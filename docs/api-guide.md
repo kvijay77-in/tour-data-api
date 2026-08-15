@@ -67,6 +67,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Riders | GET | `/v1/profile/{profileId}/tours/{tourId}` | Get rider tour participation info | [Riders](#riders) | ✅ | ✅
 | Riders | PUT | `/v1/riders/profile/{profileId}` | Update rider profile | [Riders](#riders) | ❌ | ✅
 | Riders | POST | `/v1/riders/profile/{profileId}/picture` | Get profile picture upload URL | [Riders](#riders) | ❌ | ✅
+| Riders | GET | `/v1/riders/profile/{profileId}/picture` | Get profile picture download URL | [Riders](#riders) | ❌ | ✅
 | Riders | GET | `/v1/tours/{tourId}/riders` | List tour riders | [Riders](#riders) | ✅ | ❌
 | Riders | GET | `/v1/tours/{tourId}/riders/names` | List tour riders with riderId, name, and personalCode | [Riders](#riders) | ✅ | ❌
 | Riders | POST | `/v1/tours/{tourId}/riders` | Register rider for tour | [Riders](#riders) | ✅ | ❌
@@ -138,6 +139,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/profile/{profileId}/tours/{tourId}` | `profileId, tourId` (required) | None | None | `tourId` format: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]`; returns one RiderTours record for the key pair |
 | `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | At least one of: `name, email, phone, emergencyContact, photoS3Key, personalCode, dateOfBirth, gender, address` | Email validated when provided; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD` when provided; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with string fields `line1, line2, city, state, country, postalCode`; `personalCode` normalized to uppercase; duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
 | `POST /v1/riders/profile/{profileId}/picture` | `profileId` (required) | None | Optional: `contentType` | `profileId` must exist; `contentType` in `image/jpeg, image/png`; default `image/jpeg` |
+| `GET /v1/riders/profile/{profileId}/picture` | `profileId` (required) | `expiresIn` (optional) | None | `profileId` must exist and have `photoS3Key` set, else `404`; `expiresIn` is an integer between 60 and 3600 seconds, default 300; returns presigned `downloadUrl` |
 | `GET /v1/tours/{tourId}/riders` | `tourId` (required) | None | None | `tourId` format rule |
 | `GET /v1/tours/{tourId}/riders/names` | `tourId` (required) | None | None | Returns lightweight list with `riderId`, `name`, and `personalCode`; requires authenticated user with `READ` permission |
 | `POST /v1/tours/{tourId}/riders` | `tourId` (required) | None | Required: `profileId`; Optional: `riderId, experienceLevel, medicalConditions, specialRequirements` | Tour exists with status `PLANNING/ACTIVE`; profile exists; duplicate profile registration rejected (`ALREADY_REGISTERED`); generates temp riderId if omitted |

@@ -1495,6 +1495,106 @@ class TestUploadProfilePicture:
 
 
 # ============================================================================
+# GET PROFILE PICTURE TESTS
+# ============================================================================
+
+class TestGetProfilePicture:
+    """Tests for GET /v1/riders/profile/{profileId}/picture"""
+
+    @patch('get_profile_picture.s3_client')
+    def test_get_picture_success(self, mock_s3, dynamodb_full_mock):
+        """Successfully generate presigned download URL"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        dynamodb_utils.dynamodb.Table('test-rider-table').update_item(
+            Key={'profileId': 'P001'},
+            UpdateExpression='SET photoS3Key = :k',
+            ExpressionAttributeValues={':k': 'profiles/P001/photo.jpg'}
+        )
+
+        mock_s3.generate_presigned_url.return_value = 'https://s3.example.com/presigned-url'
+
+        from get_profile_picture import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/riders/profile/P001/picture',
+            path_params={'profileId': 'P001'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        body = json.loads(response['body'])
+        assert body['success'] is True
+        assert body['data']['downloadUrl'] == 'https://s3.example.com/presigned-url'
+        assert body['data']['photoS3Key'] == 'profiles/P001/photo.jpg'
+        assert body['data']['expiresIn'] == 300
+
+    @patch('get_profile_picture.s3_client')
+    def test_get_picture_profile_not_found(self, mock_s3, dynamodb_full_mock):
+        """Fail when profile does not exist"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_profile_picture import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/riders/profile/NONEXISTENT/picture',
+            path_params={'profileId': 'NONEXISTENT'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 404
+
+    @patch('get_profile_picture.s3_client')
+    def test_get_picture_no_photo_key(self, mock_s3, dynamodb_full_mock):
+        """Fail when profile has no photo uploaded"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from get_profile_picture import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/riders/profile/P001/picture',
+            path_params={'profileId': 'P001'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 404
+
+    @patch('get_profile_picture.s3_client')
+    def test_get_picture_invalid_expires_in(self, mock_s3, dynamodb_full_mock):
+        """Fail when expiresIn is out of range"""
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        dynamodb_utils.dynamodb.Table('test-rider-table').update_item(
+            Key={'profileId': 'P001'},
+            UpdateExpression='SET photoS3Key = :k',
+            ExpressionAttributeValues={':k': 'profiles/P001/photo.jpg'}
+        )
+
+        from get_profile_picture import lambda_handler
+
+        event = _make_event(
+            method='GET',
+            path='/v1/riders/profile/P001/picture',
+            path_params={'profileId': 'P001'},
+            query_params={'expiresIn': '99999'}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+
+
+# ============================================================================
 # LIST NOTIFICATIONS TESTS
 # ============================================================================
 

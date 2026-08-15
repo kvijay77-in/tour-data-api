@@ -108,6 +108,7 @@ Authorization: Bearer <jwt-token>
 - `GET /v1/riders/profile/{profileId}` - Get rider profile
 - `PUT /v1/riders/profile/{profileId}` - Update rider profile
 - `POST /v1/riders/profile/{profileId}/picture` - Generate profile picture upload URL
+- `GET /v1/riders/profile/{profileId}/picture` - Generate profile picture download URL
 - `GET /v1/tours/{tourId}/riders` - Get all riders for a tour
 - `GET /v1/tours/{tourId}/riders/names` - Get all registered riders with riderId and name only
 - `POST /v1/tours/{tourId}/riders` - Register rider for a tour

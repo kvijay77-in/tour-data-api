@@ -84,6 +84,9 @@ class Permission(str, Enum):
     RIDER_EXIT = "RIDER_EXIT"
     """Mark a tour rider as EXITED and revert that action when needed."""
 
+    RIDER_SELF_UPDATE = "RIDER_SELF_UPDATE"
+    """Allow a rider to Create/Update their own profile (name, email, phone)."""
+
 
 # ============================================================================
 # GROUP → PERMISSION MAPPING
@@ -125,6 +128,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
     ],
     "RIDER": [
         Permission.READ,
+        Permission.RIDER_SELF_UPDATE,
     ],
 }
 
