@@ -19,6 +19,14 @@ tour-data-api/
 │   └── SolutionDesign.md             # Architecture and design
 ├── src/
 │   ├── functions/                     # Lambda function handlers
+│   │   ├── artifacts/
+│   │   │   ├── __init__.py
+│   │   │   ├── presign_tour_artifact_upload.py  # POST /v1/artifacts/tour/presign-upload
+│   │   │   ├── presign_ride_artifact_upload.py  # POST /v1/artifacts/ride/presign-upload
+│   │   │   ├── delete_tour_artifact.py          # DELETE /v1/artifacts/tour/{tourId}/{artifactId}
+│   │   │   ├── delete_ride_artifact.py          # DELETE /v1/artifacts/ride/{tourId}/{rideId}/{artifactId}
+│   │   │   ├── get_tour_artifacts.py            # GET /v1/tours/{tourId}/artifacts
+│   │   │   └── get_ride_artifacts.py            # GET /v1/tours/{tourId}/rides/{rideId}/artifacts
 │   │   ├── checkins/
 │   │   │   ├── __init__.py
 │   │   │   ├── cancel_checkin.py      # POST /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel

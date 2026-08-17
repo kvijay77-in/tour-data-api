@@ -33,12 +33,14 @@ Globals:
         RIDER_COGNITO_USER_TABLE: !Ref RiderCognitoUserTable
         TOUR_MASTER_TABLE: !Ref TourMasterTable
         APP_CONFIG_TABLE: !Ref AppConfigTable
+        ARTIFACTS_TABLE: !Ref ArtifactsTable
         # Dynamic table name resolution
         STACK_NAME: !Ref AWS::StackName
         # Metadata
         SUBSCRIPTION_ID: !Ref SubscriptionId
         ENVIRONMENT: !Ref Environment
         PHOTOS_BUCKET: !Ref PhotosBucket
+        ARTIFACTS_BUCKET: !Ref ArtifactsBucket
         MGMT_USER_POOL_ID: !If
           - CreateCognito
           - !Ref CognitoUserPool
@@ -969,6 +971,180 @@ Resources:
           Properties:
             ApiId: !Ref TourDataApi
             Path: /v1/riders/profile/{profileId}/picture
+            Method: GET
+
+  PresignTourArtifactUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/artifacts/
+      Handler: presign_tour_artifact_upload.lambda_handler
+      Description: Generate presigned URL for a tour-level artifact upload
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourMasterTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArtifactsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/artifacts/tour/presign-upload
+            Method: POST
+
+  PresignRideArtifactUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/artifacts/
+      Handler: presign_ride_artifact_upload.lambda_handler
+      Description: Generate presigned URL for a ride-level artifact upload
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourMasterTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArtifactsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/artifacts/ride/presign-upload
+            Method: POST
+
+  DeleteTourArtifactFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/artifacts/
+      Handler: delete_tour_artifact.lambda_handler
+      Description: Delete a tour-level artifact from S3 and metadata
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArtifactsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:DeleteObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/artifacts/tour/{tourId}/{artifactId}
+            Method: DELETE
+
+  DeleteRideArtifactFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/artifacts/
+      Handler: delete_ride_artifact.lambda_handler
+      Description: Delete a ride-level artifact from S3 and metadata
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArtifactsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:DeleteObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/artifacts/ride/{tourId}/{rideId}/{artifactId}
+            Method: DELETE
+
+  GetTourArtifactsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/artifacts/
+      Handler: get_tour_artifacts.lambda_handler
+      Description: Get tour-level artifacts manifest with presigned download URLs
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourMasterTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ArtifactsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*'
+      Events:
+        TourDataHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/artifacts
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/artifacts
+            Method: GET
+
+  GetRideArtifactsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/artifacts/
+      Handler: get_ride_artifacts.lambda_handler
+      Description: Get ride-level artifacts manifest with presigned download URLs
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourMasterTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ArtifactsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*'
+      Events:
+        TourDataHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/artifacts
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/artifacts
             Method: GET
 
   # ============================================================================
@@ -2012,6 +2188,39 @@ Resources:
         - Key: ManagedBy
           Value: SAM
 
+  ArtifactsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-Artifacts'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: artifactFor
+          AttributeType: S
+        - AttributeName: artifactId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: artifactFor
+          KeyType: HASH
+        - AttributeName: artifactId
+          KeyType: RANGE
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Artifacts'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - Key: Owner
+          Value: !Ref ResourceOwner
+
   # ============================================================================
   # Tour-specific tables (TourRider, Ride, CheckIn, User, Notification) are NOT defined here.
   # They are provisioned at runtime by CreateTourFunction when a tour is created.
@@ -2021,6 +2230,56 @@ Resources:
   # ============================================================================
   # S3 BUCKET FOR RIDER PHOTOS
   # ============================================================================
+
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-artifacts-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: !If [IsProd, Enabled, Suspended]
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 90
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-artifacts'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+
+  ArtifactsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactsBucket
+      PolicyDocument:
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt ArtifactsBucket.Arn
+              - !Sub '${ArtifactsBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
   
   PhotosBucket:
     Type: AWS::S3::Bucket
@@ -2119,11 +2378,23 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-AppConfigTable'
 
+  ArtifactsTableName:
+    Description: Artifacts DynamoDB table name
+    Value: !Ref ArtifactsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ArtifactsTable'
+
   PhotosBucketName:
     Description: S3 bucket for rider photos
     Value: !Ref PhotosBucket
     Export:
       Name: !Sub '${AWS::StackName}-PhotosBucket'
+
+  ArtifactsBucketName:
+    Description: S3 bucket for tour and ride artifacts
+    Value: !Ref ArtifactsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-ArtifactsBucket'
 
   StackName:
     Description: Stack name for dynamic tour-specific table name resolution

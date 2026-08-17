@@ -84,6 +84,9 @@ class Permission(str, Enum):
     RIDER_EXIT = "RIDER_EXIT"
     """Mark a tour rider as EXITED and revert that action when needed."""
 
+    ARTIFACT_MANAGE = "ARTIFACT_MANAGE"
+    """Create, update, or delete S3-backed tour/ride artifacts."""
+
     RIDER_SELF_UPDATE = "RIDER_SELF_UPDATE"
     """Allow a rider to Create/Update their own profile (name, email, phone)."""
 
@@ -107,6 +110,8 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.DASHBOARD,
         Permission.NOTIFICATION_MANAGE,
         Permission.RIDER_EXIT,
+        Permission.ARTIFACT_MANAGE,
+        Permission.RIDER_SELF_UPDATE,
     ],
     "SUPER_USER": [
         Permission.READ,

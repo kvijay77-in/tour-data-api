@@ -222,9 +222,69 @@ Both provisioning methods create the same resources: a Tour record in the shared
 
 **Notes:**
 - API readers consume enabled entries only.
-- Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`.
+- Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`.
 
-## Shared Table 5: RiderTours
+## Shared Table 5: Artifacts
+
+**Purpose:** Metadata registry for private, S3-backed tour and ride artifacts.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| artifactFor | String | Partition key; `tourId` for tour-level artifacts or `tourId#rideId` for ride-level artifacts |
+| artifactId | String | Sort key; stable artifact identifier such as `ride-plan` or `gpx-file` |
+| s3Key | String | S3 object key generated from the tour/ride prefix pattern |
+| contentType | String | MIME type of the artifact file |
+| version | Number | Incremented on each upload replacement |
+| sizeBytes | Number | Approximate file size in bytes |
+| uploadedAt | String | ISO 8601 timestamp |
+| uploadedBy | String | Actor or app user who uploaded the artifact |
+| title | String | Human-friendly artifact title |
+
+**Indexes:**
+- Primary Key: `artifactFor` (partition key), `artifactId` (sort key)
+
+**Storage convention:**
+- Tour artifact keys: `tours/{tourId}/{artifactId}.{ext}`
+- Ride artifact keys: `tours/{tourId}/rides/{rideId}/{artifactId}.{ext}`
+
+**Notes:**
+- The artifact list is configured through `AppConfig` entries with `configType = ARTIFACTS`.
+- This design is detailed in [docs/tour-artifacts-handling-design.md](tour-artifacts-handling-design.md).
+
+### Artifacts Read API
+
+The read APIs for tour and ride artifacts return a manifest of available artifacts with presigned download URLs:
+
+**GET /v1/tours/{tourId}/artifacts** (tour-level artifacts)  
+**GET /v1/tours/{tourId}/rides/{rideId}/artifacts** (ride-level artifacts)
+
+Both endpoints support optional query parameters:
+- `artifactId` (string): Filter to a single artifact; returns empty list if not found
+- `expiresIn` (integer): Download URL validity in seconds (60–3600, default 900)
+
+**Response Manifest Item:**
+```json
+{
+  "artifactId": "ride-plan",
+  "s3Key": "tours/TOT-2026/ride-plan.png",
+  "contentType": "image/png",
+  "version": 3,
+  "title": "Route map",
+  "downloadUrl": "https://s3.amazonaws.com/...",
+  "expiresIn": 900,
+  "createdAt": "2026-08-01T09:12:00Z",
+  "updatedAt": "2026-08-05T14:30:00Z"
+}
+```
+
+**Features:**
+- Both TourDataApi and RiderApi expose these endpoints (dual Events in Lambda)
+- Requires `Permission.READ` (gated by Cognito authorizer)
+- Returns empty list when a tour/ride has no artifacts
+- Presigned URLs valid for the specified `expiresIn` duration
+- Version field can be used by clients to detect stale local caches
+
+## Shared Table 6: RiderTours
 
 **Purpose:** Track rider participation lifecycle per tour using `profileId + tourId`.
 

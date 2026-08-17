@@ -10,6 +10,7 @@ This API supports managing cycling tours with approximately 100 riders, 7-8 ride
 - **Tour Management**: Tour lifecycle, rider enrollment
 - **Ride Management**: Daily ride scheduling, route planning
 - **Check-in System**: Recording rider arrivals at checkpoints (Normal/Not Riding/Quit Riding)
+- **Tour Artifacts**: Upload, store, and retrieve tour-level and ride-level artifacts (maps, GPX files, elevation charts, rider booklets) in S3
 - **Dashboard**: Real-time ride status and statistics
 - **User Management**: Admin and staff access control
 

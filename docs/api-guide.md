@@ -75,6 +75,12 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit` | Mark rider as exited from tour | [Riders](#riders) | ✅ | ❌
 | Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit/cancel` | Cancel rider exit and restore previous status | [Riders](#riders) | ✅ | ❌
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) | ✅ | ❌
+| Artifacts | POST | `/v1/artifacts/tour/presign-upload` | Generate presigned upload URL for a tour artifact | [Artifacts](#artifacts) | ✅ | ❌
+| Artifacts | POST | `/v1/artifacts/ride/presign-upload` | Generate presigned upload URL for a ride artifact | [Artifacts](#artifacts) | ✅ | ❌
+| Artifacts | DELETE | `/v1/artifacts/tour/{tourId}/{artifactId}` | Delete a tour artifact | [Artifacts](#artifacts) | ✅ | ❌
+| Artifacts | DELETE | `/v1/artifacts/ride/{tourId}/{rideId}/{artifactId}` | Delete a ride artifact | [Artifacts](#artifacts) | ✅ | ❌
+| Artifacts | GET | `/v1/tours/{tourId}/artifacts` | Get tour artifacts manifest | [Artifacts](#artifacts) | ✅ | ✅
+| Artifacts | GET | `/v1/tours/{tourId}/rides/{rideId}/artifacts` | Get ride artifacts manifest | [Artifacts](#artifacts) | ✅ | ✅
 | Rides | GET | `/v1/tours/{tourId}/rides/today` | Get today's ride | [Rides](#rides) | ✅ | ✅
 | Rides | GET | `/v1/tours/{tourId}/rides` | List rides | [Rides](#rides) | ✅ | ✅
 | Rides | GET | `/v1/tours/{tourId}/rides/{rideId}` | Get ride | [Rides](#rides) | ✅ | ✅
@@ -147,6 +153,17 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `POST /v1/tours/{tourId}/riders/{riderId}/exit` | `tourId, riderId` (required) | None | None | Updates existing row only; sets `status=EXITED`, `prevStatus=<previous status>`, `exitedAt`, `exitedBy`, and `updatedAt`; returns `409 RIDER_ALREADY_EXITED` when already exited; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
 | `POST /v1/tours/{tourId}/riders/{riderId}/exit/cancel` | `tourId, riderId` (required) | None | None | Valid only when current status is `EXITED`; restores `status` from `prevStatus`; removes `prevStatus`, `exitedAt`, `exitedBy`; returns `400 INVALID_EXIT_CANCEL_INVOCATION` for non-EXITED status; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
 | `GET /v1/tours/{tourId}/riders/{riderId}/statistics` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must exist in tour |
+
+#### Artifacts
+
+| Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
+|---|---|---|---|---|
+| `POST /v1/artifacts/tour/presign-upload` | None | None | Required: `tourId, artifactId, contentType`; optional `fileName` | Requires `ARTIFACT_MANAGE`; `tourId` must exist; artifact type must be configured under `ARTIFACTS` with `category=tour`; `contentType` must be in the allow-list; returns presigned S3 `put_object` URL and persisted metadata item |
+| `POST /v1/artifacts/ride/presign-upload` | None | None | Required: `tourId, rideId, artifactId, contentType`; optional `fileName` | Requires `ARTIFACT_MANAGE`; `tourId` and `rideId` must exist; artifact type must be configured with `category=ride`; `contentType` must be in the allow-list; returns presigned `put_object` URL and metadata item |
+| `DELETE /v1/artifacts/tour/{tourId}/{artifactId}` | `tourId, artifactId` (required) | None | None | Requires `ARTIFACT_MANAGE`; deletes the S3 object and corresponding Artifacts table record; returns `404` when not found |
+| `DELETE /v1/artifacts/ride/{tourId}/{rideId}/{artifactId}` | `tourId, rideId, artifactId` (required) | None | None | Requires `ARTIFACT_MANAGE`; deletes the ride-scoped S3 object and metadata; returns `404` when not found |
+| `GET /v1/tours/{tourId}/artifacts` | `tourId` (required) | `artifactId` (optional), `expiresIn` (optional) | None | Requires `READ`; `tourId` must exist; returns list of artifacts with presigned download URLs; `artifactId` filters to single artifact; `expiresIn` is integer between 60 and 3600 seconds (default 900); empty list if no artifacts found |
+| `GET /v1/tours/{tourId}/rides/{rideId}/artifacts` | `tourId, rideId` (required) | `artifactId` (optional), `expiresIn` (optional) | None | Requires `READ`; `tourId` and `rideId` must exist; returns list of ride artifacts with presigned download URLs; `artifactId` filters to single artifact; `expiresIn` is integer between 60 and 3600 seconds (default 900); empty list if no artifacts found |
 
 #### Rides
 

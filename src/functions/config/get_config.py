@@ -35,7 +35,7 @@ from rbac import Permission, require_permission
 
 logger = get_logger(__name__)
 
-SUPPORTED_CONFIG_TYPES = {"ID_CODE_FORMAT", "ID_CODE_TYPE"}
+SUPPORTED_CONFIG_TYPES = {"ID_CODE_FORMAT", "ID_CODE_TYPE", "ARTIFACTS"}
 
 
 def _parse_config_types(raw_value: str) -> List[str]:

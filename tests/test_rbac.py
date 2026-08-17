@@ -19,6 +19,7 @@ from moto import mock_aws
 import sys
 sys.path.insert(0, 'src/layers/common')
 
+from rbac import Permission
 from tests.fixtures.mock_data import (
     MOCK_TOUR_ID, MOCK_TOURS, MOCK_TOUR_RIDERS, MOCK_RIDES,
     MOCK_RIDER_PROFILES, MOCK_CHECKINS
@@ -217,6 +218,16 @@ class TestHasAnyGroup:
     def test_has_matching_group(self):
         from rbac import has_any_group
         assert has_any_group(['ADMINISTRATOR'], ['ADMINISTRATOR', 'SUPER_USER']) is True
+
+
+def test_artifact_manage_permission_is_admin_only():
+    from rbac import GROUP_PERMISSIONS
+
+    assert Permission.ARTIFACT_MANAGE in GROUP_PERMISSIONS['ADMINISTRATOR']
+    assert Permission.ARTIFACT_MANAGE not in GROUP_PERMISSIONS['SUPER_USER']
+    assert Permission.ARTIFACT_MANAGE not in GROUP_PERMISSIONS['HOTEL_STAFF']
+    assert Permission.ARTIFACT_MANAGE not in GROUP_PERMISSIONS['GUEST']
+    assert Permission.ARTIFACT_MANAGE not in GROUP_PERMISSIONS['RIDER']
 
     def test_no_matching_group(self):
         from rbac import has_any_group

@@ -129,6 +129,12 @@ class RiderGender(str, Enum):
     PREFER_NOT_TO_SAY = "Prefer not to say"
 
 
+class ArtifactCategory(str, Enum):
+    """Artifact category scope values."""
+    TOUR = "tour"
+    RIDE = "ride"
+
+
 # ============================================================================
 # TOUR-SPECIFIC TABLE TYPES (for dynamic table name resolution)
 # ============================================================================

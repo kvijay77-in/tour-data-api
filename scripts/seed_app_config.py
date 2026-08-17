@@ -75,6 +75,29 @@ def build_seed_items(updated_by):
             }
         )
 
+    artifact_types = [
+        ('ride-plan', 'tour', 'Tour of Tamil Nadu - Ride Plan'),
+        ('rider-docket', 'tour', 'Rider Docket'),
+        ('tour-elevation', 'tour', 'Tour Elevation'),
+        ('ride-elevation', 'ride', 'Ride Elevation'),
+        ('gpx-file', 'ride', 'Ride route GPX File'),
+        ('cue-sheet', 'ride', 'Cue Sheet'),
+    ]
+
+    for artifact_id, category, description in artifact_types:
+        items.append(
+            {
+                'configType': 'ARTIFACTS',
+                'configId': artifact_id,
+                'enabled': True,
+                'description': description,
+                'version': 1,
+                'updatedAt': now,
+                'updatedBy': updated_by,
+                'config': {'category': category},
+            }
+        )
+
     return items
 
 

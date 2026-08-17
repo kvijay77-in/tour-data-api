@@ -15,6 +15,7 @@ This page provides a guide to all project documentation.
 | [API Guide](api-guide.md) | API endpoints, mandatory attributes, validation rules, status codes, and authorization matrix |
 | [Requirements](Requirements.md) | Detailed functional and non-functional requirements, use cases, and business rules |
 | [Solution Design](SolutionDesign.md) | Architecture documentation, data model specifications, and technical design |
+| [Tour Artifacts Design](tour-artifacts-handling-design.md) | Tour and ride artifact management design — S3 storage, metadata model, read/write APIs |
 | [Project Structure](project-structure.md) | Project folder organization, file structure, and code organization |
 
 ## Quick Navigation

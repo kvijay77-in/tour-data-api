@@ -36,6 +36,9 @@ This is a future roadmap item. This App is for riders to use for pre-registratio
 ## Excel Report
 Data can be extracted during various of the tour starting from pre-registration to post-tour analysis to Excel. This data can be used for all external (out side of the Apps capability) activities and to prepare reports. No tool or development has been done yet.
 
+## Tour Artifacts Management
+Tour and ride artifacts such as route maps, GPX files, elevation charts, and rider booklets must be stored centrally in S3 and tracked in DynamoDB metadata. The system must allow administrators to upload and replace these artifact files while keeping the asset list configurable through the shared AppConfig table. The artifact model and storage conventions are defined in the design document [docs/tour-artifacts-handling-design.md](tour-artifacts-handling-design.md).
+
 # Data Set
 
 Following are expected to be maintained in one or more DynamoDB tables. Tour Riders, Ride Detail, Check-In registry and User Profile are considered tour data and should be managed per tour which will make data management easy. Tour Entity design is expected to be part of data model design phase and the same will be reviewed before development can begin.

@@ -83,6 +83,26 @@ def app_config_mock(aws_credentials):
             'config': {'code': '0', 'type': None, 'name': 'Blank'},
         })
 
+        table.put_item(Item={
+            'configType': 'ARTIFACTS',
+            'configId': 'ride-plan',
+            'enabled': True,
+            'version': 1,
+            'updatedAt': '2026-08-01T00:00:00Z',
+            'updatedBy': 'seed',
+            'config': {'category': 'tour'},
+        })
+
+        table.put_item(Item={
+            'configType': 'ARTIFACTS',
+            'configId': 'ride-elevation',
+            'enabled': True,
+            'version': 1,
+            'updatedAt': '2026-08-01T00:00:00Z',
+            'updatedBy': 'seed',
+            'config': {'category': 'ride'},
+        })
+
         os.environ['APP_CONFIG_TABLE'] = 'test-app-config-table'
         os.environ['LOG_LEVEL'] = 'INFO'
 
@@ -121,7 +141,7 @@ def test_get_config_default_returns_all_enabled(app_config_mock):
 
     body = json.loads(response['body'])
     items = body['data']['items']
-    assert len(items) == 2
+    assert len(items) == 4
     assert all(item['enabled'] is True for item in items)
 
 
@@ -136,7 +156,7 @@ def test_get_config_all_alias_returns_all_enabled(app_config_mock):
     assert response['statusCode'] == 200
 
     body = json.loads(response['body'])
-    assert len(body['data']['items']) == 2
+    assert len(body['data']['items']) == 4
 
 
 def test_get_config_single_type(app_config_mock):
@@ -170,6 +190,23 @@ def test_get_config_multiple_types(app_config_mock):
     items = body['data']['items']
     assert len(items) == 2
     assert {item['configType'] for item in items} == {'ID_CODE_FORMAT', 'ID_CODE_TYPE'}
+
+
+def test_get_config_artifacts_type(app_config_mock):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from get_config import lambda_handler
+
+    response = lambda_handler(_event(query={'configType': 'ARTIFACTS'}), None)
+    assert response['statusCode'] == 200
+
+    body = json.loads(response['body'])
+    items = body['data']['items']
+    assert len(items) == 2
+    assert {item['configId'] for item in items} == {'ride-plan', 'ride-elevation'}
+    assert {item['config']["category"] for item in items} == {'tour', 'ride'}
 
 
 def test_get_config_invalid_type(app_config_mock):

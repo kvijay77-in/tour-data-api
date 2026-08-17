@@ -14,6 +14,19 @@ RIDER_ADDRESS_REQUIRED_FIELDS = ('line1', 'city', 'country', 'postalCode')
 RIDER_ADDRESS_OPTIONAL_FIELDS = ('line2', 'state')
 RIDER_ADDRESS_ALLOWED_FIELDS = RIDER_ADDRESS_REQUIRED_FIELDS + RIDER_ADDRESS_OPTIONAL_FIELDS
 EMERGENCY_CONTACT_FIELDS = ('name', 'phone', 'relation')
+ALLOWED_ARTIFACT_CONTENT_TYPES = {
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+    'image/webp',
+    'application/pdf',
+    'application/gpx+xml',
+    'application/xml',
+    'text/xml',
+    'text/plain',
+    'application/octet-stream',
+}
+ARTIFACT_CATEGORIES = {'tour', 'ride'}
 
 
 class ValidationError(Exception):
@@ -46,6 +59,54 @@ def validate_rider_id(rider_id: str) -> None:
         raise ValidationError(
             f"Rider ID number out of range: {num}. Must be between 1 and 999",
             {"field": "riderId", "value": rider_id}
+        )
+
+
+def validate_artifact_id(artifact_id: str) -> None:
+    """Validate artifact IDs used in app config and storage keys."""
+    if not artifact_id or not isinstance(artifact_id, str):
+        raise ValidationError(
+            "Artifact ID is required and must be a non-empty string",
+            {"field": "artifactId", "value": artifact_id},
+        )
+
+    normalized = artifact_id.strip()
+    if not re.match(r'^[a-z0-9][a-z0-9-]*$', normalized):
+        raise ValidationError(
+            f"Invalid artifact ID: '{artifact_id}'. Expected lowercase letters, numbers, and hyphens only",
+            {"field": "artifactId", "value": artifact_id},
+        )
+
+
+def validate_artifact_content_type(content_type: str) -> None:
+    """Validate the MIME type for a stored artifact."""
+    if not content_type or not isinstance(content_type, str):
+        raise ValidationError(
+            "contentType is required and must be a string",
+            {"field": "contentType", "value": content_type},
+        )
+
+    normalized = content_type.strip().lower()
+    if normalized not in ALLOWED_ARTIFACT_CONTENT_TYPES:
+        raise ValidationError(
+            f"Unsupported artifact contentType: '{content_type}'. Allowed values: {sorted(ALLOWED_ARTIFACT_CONTENT_TYPES)}",
+            {"field": "contentType", "value": content_type},
+        )
+
+
+def validate_artifact_category(category: str) -> None:
+    """Validate artifact category values used by AppConfig and APIs."""
+    if not category or not isinstance(category, str):
+        raise ValidationError(
+            "Artifact category is required and must be a string",
+            {"field": "category", "value": category},
+        )
+
+    normalized = category.strip().lower()
+    if normalized not in ARTIFACT_CATEGORIES:
+        raise ValidationError(
+            f"Unsupported artifact category: '{category}'. Supported values: {sorted(ARTIFACT_CATEGORIES)}",
+            {"field": "category", "value": category},
         )
 
 
