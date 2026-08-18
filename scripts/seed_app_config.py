@@ -79,6 +79,7 @@ def build_seed_items(updated_by):
         ('ride-plan', 'tour', 'Tour of Tamil Nadu - Ride Plan'),
         ('rider-docket', 'tour', 'Rider Docket'),
         ('tour-elevation', 'tour', 'Tour Elevation'),
+        ('training-challenge', 'tour', 'Training Challenge'),
         ('ride-elevation', 'ride', 'Ride Elevation'),
         ('gpx-file', 'ride', 'Ride route GPX File'),
         ('cue-sheet', 'ride', 'Cue Sheet'),
