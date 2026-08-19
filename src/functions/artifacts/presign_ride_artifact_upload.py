@@ -8,7 +8,7 @@ import boto3
 
 sys.path.insert(0, '/opt/python')
 
-from dynamodb_utils import get_item, get_tour_item, put_item, query_items
+from dynamodb_utils import get_item, get_tour_item, put_tour_item, query_items
 from logger import get_logger, log_event
 from models import utc_now_iso
 from rbac import Permission, require_permission
@@ -114,8 +114,9 @@ def lambda_handler(event, context):
             return internal_error_response('Artifacts bucket not configured')
 
         artifact_for = f'{tour_id}#{ride_id}'
-        existing = get_item(
-            table_name_env='ARTIFACTS_TABLE',
+        existing = get_tour_item(
+            table_type='Artifacts',
+            tour_id=tour_id,
             key={'artifactFor': artifact_for, 'artifactId': artifact_id},
         )
         version = int(existing.get('version', 0)) + 1 if existing else 1
@@ -134,7 +135,7 @@ def lambda_handler(event, context):
             'updatedAt': updated_at,
         }
 
-        put_item('ARTIFACTS_TABLE', item=metadata)
+        put_tour_item('Artifacts', tour_id, item=metadata)
 
         presigned_url = s3_client.generate_presigned_url(
             'put_object',

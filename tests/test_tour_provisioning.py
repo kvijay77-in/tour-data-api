@@ -82,7 +82,7 @@ class TestTourTableDefinitions:
         assert 'checkInId' in key_attrs
 
     def test_other_tables_have_simple_key(self):
-        """TourRider, Ride, User tables have single partition keys"""
+        """TourRider, Ride, and User tables have single partition keys"""
         expected_keys = {
             'TourRider': ['riderId'],
             'Ride': ['rideId'],
@@ -93,6 +93,12 @@ class TestTourTableDefinitions:
             key_attrs = [k['AttributeName'] for k in definition['KeySchema']]
             assert key_attrs == expected, \
                 f"{table_type} should have {expected} key"
+
+    def test_artifacts_table_has_composite_key(self):
+        """Artifacts table uses artifactFor and artifactId as its composite key."""
+        artifacts_definition = TOUR_TABLE_DEFINITIONS['Artifacts']
+        key_attrs = [key['AttributeName'] for key in artifacts_definition['KeySchema']]
+        assert key_attrs == ['artifactFor', 'artifactId']
 
 
 class TestBuildTourTableTags:
@@ -131,10 +137,10 @@ class TestBuildTourTableTags:
 class TestProvisionTourTables:
     """Test end-to-end tour table provisioning"""
 
-    def test_provision_creates_all_four_tables(self, dynamodb_client_mock):
-        """Provisioning creates all 5 tour-specific tables"""
+    def test_provision_creates_all_tour_tables(self, dynamodb_client_mock):
+        """Provisioning creates all six tour-specific tables."""
         created = provision_tour_tables(dynamodb_client_mock, MOCK_TOUR_ID)
-        assert len(created) == 5
+        assert len(created) == 6
 
         # Verify table names
         expected_prefix = f"{MOCK_STACK_NAME}-"
@@ -151,6 +157,7 @@ class TestProvisionTourTables:
             f"{MOCK_STACK_NAME}-CheckIn-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-User-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-Notification-{MOCK_TOUR_ID}",
+            f"{MOCK_STACK_NAME}-Artifacts-{MOCK_TOUR_ID}",
         ]
         assert sorted(created) == sorted(expected_names)
 

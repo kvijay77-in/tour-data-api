@@ -10,6 +10,8 @@ Tour-specific tables:
 - Ride-{tourId}: Daily ride configurations
 - CheckIn-{tourId}: Check-in records
 - User-{tourId}: Staff/crew user assignments
+- Notification-{tourId}: Tour rider notifications
+- Artifacts-{tourId}: Tour and ride artifact metadata
 """
 
 import os
@@ -129,6 +131,16 @@ TOUR_TABLE_DEFINITIONS = {
             },
         ],
     },
+    'Artifacts': {
+        'AttributeDefinitions': [
+            {'AttributeName': 'artifactFor', 'AttributeType': 'S'},
+            {'AttributeName': 'artifactId', 'AttributeType': 'S'},
+        ],
+        'KeySchema': [
+            {'AttributeName': 'artifactFor', 'KeyType': 'HASH'},
+            {'AttributeName': 'artifactId', 'KeyType': 'RANGE'},
+        ],
+    },
 }
 
 
@@ -165,7 +177,7 @@ def create_tour_table(dynamodb_client, table_type, tour_id):
 
     Args:
         dynamodb_client: boto3 DynamoDB client
-        table_type: Table type (TourRider, Ride, CheckIn, User)
+        table_type: Tour-specific table type
         tour_id: Tour identifier
 
     Returns:
@@ -224,7 +236,7 @@ def wait_for_tour_tables(dynamodb_client, table_names, max_wait=90):
 
 def provision_tour_tables(dynamodb_client, tour_id):
     """
-    Provision all 4 tour-specific DynamoDB tables for a tour
+    Provision all tour-specific DynamoDB tables for a tour
 
     Args:
         dynamodb_client: boto3 DynamoDB client

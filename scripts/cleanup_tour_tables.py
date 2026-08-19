@@ -8,7 +8,7 @@ are NOT removed by 'sam delete'.
 
 Tour-specific tables follow the naming pattern:
     {stack_name}-{TableType}-{tourId}
-where TableType is one of: TourRider, Ride, CheckIn, User
+where TableType is one of: TourRider, Ride, CheckIn, User, Notification, Artifacts
 
 Detection strategy:
     1. Lists all DynamoDB tables in the region
@@ -38,7 +38,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 # Tour-specific table types (must match models.TOUR_TABLE_TYPES)
-TOUR_TABLE_TYPES = ('TourRider', 'Ride', 'CheckIn', 'User')
+TOUR_TABLE_TYPES = ('TourRider', 'Ride', 'CheckIn', 'User', 'Notification', 'Artifacts')
 
 
 def find_tour_tables(dynamodb_client, stack_name):
@@ -55,7 +55,7 @@ def find_tour_tables(dynamodb_client, stack_name):
     Returns:
         List of matching table names sorted alphabetically
     """
-    # Build regex: {stack_name}-(TourRider|Ride|CheckIn|User)-{tourId}
+    # Build regex: {stack_name}-{TableType}-{tourId}
     types_pattern = '|'.join(re.escape(t) for t in TOUR_TABLE_TYPES)
     pattern = re.compile(rf'^{re.escape(stack_name)}-({types_pattern})-.+$')
 

@@ -3,7 +3,7 @@
 Tour provisioning CLI script
 
 Provisions a new tour by creating a Tour record in the shared TourMaster table
-and creating 4 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User).
+and creating all tour-specific DynamoDB tables.
 
 This script provides the deployment-time method for tour provisioning,
 complementing the API method (POST /v1/tours) used by external apps.

@@ -174,14 +174,14 @@ tour-data-api/
 - Sample JSON payloads for testing Lambda functions locally with `sam local invoke`
 
 ### Infrastructure as Code
-- **`template.yaml`**: AWS SAM template defining all AWS resources (Lambda functions, API Gateway HTTP API, Cognito User Pool + Groups, shared DynamoDB tables, S3 bucket, IAM roles). Cognito is auto-created by default, including the standard management groups (`ADMINISTRATOR`, `SUPER_USER`, `HOTEL_STAFF`, `GUEST`) and five predefined pit-stop groups (`PS_1_USER` to `PS_5_USER`). Tour-specific tables (TourRider, Ride, CheckIn, User, Notification) are provisioned at runtime by `create_tour.py`.
+- **`template.yaml`**: AWS SAM template defining all AWS resources (Lambda functions, API Gateway HTTP API, Cognito User Pool + Groups, shared DynamoDB tables, S3 bucket, IAM roles). Cognito is auto-created by default, including the standard management groups (`ADMINISTRATOR`, `SUPER_USER`, `HOTEL_STAFF`, `GUEST`) and five predefined pit-stop groups (`PS_1_USER` to `PS_5_USER`). Tour-specific tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) are provisioned at runtime by `create_tour.py`.
 - **`samconfig.toml`**: SAM CLI configuration for different environments (dev, test, prod)
 - **`Makefile`**: Automation scripts for common tasks (build, deploy, test, logs, preflight check, OIDC setup)
 - **`cloudformation/github-oidc.yaml`**: Bootstrap template for GitHub OIDC authentication (deployed once per AWS account)
 - **`scripts/preflight-check.sh`**: Pre-deployment checks for AWS CLI, SAM CLI, Python, credentials, and template validity
 - **`scripts/dev-test-setup.sh`**: Exports environment variables (API endpoint, JWT token, etc.) for dev API testing
-- **`scripts/provision_tour.py`**: CLI tool for provisioning tours during deployment. Creates Tour record and 4 tour-specific DynamoDB tables. This is the deployment-time equivalent of the `POST /v1/tours` API endpoint.
-- **`scripts/cleanup_tour_tables.py`**: Deletes tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User) that are created at runtime and not managed by CloudFormation. Runs automatically as part of `make delete` and can also be used standalone.
+- **`scripts/provision_tour.py`**: CLI tool for provisioning tours during deployment. Creates a Tour record and 6 tour-specific DynamoDB tables. This is the deployment-time equivalent of the `POST /v1/tours` API endpoint.
+- **`scripts/cleanup_tour_tables.py`**: Deletes tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) that are created at runtime and not managed by CloudFormation. Runs automatically as part of `make delete` and can also be used standalone.
 - **`scripts/simulate/`**: Test data simulation utility. Uses YAML scenario configs to generate and load realistic test data (rider profiles, tour riders, rides, check-ins) into DynamoDB. See `scripts/simulate/README.md` for full documentation.
 
 ### CI/CD (`.github/workflows/`)

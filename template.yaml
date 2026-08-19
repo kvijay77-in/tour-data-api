@@ -9,7 +9,7 @@ Description: >
   Table Strategy: Hybrid (Shared + Tour-Specific)
   - Shared tables (SAM-managed): RiderProfile, TourMaster
   - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
-    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}
+    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId}
 
 Metadata:
   cfn-lint:
@@ -33,7 +33,6 @@ Globals:
         RIDER_COGNITO_USER_TABLE: !Ref RiderCognitoUserTable
         TOUR_MASTER_TABLE: !Ref TourMasterTable
         APP_CONFIG_TABLE: !Ref AppConfigTable
-        ARTIFACTS_TABLE: !Ref ArtifactsTable
         # Dynamic table name resolution
         STACK_NAME: !Ref AWS::StackName
         # Metadata
@@ -986,9 +985,13 @@ Resources:
             TableName: !Ref TourMasterTable
         - DynamoDBReadPolicy:
             TableName: !Ref AppConfigTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ArtifactsTable
         - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Artifacts-*'
             - Effect: Allow
               Action:
                 - s3:PutObject
@@ -1015,9 +1018,18 @@ Resources:
             TableName: !Ref TourMasterTable
         - DynamoDBReadPolicy:
             TableName: !Ref AppConfigTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ArtifactsTable
         - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Artifacts-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Ride-*'
             - Effect: Allow
               Action:
                 - s3:PutObject
@@ -1040,9 +1052,13 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ArtifactsTable
         - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:DeleteItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Artifacts-*'
             - Effect: Allow
               Action:
                 - s3:DeleteObject
@@ -1065,9 +1081,13 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ArtifactsTable
         - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:DeleteItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Artifacts-*'
             - Effect: Allow
               Action:
                 - s3:DeleteObject
@@ -1092,8 +1112,12 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref TourMasterTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref ArtifactsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Artifacts-*'
         - Statement:
             - Effect: Allow
               Action:
@@ -1125,8 +1149,14 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref TourMasterTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref ArtifactsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Artifacts-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Ride-*'
         - Statement:
             - Effect: Allow
               Action:
@@ -2188,41 +2218,8 @@ Resources:
         - Key: ManagedBy
           Value: SAM
 
-  ArtifactsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub '${AWS::StackName}-Artifacts'
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
-      SSESpecification:
-        SSEEnabled: true
-      AttributeDefinitions:
-        - AttributeName: artifactFor
-          AttributeType: S
-        - AttributeName: artifactId
-          AttributeType: S
-      KeySchema:
-        - AttributeName: artifactFor
-          KeyType: HASH
-        - AttributeName: artifactId
-          KeyType: RANGE
-      Tags:
-        - Key: Name
-          Value: !Sub '${AWS::StackName}-Artifacts'
-        - Key: Project
-          Value: tour-data-api
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Application
-          Value: TourManagement
-        - Key: ManagedBy
-          Value: SAM
-        - Key: Owner
-          Value: !Ref ResourceOwner
-
   # ============================================================================
-  # Tour-specific tables (TourRider, Ride, CheckIn, User, Notification) are NOT defined here.
+  # Tour-specific tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) are NOT defined here.
   # They are provisioned at runtime by CreateTourFunction when a tour is created.
   # Table naming: {StackName}-{TableType}-{tourId}
   # ============================================================================
@@ -2377,12 +2374,6 @@ Outputs:
     Value: !Ref AppConfigTable
     Export:
       Name: !Sub '${AWS::StackName}-AppConfigTable'
-
-  ArtifactsTableName:
-    Description: Artifacts DynamoDB table name
-    Value: !Ref ArtifactsTable
-    Export:
-      Name: !Sub '${AWS::StackName}-ArtifactsTable'
 
   PhotosBucketName:
     Description: S3 bucket for rider photos

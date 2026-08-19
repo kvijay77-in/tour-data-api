@@ -96,6 +96,7 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 | **CheckIn-{tourId}** | Check-in records for the specific tour |
 | **User-{tourId}** | Admin/staff user assignments for the specific tour |
 | **Notification-{tourId}** | Notifications for tour riders (announcements, alerts, personal messages) |
+| **Artifacts-{tourId}** | Metadata registry for the specific tour's S3-backed tour and ride artifacts |
 
 ### Table Naming Convention
 
@@ -103,7 +104,7 @@ All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables 
 
 Examples (stack name: `dev`, tour ID: `TOT-2026`):
 - Shared: `dev-RiderProfile`, `dev-RiderTours`, `dev-RiderCognitoUser`, `dev-TourMaster`, `dev-AppConfig`
-- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`
+- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`, `dev-Artifacts-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
 
@@ -116,7 +117,7 @@ Lambda functions resolve shared table names via environment variables (set by SA
 3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
 4. **De-provisioning:** For one-off usage, the operator can delete tour tables or the entire stack
 
-Both provisioning methods create the same resources: a Tour record in the shared TourMaster table and 5 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification) with identical schemas and configurations. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
+Both provisioning methods create the same resources: a Tour record in the shared TourMaster table and 6 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) with identical schemas and configurations. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
 
 ### Key Design Benefits
 
@@ -224,9 +225,9 @@ Both provisioning methods create the same resources: a Tour record in the shared
 - API readers consume enabled entries only.
 - Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`.
 
-## Shared Table 5: Artifacts
+## Tour-Specific Table 6: Artifacts-{tourId}
 
-**Purpose:** Metadata registry for private, S3-backed tour and ride artifacts.
+**Purpose:** Metadata registry for private, S3-backed tour and ride artifacts. One table is created per tour during provisioning.
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
@@ -684,7 +685,7 @@ tour-data-api/
 10. **CloudWatch Logs:** For monitoring and debugging
 
 ### Managed at Runtime (Tour Provisioning)
-1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId}, Notification-{tourId} (with GSIs)
+1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId} (with GSIs where required)
 2. Created by the shared tour provisioning utility (`src/layers/common/tour_provisioning.py`) via boto3
 3. Follow the same naming convention, tagging, and billing mode as SAM-managed tables
 
@@ -698,7 +699,7 @@ For use during initial setup, CI/CD pipelines, or by operators:
 1. Run `make provision-tour` or `python scripts/provision_tour.py` with tour parameters
 2. Script resolves the TourMaster table name from CloudFormation stack outputs
 3. Creates a Tour record in the shared TourMaster table (status: PROVISIONING)
-4. Creates 5 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`, `{STACK_NAME}-Notification-{tourId}`
+4. Creates 6 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`, `{STACK_NAME}-Notification-{tourId}`, `{STACK_NAME}-Artifacts-{tourId}`
 5. Tables are created with on-demand billing, encryption, and standard tags
 6. Once all tables are active, Tour status is updated to PLANNING
 

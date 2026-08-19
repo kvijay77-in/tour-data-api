@@ -49,7 +49,7 @@ Tour-specific tables can be created through two methods:
 1. **CLI Script (Deployment Method):** `make provision-tour` or `python scripts/provision_tour.py` — for initial setup or CI/CD pipelines
 2. **API Endpoint (Runtime Method):** `POST /v1/tours` — for external apps (e.g., Check-In App) to create tours programmatically
 
-Both methods create the same Tour record and 5 tour-specific tables. See [Deployment Guide → After Deployment: Provisioning a Tour](docs/deployment-guide.md#after-deployment-provisioning-a-tour) for details.
+Both methods create the same Tour record and 6 tour-specific tables. See [Deployment Guide → After Deployment: Provisioning a Tour](docs/deployment-guide.md#after-deployment-provisioning-a-tour) for details.
 
 ## Business Rules
 

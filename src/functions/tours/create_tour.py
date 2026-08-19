@@ -2,7 +2,7 @@
 Create and provision a new tour Lambda function
 
 Creates the Tour record in the shared TourMaster table and provisions
-4 tour-specific DynamoDB tables: TourRider, Ride, CheckIn, User.
+tour-specific DynamoDB tables.
 """
 
 import sys
@@ -42,7 +42,7 @@ def lambda_handler(event, context):
     
     Creates:
         1. Tour record in shared TourMaster table (status: PROVISIONING)
-        2. Four tour-specific DynamoDB tables
+        2. Tour-specific DynamoDB tables
         3. Updates Tour status to PLANNING once tables are active
     """
     try:

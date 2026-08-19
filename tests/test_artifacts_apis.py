@@ -15,14 +15,13 @@ sys.path.insert(0, 'src/functions/artifacts')
 def artifact_environment():
     os.environ['TOUR_MASTER_TABLE'] = 'test-tour-master-table'
     os.environ['APP_CONFIG_TABLE'] = 'test-app-config-table'
-    os.environ['ARTIFACTS_TABLE'] = 'test-artifacts-table'
     os.environ['ARTIFACTS_BUCKET'] = 'test-artifacts-bucket'
     os.environ['STACK_NAME'] = 'test-stack'
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
 
     yield
 
-    for key in ['TOUR_MASTER_TABLE', 'APP_CONFIG_TABLE', 'ARTIFACTS_TABLE', 'ARTIFACTS_BUCKET', 'STACK_NAME']:
+    for key in ['TOUR_MASTER_TABLE', 'APP_CONFIG_TABLE', 'ARTIFACTS_BUCKET', 'STACK_NAME']:
         os.environ.pop(key, None)
 
 
@@ -75,7 +74,7 @@ def artifact_tables(artifact_environment):
         ride_table.put_item(Item={'rideId': 'RIDE001', 'date': '2026-02-10'})
 
         artifacts_table = dynamodb.create_table(
-            TableName='test-artifacts-table',
+            TableName='test-stack-Artifacts-TOT-2026',
             KeySchema=[
                 {'AttributeName': 'artifactFor', 'KeyType': 'HASH'},
                 {'AttributeName': 'artifactId', 'KeyType': 'RANGE'},

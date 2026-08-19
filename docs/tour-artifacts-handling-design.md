@@ -45,9 +45,9 @@ A single `tourId` is the parent prefix for everything related to that tour. Ride
 
 ### 2. Artifact metadata
 
-**Table: `Artifacts`**
+**Table: `Artifacts-{tourId}`**
 
-A new DynamoDB table should be created using Cloud Formation deployment. Partition key `artifactFor` is string and it can be unambiguous `tourId` or `tourId#rideId` and artifact name as Sort Key, `artifactId` make it all unique.
+Each tour's metadata table is created by tour provisioning, not CloudFormation. The partition key `artifactFor` is a string and can be the `tourId` for tour artifacts or `tourId#rideId` for ride artifacts; `artifactId` is the sort key. The table is resolved from the request `tourId` as `{STACK_NAME}-Artifacts-{tourId}`.
 
 **Tour Artifact**
 ```json

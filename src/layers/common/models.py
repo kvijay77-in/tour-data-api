@@ -7,7 +7,7 @@ and returned by the API endpoints.
 Table Strategy (Hybrid):
 - Shared tables (SAM-managed): RiderProfile, RiderCognitoUser, TourMaster
 - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
-    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}
+    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId}
 """
 
 from typing import Optional, List, Dict, Any
@@ -139,7 +139,7 @@ class ArtifactCategory(str, Enum):
 # TOUR-SPECIFIC TABLE TYPES (for dynamic table name resolution)
 # ============================================================================
 
-TOUR_TABLE_TYPES = ['TourRider', 'Ride', 'CheckIn', 'User', 'Notification']
+TOUR_TABLE_TYPES = ['TourRider', 'Ride', 'CheckIn', 'User', 'Notification', 'Artifacts']
 
 
 # ============================================================================

@@ -1,7 +1,7 @@
 """
 Get ride artifacts manifest Lambda function.
 
-Queries the Artifacts table for a ride and returns presigned download URLs.
+Queries the tour-specific Artifacts table for a ride and returns presigned download URLs.
 Route: GET /v1/tours/{tourId}/rides/{rideId}/artifacts
 """
 
@@ -13,7 +13,7 @@ import boto3
 
 sys.path.insert(0, '/opt/python')
 
-from dynamodb_utils import get_item, get_tour_item, query_items
+from dynamodb_utils import get_item, get_tour_item, query_tour_items
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, not_found_response, success_response
@@ -93,8 +93,9 @@ def lambda_handler(event, context):
 
         # Query artifacts for this ride (artifactFor = tourId#rideId)
         artifact_for = f"{tour_id}#{ride_id}"
-        artifacts = query_items(
-            table_name_env='ARTIFACTS_TABLE',
+        artifacts = query_tour_items(
+            table_type='Artifacts',
+            tour_id=tour_id,
             key_condition_expression='artifactFor = :artifactFor',
             expression_values={':artifactFor': artifact_for},
         )

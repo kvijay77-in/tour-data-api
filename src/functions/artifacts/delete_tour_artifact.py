@@ -7,14 +7,13 @@ import boto3
 
 sys.path.insert(0, '/opt/python')
 
-from dynamodb_utils import get_item
+from dynamodb_utils import get_tour_item, get_tour_table
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, not_found_response, success_response
 
 logger = get_logger(__name__)
 s3_client = boto3.client('s3')
-dynamodb = boto3.resource('dynamodb')
 
 
 def lambda_handler(event, context):
@@ -34,8 +33,9 @@ def lambda_handler(event, context):
             return bad_request_response('artifactId is required in path')
 
         artifact_for = tour_id
-        existing = get_item(
-            table_name_env='ARTIFACTS_TABLE',
+        existing = get_tour_item(
+            table_type='Artifacts',
+            tour_id=tour_id,
             key={'artifactFor': artifact_for, 'artifactId': artifact_id},
         )
         if not existing:
@@ -49,7 +49,7 @@ def lambda_handler(event, context):
         if s3_key:
             s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
 
-        dynamodb.Table(os.environ['ARTIFACTS_TABLE']).delete_item(
+        get_tour_table('Artifacts', tour_id).delete_item(
             Key={'artifactFor': artifact_for, 'artifactId': artifact_id}
         )
 

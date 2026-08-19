@@ -79,6 +79,7 @@ These instructions are general for our interaction and MUST BE STRICTLY FOLLOWED
 ### Additional Guidelines
 - Ensure code is modular and reusable. 
 - Follow RESTful principles for any additional API development.
+- Tour specific data should be stored in separate 'tour-specific' DynamoDB tables for each tour to ensure data isolation and scalability.
 
 ### AWS Cost Management
 - Always look for free tier options and optimize resource usage.
