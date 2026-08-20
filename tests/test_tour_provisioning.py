@@ -139,7 +139,11 @@ class TestProvisionTourTables:
 
     def test_provision_creates_all_tour_tables(self, dynamodb_client_mock):
         """Provisioning creates all six tour-specific tables."""
-        created = provision_tour_tables(dynamodb_client_mock, MOCK_TOUR_ID)
+        created = provision_tour_tables(
+            dynamodb_client_mock,
+            MOCK_TOUR_ID,
+            ignore_existing=True,
+        )
         assert len(created) == 6
 
         # Verify table names
@@ -150,7 +154,11 @@ class TestProvisionTourTables:
 
     def test_provision_creates_correct_table_names(self, dynamodb_client_mock):
         """Provisioned tables follow naming convention"""
-        created = provision_tour_tables(dynamodb_client_mock, MOCK_TOUR_ID)
+        created = provision_tour_tables(
+            dynamodb_client_mock,
+            MOCK_TOUR_ID,
+            ignore_existing=True,
+        )
         expected_names = [
             f"{MOCK_STACK_NAME}-TourRider-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-Ride-{MOCK_TOUR_ID}",
@@ -163,7 +171,11 @@ class TestProvisionTourTables:
 
     def test_provisioned_tables_are_active(self, dynamodb_client_mock):
         """All provisioned tables are in ACTIVE status"""
-        created = provision_tour_tables(dynamodb_client_mock, MOCK_TOUR_ID)
+        created = provision_tour_tables(
+            dynamodb_client_mock,
+            MOCK_TOUR_ID,
+            ignore_existing=True,
+        )
 
         for table_name in created:
             resp = dynamodb_client_mock.describe_table(TableName=table_name)
@@ -195,6 +207,25 @@ class TestProvisionTourTables:
 
         resp = dynamodb_client_mock.describe_table(TableName=table_name)
         assert resp['Table']['TableStatus'] == 'ACTIVE'
+
+    def test_provision_rerun_ignores_existing_tables(self, dynamodb_client_mock):
+        """Rerun provisioning creates missing tables and ignores existing ones."""
+        provision_tour_tables(dynamodb_client_mock, MOCK_TOUR_ID)
+        missing_table = f"{MOCK_STACK_NAME}-Artifacts-{MOCK_TOUR_ID}"
+        dynamodb_client_mock.delete_table(TableName=missing_table)
+
+        created = provision_tour_tables(
+            dynamodb_client_mock,
+            MOCK_TOUR_ID,
+            ignore_existing=True,
+        )
+
+        assert len(created) == 6
+        for table_type in TOUR_TABLE_TYPES:
+            resp = dynamodb_client_mock.describe_table(
+                TableName=f"{MOCK_STACK_NAME}-{table_type}-{MOCK_TOUR_ID}"
+            )
+            assert resp['Table']['TableStatus'] == 'ACTIVE'
 
 
 if __name__ == '__main__':

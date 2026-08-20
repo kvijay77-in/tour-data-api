@@ -439,12 +439,13 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
     - RiderCognitoUser
     - TourMaster (with StatusIndex GSI)
     - AppConfig
-  - **Tour-specific (runtime-provisioned per tour, 5 tables each)**:
+  - **Tour-specific (runtime-provisioned per tour, 6 tables each)**:
     - TourRider-{tourId}
     - Ride-{tourId} (with DateIndex, StatusIndex GSIs)
     - CheckIn-{tourId} (with RideIndex GSI)
     - User-{tourId}
     - Notification-{tourId}
+    - Artifacts-{tourId}
 
 ### API Endpoints
 

@@ -8,6 +8,7 @@ Tests the Lambda functions with the hybrid table strategy:
 
 import os
 import json
+import importlib
 import pytest
 import boto3
 from moto import mock_aws
@@ -19,6 +20,34 @@ sys.path.insert(0, 'src/functions/tours')
 
 from tests.fixtures.mock_data import MOCK_TOURS, MOCK_TOUR_ID
 from models import TourStatus
+
+
+def _make_auth_event(method='GET', body=None, path_params=None, groups=None):
+    """Build a minimal authenticated API Gateway v2 event."""
+    claims = {
+        'sub': 'user-001',
+        'email': 'user@example.com',
+        'cognito:username': 'testuser',
+    }
+    if groups is not None:
+        claims['cognito:groups'] = ','.join(groups)
+
+    return {
+        'version': '2.0',
+        'requestContext': {
+            'http': {'method': method},
+            'authorizer': {'jwt': {'claims': claims}},
+        },
+        'pathParameters': path_params or {},
+        'headers': {},
+        'body': json.dumps(body) if body is not None else None,
+    }
+
+
+def _load_tours_handler(module_name):
+    """Load a tours Lambda handler after moto/env setup."""
+    module = importlib.import_module(module_name)
+    return importlib.reload(module)
 
 
 @pytest.fixture
@@ -166,6 +195,65 @@ def test_dynamodb_utils_shared_tables(dynamodb_mock):
     )
     assert len(items) == 1
     assert items[0]['tourId'] == MOCK_TOUR_ID
+
+
+def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
+    """PUT /v1/tours updates TourMaster and provisions tour tables."""
+    update_tour = _load_tours_handler('update_tour')
+    event = _make_auth_event(
+        method='PUT',
+        groups=['ADMINISTRATOR'],
+        body={
+            'tourId': MOCK_TOUR_ID,
+            'name': 'Updated Test Tour',
+            'startDate': '2026-02-12',
+            'endDate': '2026-02-18',
+            'status': 'planning',
+        },
+    )
+
+    response = update_tour.lambda_handler(event, None)
+
+    assert response['statusCode'] == 200
+    body = json.loads(response['body'])
+    assert body['success'] is True
+    assert body['data']['tour']['name'] == 'Updated Test Tour'
+    assert body['data']['tour']['status'] == TourStatus.PLANNING.value
+    assert len(body['data']['provisionedTables']) == 6
+
+    table = dynamodb_mock.Table('test-tour-master-table')
+    saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
+    assert saved['name'] == 'Updated Test Tour'
+    assert saved['startDate'] == '2026-02-12'
+
+
+def test_update_tour_provision_only_skips_master_update(dynamodb_mock):
+    """provisionOnly reruns provisioning without updating TourMaster."""
+    update_tour = _load_tours_handler('update_tour')
+    event = _make_auth_event(
+        method='PUT',
+        groups=['ADMINISTRATOR'],
+        body={
+            'tourId': MOCK_TOUR_ID,
+            'provisionOnly': True,
+            'name': 'Should Not Be Saved',
+        },
+    )
+
+    response = update_tour.lambda_handler(event, None)
+
+    assert response['statusCode'] == 200
+    body = json.loads(response['body'])
+    assert body['success'] is True
+    assert body['data']['provisionOnly'] is True
+    assert body['data']['tour']['name'] == MOCK_TOURS[0]['name']
+
+    table = dynamodb_mock.Table('test-tour-master-table')
+    saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
+    assert saved == MOCK_TOURS[0]
+
+    dynamodb_client = boto3.client('dynamodb', region_name='us-east-1')
+    dynamodb_client.describe_table(TableName=f'test-stack-Artifacts-{MOCK_TOUR_ID}')
 
 
 if __name__ == '__main__':

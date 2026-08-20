@@ -102,6 +102,7 @@ Authorization: Bearer <jwt-token>
 - `GET /v1/tours/{tourId}` - Get tour details
 - `GET /v1/tours` - List all tours (optional `?status=` filter)
 - `POST /v1/tours` - Create and provision a new tour
+- `PUT /v1/tours` - Update a tour and rerun table provisioning; supports `provisionOnly`
 - `POST /v1/tours/{tourId}/archive` - Archive a completed tour
 
 #### Riders

@@ -234,7 +234,7 @@ make provision-tour \
   ENV=prod
 ```
 
-The script creates the Tour record in the shared TourMaster table and provisions 5 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification).
+The script creates the Tour record in the shared TourMaster table and provisions 6 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts).
 
 ### Method 2: API Endpoint (Runtime Method)
 
@@ -253,7 +253,9 @@ curl -X POST https://<api-url>/v1/tours \
   }'
 ```
 
-Both methods produce the same result: a Tour record and 5 tour-specific DynamoDB tables.
+Both methods produce the same result: a Tour record and 6 tour-specific DynamoDB tables.
+
+To update an existing TourMaster item and rerun table provisioning, use `PUT /v1/tours`. Existing tour-specific tables are ignored; missing tables or newly defined table types are created. To rerun provisioning without updating TourMaster, send `"provisionOnly": true`.
 
 > **Note**: The API method is designed for use by external apps like the Check-In App. The actual integration from these apps is out of scope for this project — this API capability is provided for their use.
 
@@ -303,7 +305,7 @@ An "Unauthorized" response means the API is running and authentication is workin
 
 Detailed inventory of everything deployment creates in your AWS account.
 
-### Lambda Functions (All 25)
+### Lambda Functions
 
 | Function | Endpoint | Purpose |
 |---|---|---|
@@ -311,6 +313,7 @@ Detailed inventory of everything deployment creates in your AWS account.
 | GetTourFunction | `GET /v1/tours/{tourId}` | Get tour details |
 | ListToursFunction | `GET /v1/tours` | List all tours |
 | CreateTourFunction | `POST /v1/tours` | Create tour and provision tables |
+| UpdateTourFunction | `PUT /v1/tours` | Update tour and rerun table provisioning |
 | ArchiveTourFunction | `POST /v1/tours/{tourId}/archive` | Archive completed tour |
 | GetRiderProfileFunction | `GET /v1/riders/profile/{profileId}` | Get rider profile |
 | ListRiderTourParticipationsFunction | `GET /v1/profile/{profileId}/tours` | List rider participation details across all tours for a profile |

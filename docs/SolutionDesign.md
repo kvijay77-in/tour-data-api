@@ -111,13 +111,14 @@ Lambda functions resolve shared table names via environment variables (set by SA
 ### Tour Lifecycle and Table Management
 
 1. **Provisioning:** Tour-specific tables are created when a new tour is provisioned. Two methods are available:
-   - **CLI Script (Deployment Method):** `scripts/provision_tour.py` or `make provision-tour` — runs locally or in CI/CD pipelines, creates Tour record + 5 tables via boto3 directly
+   - **CLI Script (Deployment Method):** `scripts/provision_tour.py` or `make provision-tour` — runs locally or in CI/CD pipelines, creates Tour record + 6 tables via boto3 directly
    - **API Endpoint (Runtime Method):** `POST /v1/tours` — used by external apps (e.g., Check-In App) to create tours programmatically. The actual integration from external apps is out of scope for this project; this API capability is provided for their use.
+   - **API Repair/Update Method:** `PUT /v1/tours` — updates an existing TourMaster record and reruns provisioning. Existing tour-specific tables are ignored so the call can create missing tables or newly defined table types. `provisionOnly=true` skips TourMaster updates and only reruns provisioning.
 2. **Active use:** Lambda functions resolve tour-specific table names using `{STACK_NAME}-{TableType}-{tourId}`
 3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
 4. **De-provisioning:** For one-off usage, the operator can delete tour tables or the entire stack
 
-Both provisioning methods create the same resources: a Tour record in the shared TourMaster table and 6 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) with identical schemas and configurations. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
+Provisioning methods create the same resources: a Tour record in the shared TourMaster table and 6 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) with identical schemas and configurations. Rerun provisioning is idempotent for existing tables and creates only missing tables. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
 
 ### Key Design Benefits
 

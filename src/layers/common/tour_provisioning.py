@@ -24,6 +24,9 @@ from dynamodb_utils import get_tour_table_name
 from models import TOUR_TABLE_TYPES
 
 
+TABLE_ALREADY_EXISTS_CODE = 'ResourceInUseException'
+
+
 # Table definitions for tour-specific tables
 TOUR_TABLE_DEFINITIONS = {
     'TourRider': {
@@ -171,7 +174,7 @@ def build_tour_table_tags(tour_id):
     return tags
 
 
-def create_tour_table(dynamodb_client, table_type, tour_id):
+def create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=False):
     """
     Create a single tour-specific DynamoDB table
 
@@ -179,6 +182,7 @@ def create_tour_table(dynamodb_client, table_type, tour_id):
         dynamodb_client: boto3 DynamoDB client
         table_type: Tour-specific table type
         tour_id: Tour identifier
+        ignore_existing: When true, existing tables are returned without error
 
     Returns:
         Created table name
@@ -198,7 +202,13 @@ def create_tour_table(dynamodb_client, table_type, tour_id):
     if definition.get('GlobalSecondaryIndexes'):
         create_params['GlobalSecondaryIndexes'] = definition['GlobalSecondaryIndexes']
 
-    dynamodb_client.create_table(**create_params)
+    try:
+        dynamodb_client.create_table(**create_params)
+    except ClientError as e:
+        if ignore_existing and e.response['Error']['Code'] == TABLE_ALREADY_EXISTS_CODE:
+            return table_name
+        raise
+
     return table_name
 
 
@@ -234,13 +244,14 @@ def wait_for_tour_tables(dynamodb_client, table_names, max_wait=90):
         raise TimeoutError(f"Tables did not become ACTIVE within {max_wait}s: {pending}")
 
 
-def provision_tour_tables(dynamodb_client, tour_id):
+def provision_tour_tables(dynamodb_client, tour_id, ignore_existing=False):
     """
     Provision all tour-specific DynamoDB tables for a tour
 
     Args:
         dynamodb_client: boto3 DynamoDB client
         tour_id: Tour identifier
+        ignore_existing: When true, existing tables are ignored for rerun provisioning
 
     Returns:
         List of created table names
@@ -250,7 +261,12 @@ def provision_tour_tables(dynamodb_client, tour_id):
     """
     created_tables = []
     for table_type in TOUR_TABLE_TYPES:
-        table_name = create_tour_table(dynamodb_client, table_type, tour_id)
+        table_name = create_tour_table(
+            dynamodb_client,
+            table_type,
+            tour_id,
+            ignore_existing=ignore_existing,
+        )
         created_tables.append(table_name)
 
     wait_for_tour_tables(dynamodb_client, created_tables)

@@ -655,6 +655,38 @@ class TestCreateTourRBAC:
 
 
 # ---------------------------------------------------------------------------
+# update_tour RBAC tests
+# ---------------------------------------------------------------------------
+
+class TestUpdateTourRBAC:
+    def test_administrator_allowed(self, rbac_dynamodb):
+        update_tour = _load_handler('tours', 'update_tour')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            body={
+                'tourId': MOCK_TOUR_ID,
+                'provisionOnly': True,
+            },
+            method='PUT'
+        )
+        response = update_tour.lambda_handler(event, None)
+        assert response['statusCode'] != 403
+
+    def test_super_user_denied(self, rbac_dynamodb):
+        update_tour = _load_handler('tours', 'update_tour')
+        event = _make_event(
+            groups=['SUPER_USER'],
+            body={
+                'tourId': MOCK_TOUR_ID,
+                'provisionOnly': True,
+            },
+            method='PUT'
+        )
+        response = update_tour.lambda_handler(event, None)
+        assert response['statusCode'] == 403
+
+
+# ---------------------------------------------------------------------------
 # create_ride RBAC tests
 # ---------------------------------------------------------------------------
 

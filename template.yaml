@@ -514,6 +514,34 @@ Resources:
             Path: /v1/tours
             Method: POST
 
+  UpdateTourFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/tours/
+      Handler: update_tour.lambda_handler
+      Description: Update a tour and rerun tour-specific DynamoDB table provisioning
+      Timeout: 120
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TourMasterTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:CreateTable
+                - dynamodb:DescribeTable
+                - dynamodb:TagResource
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours
+            Method: PUT
+
   ArchiveTourFunction:
     Type: AWS::Serverless::Function
     Properties:

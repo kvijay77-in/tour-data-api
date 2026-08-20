@@ -56,6 +56,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Tours | GET | `/v1/tours/{tourId}` | Get tour details | [Tours](#tours) | ✅ | ✅
 | Tours | GET | `/v1/tours` | List tours | [Tours](#tours) | ✅ | ✅
 | Tours | POST | `/v1/tours` | Create and provision tour | [Tours](#tours) | ✅ | ❌
+| Tours | PUT | `/v1/tours` | Update tour and rerun provisioning | [Tours](#tours) | ✅ | ❌
 | Tours | POST | `/v1/tours/{tourId}/archive` | Archive tour | [Tours](#tours) | ✅ | ❌
 | Riders | POST | `/v1/riders/profile` | Create rider profile | [Riders](#riders) | ❌ | ✅
 | Riders | POST | `/v1/riders/profile/{profileId}` | Create rider profile | [Riders](#riders) | ❌ | ✅
@@ -128,7 +129,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/active` | None | None | None | No body required |
 | `GET /v1/tours/{tourId}` | `tourId` (required) | None | None | `tourId`: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]` |
 | `GET /v1/tours` | None | `status` (optional) | None | `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED` |
-| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate`; Optional: `description` | `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; provisions 5 tour tables |
+| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate`; Optional: `description` | `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; provisions 6 tour tables |
+| `PUT /v1/tours` | None | None | Required: `tourId`; Optional: `name, startDate, endDate, description, status, provisionOnly` | Tour must exist; `tourId` format; dates `YYYY-MM-DD`; `endDate >= startDate`; `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; reruns provisioning and ignores existing tables; when `provisionOnly=true`, skips TourMaster update and only reruns provisioning |
 | `POST /v1/tours/{tourId}/archive` | `tourId` (required) | `exportToS3` (optional, default true), `deleteTables` (optional, default true) | None | Tour exists; status must be `ACTIVE` or `COMPLETED`; ARCHIVED cannot be archived again |
 
 #### Riders
@@ -233,6 +235,25 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
   "startDate": "2026-02-10",
   "endDate": "2026-02-17",
   "description": "Annual coastal cycling tour"
+}
+```
+
+#### Update Tour
+```json
+{
+  "tourId": "TOT-2026",
+  "name": "Tour of Tamilnadu 2026 - Updated",
+  "startDate": "2026-02-10",
+  "endDate": "2026-02-18",
+  "status": "PLANNING"
+}
+```
+
+#### Rerun Tour Provisioning Only
+```json
+{
+  "tourId": "TOT-2026",
+  "provisionOnly": true
 }
 ```
 
