@@ -73,6 +73,8 @@ def lambda_handler(event, context):
     Body:
         tourId: Existing tour identifier (required)
         provisionOnly: When true, skip TourMaster update and only rerun provisioning
+        provisioning: Whether to (re)run table provisioning (optional, default false).
+            Defaults to true when provisionOnly is true and provisioning is omitted.
         name: Tour name (optional)
         startDate: ISO 8601 date (optional)
         endDate: ISO 8601 date (optional)
@@ -94,8 +96,20 @@ def lambda_handler(event, context):
         try:
             validate_tour_id(tour_id)
             _validate_optional_bool(body.get('provisionOnly'), 'provisionOnly')
+            _validate_optional_bool(body.get('provisioning'), 'provisioning')
         except ValidationError as e:
             return bad_request_response(str(e))
+
+        provision_only = body.get('provisionOnly', False)
+
+        if 'provisioning' in body:
+            provisioning = body['provisioning']
+            if provision_only and not provisioning:
+                return bad_request_response(
+                    "provisioning cannot be false when provisionOnly is true"
+                )
+        else:
+            provisioning = provision_only
 
         tour = get_item(
             table_name_env='TOUR_MASTER_TABLE',
@@ -103,8 +117,6 @@ def lambda_handler(event, context):
         )
         if not tour:
             return not_found_response("Tour", tour_id)
-
-        provision_only = body.get('provisionOnly', False)
 
         if provision_only:
             updated_tour = tour
@@ -123,6 +135,14 @@ def lambda_handler(event, context):
 
             updated_tour['updatedAt'] = utc_now_iso()
             put_item('TOUR_MASTER_TABLE', updated_tour)
+
+        if not provisioning:
+            return success_response({
+                'tour': updated_tour,
+                'provisionOnly': provision_only,
+                'provisioning': provisioning,
+                'provisionedTables': [],
+            })
 
         try:
             provisioned_tables = provision_tour_tables(
@@ -148,6 +168,7 @@ def lambda_handler(event, context):
         return success_response({
             'tour': updated_tour,
             'provisionOnly': provision_only,
+            'provisioning': provisioning,
             'provisionedTables': provisioned_tables,
         })
 

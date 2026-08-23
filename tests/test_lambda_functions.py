@@ -197,8 +197,84 @@ def test_dynamodb_utils_shared_tables(dynamodb_mock):
     assert items[0]['tourId'] == MOCK_TOUR_ID
 
 
+def test_create_tour_defaults_to_master_record_only(dynamodb_mock):
+    """POST /v1/tours saves TourMaster only when provisioning is omitted."""
+    create_tour = _load_tours_handler('create_tour')
+    event = _make_auth_event(
+        method='POST',
+        groups=['ADMINISTRATOR'],
+        body={
+            'tourId': 'NewTour-2026',
+            'name': 'New Test Tour',
+            'startDate': '2026-06-01',
+            'endDate': '2026-06-10',
+        },
+    )
+
+    response = create_tour.lambda_handler(event, None)
+
+    assert response['statusCode'] == 201
+    body = json.loads(response['body'])
+    assert body['success'] is True
+    assert body['data']['status'] == TourStatus.PLANNING.value
+    assert 'provisioning' not in body['data']
+    assert 'provisionedAt' not in body['data']
+
+    table = dynamodb_mock.Table('test-tour-master-table')
+    saved = table.get_item(Key={'tourId': 'NewTour-2026'})['Item']
+    assert saved['status'] == TourStatus.PLANNING.value
+    assert 'provisioning' not in saved
+
+    dynamodb_client = boto3.client('dynamodb', region_name='us-east-1')
+    table_names = dynamodb_client.list_tables()['TableNames']
+    assert f"test-stack-TourRider-NewTour-2026" not in table_names
+
+
+def test_create_tour_provisions_tables_when_requested(dynamodb_mock):
+    """POST /v1/tours provisions tour tables only when provisioning is true."""
+    create_tour = _load_tours_handler('create_tour')
+    event = _make_auth_event(
+        method='POST',
+        groups=['ADMINISTRATOR'],
+        body={
+            'tourId': 'ProvisionedTour-2026',
+            'name': 'Provisioned Test Tour',
+            'startDate': '2026-06-01',
+            'endDate': '2026-06-10',
+            'provisioning': True,
+        },
+    )
+
+    response = create_tour.lambda_handler(event, None)
+
+    assert response['statusCode'] == 201
+    body = json.loads(response['body'])
+    assert body['success'] is True
+    assert body['data']['status'] == TourStatus.PLANNING.value
+    assert 'provisioning' not in body['data']
+    assert 'provisionedAt' in body['data']
+
+    table = dynamodb_mock.Table('test-tour-master-table')
+    saved = table.get_item(Key={'tourId': 'ProvisionedTour-2026'})['Item']
+    assert saved['status'] == TourStatus.PLANNING.value
+    assert 'provisioning' not in saved
+
+    dynamodb_client = boto3.client('dynamodb', region_name='us-east-1')
+    expected_names = [
+        f"test-stack-TourRider-ProvisionedTour-2026",
+        f"test-stack-Ride-ProvisionedTour-2026",
+        f"test-stack-CheckIn-ProvisionedTour-2026",
+        f"test-stack-User-ProvisionedTour-2026",
+        f"test-stack-Notification-ProvisionedTour-2026",
+        f"test-stack-Artifacts-ProvisionedTour-2026",
+    ]
+    table_names = dynamodb_client.list_tables()['TableNames']
+    for table_name in expected_names:
+        assert table_name in table_names
+
+
 def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
-    """PUT /v1/tours updates TourMaster and provisions tour tables."""
+    """PUT /v1/tours updates TourMaster and provisions tour tables when provisioning=true."""
     update_tour = _load_tours_handler('update_tour')
     event = _make_auth_event(
         method='PUT',
@@ -209,6 +285,7 @@ def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
             'startDate': '2026-02-12',
             'endDate': '2026-02-18',
             'status': 'planning',
+            'provisioning': True,
         },
     )
 
@@ -225,6 +302,69 @@ def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
     saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
     assert saved['name'] == 'Updated Test Tour'
     assert saved['startDate'] == '2026-02-12'
+
+
+def test_update_tour_default_provisioning_false_skips_provisioning(dynamodb_mock):
+    """PUT /v1/tours without provisioning/provisionOnly only updates TourMaster."""
+    update_tour = _load_tours_handler('update_tour')
+    event = _make_auth_event(
+        method='PUT',
+        groups=['ADMINISTRATOR'],
+        body={
+            'tourId': MOCK_TOUR_ID,
+            'name': 'Updated Test Tour',
+        },
+    )
+
+    response = update_tour.lambda_handler(event, None)
+
+    assert response['statusCode'] == 200
+    body = json.loads(response['body'])
+    assert body['success'] is True
+    assert body['data']['provisioning'] is False
+    assert body['data']['provisionedTables'] == []
+
+    table = dynamodb_mock.Table('test-tour-master-table')
+    saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
+    assert saved['name'] == 'Updated Test Tour'
+
+
+def test_update_tour_provision_only_defaults_provisioning_true(dynamodb_mock):
+    """provisionOnly=true implies provisioning=true when provisioning is omitted."""
+    update_tour = _load_tours_handler('update_tour')
+    event = _make_auth_event(
+        method='PUT',
+        groups=['ADMINISTRATOR'],
+        body={
+            'tourId': MOCK_TOUR_ID,
+            'provisionOnly': True,
+        },
+    )
+
+    response = update_tour.lambda_handler(event, None)
+
+    assert response['statusCode'] == 200
+    body = json.loads(response['body'])
+    assert body['data']['provisioning'] is True
+    assert len(body['data']['provisionedTables']) == 6
+
+
+def test_update_tour_provisioning_false_conflicts_with_provision_only(dynamodb_mock):
+    """provisioning=false with provisionOnly=true is rejected."""
+    update_tour = _load_tours_handler('update_tour')
+    event = _make_auth_event(
+        method='PUT',
+        groups=['ADMINISTRATOR'],
+        body={
+            'tourId': MOCK_TOUR_ID,
+            'provisionOnly': True,
+            'provisioning': False,
+        },
+    )
+
+    response = update_tour.lambda_handler(event, None)
+
+    assert response['statusCode'] == 400
 
 
 def test_update_tour_provision_only_skips_master_update(dynamodb_mock):

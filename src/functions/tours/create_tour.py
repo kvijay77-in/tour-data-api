@@ -1,8 +1,8 @@
 """
-Create and provision a new tour Lambda function
+Create a new tour Lambda function
 
-Creates the Tour record in the shared TourMaster table and provisions
-tour-specific DynamoDB tables.
+Creates the Tour record in the shared TourMaster table and optionally
+provisions tour-specific DynamoDB tables.
 """
 
 import sys
@@ -31,7 +31,7 @@ dynamodb_client = boto3.client('dynamodb')
 
 def lambda_handler(event, context):
     """
-    Create and provision a new tour
+    Create a new tour
     
     Body:
         tourId: Free-form tour identifier (required, 3-50 chars)
@@ -39,11 +39,12 @@ def lambda_handler(event, context):
         startDate: ISO 8601 date (required)
         endDate: ISO 8601 date (required)
         description: Tour description (optional)
+        provisioning: Whether to provision tour-specific tables (optional, default false)
     
     Creates:
-        1. Tour record in shared TourMaster table (status: PROVISIONING)
-        2. Tour-specific DynamoDB tables
-        3. Updates Tour status to PLANNING once tables are active
+        1. Tour record in shared TourMaster table
+        2. Tour-specific DynamoDB tables only when provisioning is true
+        3. Updates Tour status to PLANNING once requested tables are active
     """
     try:
         log_event(logger, event)
@@ -89,14 +90,18 @@ def lambda_handler(event, context):
         if existing:
             return conflict_response(f"Tour '{tour_id}' already exists")
         
-        # Create Tour record with PROVISIONING status
+        provisioning = body.get('provisioning', False)
+        if not isinstance(provisioning, bool):
+            return bad_request_response("provisioning must be a boolean")
+        
+        # Create Tour record. Provisioning is request-only and is not stored.
         now = utc_now_iso()
         tour_item = {
             'tourId': tour_id,
             'name': body['name'],
             'startDate': body['startDate'],
             'endDate': body['endDate'],
-            'status': TourStatus.PROVISIONING.value,
+            'status': TourStatus.PROVISIONING.value if provisioning else TourStatus.PLANNING.value,
             'createdAt': now,
             'updatedAt': now,
         }
@@ -105,7 +110,10 @@ def lambda_handler(event, context):
             tour_item['description'] = body['description']
         
         put_item('TOUR_MASTER_TABLE', tour_item)
-        logger.info(f"Tour record created: {tour_id} (status: PROVISIONING)")
+        logger.info(f"Tour record created: {tour_id} (status: {tour_item['status']})")
+        
+        if not provisioning:
+            return success_response(tour_item, status_code=201)
         
         # Provision tour-specific tables
         created_tables = []

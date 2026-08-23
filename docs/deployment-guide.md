@@ -184,11 +184,13 @@ Creates or updates all required resources in your AWS account.
 | CloudWatch Log Groups | 20 | Monitoring and debugging logs |
 | JWT Authorizer | 1 | Validates user login tokens |
 
-**Tour-specific tables** (created at runtime when a tour is created via `POST /v1/tours`):
+**Tour-specific tables** (created at runtime when a tour is provisioned via the CLI script, `PUT /v1/tours`, or `POST /v1/tours` with `"provisioning": true`):
 - `TourRider-{tourId}` — Rider enrollment
 - `Ride-{tourId}` — Daily rides and routes
 - `CheckIn-{tourId}` — Check-in records
 - `User-{tourId}` — Staff accounts
+- `Notification-{tourId}` — Tour notifications
+- `Artifacts-{tourId}` — Tour and ride artifact metadata
 
 When a tour is archived, these tables can be exported and deleted to save costs.
 
@@ -253,9 +255,25 @@ curl -X POST https://<api-url>/v1/tours \
   }'
 ```
 
-Both methods produce the same result: a Tour record and 6 tour-specific DynamoDB tables.
+By default, `POST /v1/tours` creates only the TourMaster record. To provision the 6 tour-specific DynamoDB tables in the same request, include `"provisioning": true`. The `provisioning` request attribute is not stored in TourMaster.
 
-To update an existing TourMaster item and rerun table provisioning, use `PUT /v1/tours`. Existing tour-specific tables are ignored; missing tables or newly defined table types are created. To rerun provisioning without updating TourMaster, send `"provisionOnly": true`.
+```bash
+curl -X POST https://<api-url>/v1/tours \
+  -H "Authorization: Bearer <jwt-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tourId": "TOT-2026",
+    "name": "Tour of Tamilnadu 2026",
+    "startDate": "2026-02-10",
+    "endDate": "2026-02-17",
+    "description": "Season 2: Chera Nadu II",
+    "provisioning": true
+  }'
+```
+
+When API provisioning is requested, it uses the same shared provisioning logic as the CLI method.
+
+To update an existing TourMaster item, use `PUT /v1/tours`. By default, `provisioning` is `false`, so only the TourMaster item is updated and table provisioning is skipped. To also rerun table provisioning, send `"provisioning": true`; existing tour-specific tables are ignored and only missing tables or newly defined table types are created. To rerun provisioning without updating TourMaster, send `"provisionOnly": true` (this implies `provisioning: true` unless `provisioning` is explicitly set — sending `"provisioning": false` together with `"provisionOnly": true` is rejected).
 
 > **Note**: The API method is designed for use by external apps like the Check-In App. The actual integration from these apps is out of scope for this project — this API capability is provided for their use.
 
@@ -312,7 +330,7 @@ Detailed inventory of everything deployment creates in your AWS account.
 | GetActiveTourFunction | `GET /v1/tours/active` | Get currently active tour |
 | GetTourFunction | `GET /v1/tours/{tourId}` | Get tour details |
 | ListToursFunction | `GET /v1/tours` | List all tours |
-| CreateTourFunction | `POST /v1/tours` | Create tour and provision tables |
+| CreateTourFunction | `POST /v1/tours` | Create tour and optionally provision tables |
 | UpdateTourFunction | `PUT /v1/tours` | Update tour and rerun table provisioning |
 | ArchiveTourFunction | `POST /v1/tours/{tourId}/archive` | Archive completed tour |
 | GetRiderProfileFunction | `GET /v1/riders/profile/{profileId}` | Get rider profile |
