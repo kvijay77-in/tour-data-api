@@ -665,7 +665,7 @@ class TestUpdateTourRBAC:
             groups=['ADMINISTRATOR'],
             body={
                 'tourId': MOCK_TOUR_ID,
-                'provisionOnly': True,
+                'name': 'Updated Tour',
             },
             method='PUT'
         )
@@ -678,11 +678,33 @@ class TestUpdateTourRBAC:
             groups=['SUPER_USER'],
             body={
                 'tourId': MOCK_TOUR_ID,
-                'provisionOnly': True,
+                'name': 'Updated Tour',
             },
             method='PUT'
         )
         response = update_tour.lambda_handler(event, None)
+        assert response['statusCode'] == 403
+
+
+class TestProvisionTourRBAC:
+    def test_administrator_allowed(self, rbac_dynamodb):
+        provision_tour = _load_handler('tours', 'provision_tour')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            method='PUT'
+        )
+        response = provision_tour.lambda_handler(event, None)
+        assert response['statusCode'] != 403
+
+    def test_super_user_denied(self, rbac_dynamodb):
+        provision_tour = _load_handler('tours', 'provision_tour')
+        event = _make_event(
+            groups=['SUPER_USER'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            method='PUT'
+        )
+        response = provision_tour.lambda_handler(event, None)
         assert response['statusCode'] == 403
 
 

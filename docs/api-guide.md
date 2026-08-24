@@ -56,7 +56,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Tours | GET | `/v1/tours/{tourId}` | Get tour details | [Tours](#tours) | ✅ | ✅
 | Tours | GET | `/v1/tours` | List tours | [Tours](#tours) | ✅ | ✅
 | Tours | POST | `/v1/tours` | Create tour, optionally provision tables | [Tours](#tours) | ✅ | ❌
-| Tours | PUT | `/v1/tours` | Update tour and rerun provisioning | [Tours](#tours) | ✅ | ❌
+| Tours | PUT | `/v1/tours` | Update tour and optionally provision it for the first time | [Tours](#tours) | ✅ | ❌
+| Tours | PUT | `/v1/tours/{tourId}/provision` | Re-provision missing tour tables | [Tours](#tours) | ✅ | ❌
 | Tours | POST | `/v1/tours/{tourId}/archive` | Archive tour | [Tours](#tours) | ✅ | ❌
 | Riders | POST | `/v1/riders/profile` | Create rider profile | [Riders](#riders) | ❌ | ✅
 | Riders | POST | `/v1/riders/profile/{profileId}` | Create rider profile | [Riders](#riders) | ❌ | ✅
@@ -129,8 +130,9 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/active` | None | None | None | No body required |
 | `GET /v1/tours/{tourId}` | `tourId` (required) | None | None | `tourId`: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]` |
 | `GET /v1/tours` | None | `status` (optional) | None | `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED` |
-| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate`; Optional: `description, provisioning` | `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; `provisioning` is boolean, defaults to `false`, is not stored in TourMaster, and provisions 6 tour tables only when `true` |
-| `PUT /v1/tours` | None | None | Required: `tourId`; Optional: `name, startDate, endDate, description, status, provisionOnly, provisioning` | Tour must exist; `tourId` format; dates `YYYY-MM-DD`; `endDate >= startDate`; `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; `provisioning` is boolean, defaults to `false` (defaults to `true` when `provisionOnly=true` and `provisioning` is omitted); when `provisioning=false`, only TourMaster is updated and table provisioning is skipped; when `provisioning=true`, reruns provisioning and ignores existing tables; when `provisionOnly=true`, skips TourMaster update and only reruns provisioning; `provisioning=false` with `provisionOnly=true` is rejected |
+| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate`; Optional: `description, provisioning` | `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; `provisioning` is boolean, defaults to `false`, is not stored in TourMaster, and provisions 6 tour tables only when `true`; successful provisioning sets `provisionedAt` |
+| `PUT /v1/tours` | None | None | Required: `tourId`; Optional: `name, startDate, endDate, description, status, provisioning` | Tour must exist; `tourId` format; dates `YYYY-MM-DD`; `endDate >= startDate`; `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; `provisioning` is boolean and defaults to `false`; when `provisioning=false`, only TourMaster is updated; when `provisioning=true`, provisioning is allowed only when `provisionedAt` is absent, then it creates 6 tables and sets `provisionedAt`; repeat provisioning is rejected |
+| `PUT /v1/tours/{tourId}/provision` | `tourId` (required) | None | None | Tour must exist and have `provisionedAt`; reruns idempotent provisioning to create only missing or newly defined table types; does not modify TourMaster, including `provisionedAt` |
 | `POST /v1/tours/{tourId}/archive` | `tourId` (required) | `exportToS3` (optional, default true), `deleteTables` (optional, default true) | None | Tour exists; status must be `ACTIVE` or `COMPLETED`; ARCHIVED cannot be archived again |
 
 #### Riders
@@ -251,12 +253,9 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 }
 ```
 
-#### Rerun Tour Provisioning Only
+#### Re-provision Tour Tables
 ```json
-{
-  "tourId": "TOT-2026",
-  "provisionOnly": true
-}
+PUT /v1/tours/TOT-2026/provision
 ```
 
 #### Create Rider Profile

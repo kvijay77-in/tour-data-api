@@ -1,8 +1,8 @@
 """
 Update tour Lambda function
 
-Updates an existing TourMaster item and reruns tour-specific table provisioning
-so any missing or newly defined tour tables are created.
+Updates an existing TourMaster item and optionally provisions its tour-specific
+tables when they have not been provisioned before.
 """
 
 import sys
@@ -72,9 +72,7 @@ def lambda_handler(event, context):
 
     Body:
         tourId: Existing tour identifier (required)
-        provisionOnly: When true, skip TourMaster update and only rerun provisioning
-        provisioning: Whether to (re)run table provisioning (optional, default false).
-            Defaults to true when provisionOnly is true and provisioning is omitted.
+        provisioning: Whether to provision tour-specific tables (optional, default false).
         name: Tour name (optional)
         startDate: ISO 8601 date (optional)
         endDate: ISO 8601 date (optional)
@@ -95,21 +93,16 @@ def lambda_handler(event, context):
 
         try:
             validate_tour_id(tour_id)
-            _validate_optional_bool(body.get('provisionOnly'), 'provisionOnly')
             _validate_optional_bool(body.get('provisioning'), 'provisioning')
         except ValidationError as e:
             return bad_request_response(str(e))
 
-        provision_only = body.get('provisionOnly', False)
+        if 'provisionOnly' in body:
+            return bad_request_response(
+                "provisionOnly is not supported; use PUT /v1/tours/{tourId}/provision"
+            )
 
-        if 'provisioning' in body:
-            provisioning = body['provisioning']
-            if provision_only and not provisioning:
-                return bad_request_response(
-                    "provisioning cannot be false when provisionOnly is true"
-                )
-        else:
-            provisioning = provision_only
+        provisioning = body.get('provisioning', False)
 
         tour = get_item(
             table_name_env='TOUR_MASTER_TABLE',
@@ -118,28 +111,28 @@ def lambda_handler(event, context):
         if not tour:
             return not_found_response("Tour", tour_id)
 
-        if provision_only:
-            updated_tour = tour
-        else:
-            updates = {key: body[key] for key in TOUR_UPDATE_FIELDS if key in body}
-            if not updates:
-                return bad_request_response(
-                    "At least one TourMaster field is required unless provisionOnly is true"
-                )
+        if provisioning and tour.get('provisionedAt'):
+            return bad_request_response(
+                "Tour tables are already provisioned; use PUT /v1/tours/{tourId}/provision"
+            )
 
-            updated_tour = {**tour, **updates}
-            try:
-                _validate_update_fields(updates, updated_tour)
-            except ValidationError as e:
-                return bad_request_response(str(e))
+        updates = {key: body[key] for key in TOUR_UPDATE_FIELDS if key in body}
+        if not updates and not provisioning:
+            return bad_request_response("At least one TourMaster field is required")
 
+        updated_tour = {**tour, **updates}
+        try:
+            _validate_update_fields(updates, updated_tour)
+        except ValidationError as e:
+            return bad_request_response(str(e))
+
+        if updates:
             updated_tour['updatedAt'] = utc_now_iso()
             put_item('TOUR_MASTER_TABLE', updated_tour)
 
         if not provisioning:
             return success_response({
                 'tour': updated_tour,
-                'provisionOnly': provision_only,
                 'provisioning': provisioning,
                 'provisionedTables': [],
             })
@@ -152,22 +145,19 @@ def lambda_handler(event, context):
             )
         except Exception as e:
             logger.error(f"Error provisioning tables for tour {tour_id}: {str(e)}")
-            if not provision_only:
-                updated_tour['provisioningError'] = str(e)
-                updated_tour['updatedAt'] = utc_now_iso()
-                put_item('TOUR_MASTER_TABLE', updated_tour)
-            return internal_error_response(f"Tour update processed but table provisioning failed: {str(e)}")
-
-        if not provision_only:
-            updated_tour.pop('provisioningError', None)
-            updated_tour['provisionedAt'] = utc_now_iso()
+            updated_tour['provisioningError'] = str(e)
             updated_tour['updatedAt'] = utc_now_iso()
             put_item('TOUR_MASTER_TABLE', updated_tour)
+            return internal_error_response(f"Tour update processed but table provisioning failed: {str(e)}")
+
+        updated_tour.pop('provisioningError', None)
+        updated_tour['provisionedAt'] = utc_now_iso()
+        updated_tour['updatedAt'] = utc_now_iso()
+        put_item('TOUR_MASTER_TABLE', updated_tour)
 
         logger.info(f"Tour {tour_id} provisioning rerun completed with {len(provisioned_tables)} tables")
         return success_response({
             'tour': updated_tour,
-            'provisionOnly': provision_only,
             'provisioning': provisioning,
             'provisionedTables': provisioned_tables,
         })

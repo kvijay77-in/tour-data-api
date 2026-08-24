@@ -273,7 +273,7 @@ curl -X POST https://<api-url>/v1/tours \
 
 When API provisioning is requested, it uses the same shared provisioning logic as the CLI method.
 
-To update an existing TourMaster item, use `PUT /v1/tours`. By default, `provisioning` is `false`, so only the TourMaster item is updated and table provisioning is skipped. To also rerun table provisioning, send `"provisioning": true`; existing tour-specific tables are ignored and only missing tables or newly defined table types are created. To rerun provisioning without updating TourMaster, send `"provisionOnly": true` (this implies `provisioning: true` unless `provisioning` is explicitly set — sending `"provisioning": false` together with `"provisionOnly": true` is rejected).
+To update an existing TourMaster item, use `PUT /v1/tours`. By default, `provisioning` is `false`, so only the TourMaster item is updated. Sending `"provisioning": true` provisions tour tables only when `provisionedAt` is absent, then records that timestamp. Repeat provisioning through this endpoint is rejected. To create missing or newly defined table types after the tour has been provisioned, use `PUT /v1/tours/{tourId}/provision`; it reruns provisioning without changing TourMaster or `provisionedAt`.
 
 > **Note**: The API method is designed for use by external apps like the Check-In App. The actual integration from these apps is out of scope for this project — this API capability is provided for their use.
 
@@ -331,7 +331,8 @@ Detailed inventory of everything deployment creates in your AWS account.
 | GetTourFunction | `GET /v1/tours/{tourId}` | Get tour details |
 | ListToursFunction | `GET /v1/tours` | List all tours |
 | CreateTourFunction | `POST /v1/tours` | Create tour and optionally provision tables |
-| UpdateTourFunction | `PUT /v1/tours` | Update tour and rerun table provisioning |
+| UpdateTourFunction | `PUT /v1/tours` | Update tour and optionally provision it for the first time |
+| ProvisionTourFunction | `PUT /v1/tours/{tourId}/provision` | Re-provision missing tour tables without updating TourMaster |
 | ArchiveTourFunction | `POST /v1/tours/{tourId}/archive` | Archive completed tour |
 | GetRiderProfileFunction | `GET /v1/riders/profile/{profileId}` | Get rider profile |
 | ListRiderTourParticipationsFunction | `GET /v1/profile/{profileId}/tours` | List rider participation details across all tours for a profile |

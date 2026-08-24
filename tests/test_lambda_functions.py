@@ -274,8 +274,12 @@ def test_create_tour_provisions_tables_when_requested(dynamodb_mock):
 
 
 def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
-    """PUT /v1/tours updates TourMaster and provisions tour tables when provisioning=true."""
+    """PUT /v1/tours provisions a tour that does not have provisionedAt."""
     update_tour = _load_tours_handler('update_tour')
+    table = dynamodb_mock.Table('test-tour-master-table')
+    unprovisioned_tour = {**MOCK_TOURS[0]}
+    unprovisioned_tour.pop('provisionedAt')
+    table.put_item(Item=unprovisioned_tour)
     event = _make_auth_event(
         method='PUT',
         groups=['ADMINISTRATOR'],
@@ -296,12 +300,13 @@ def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
     assert body['success'] is True
     assert body['data']['tour']['name'] == 'Updated Test Tour'
     assert body['data']['tour']['status'] == TourStatus.PLANNING.value
+    assert 'provisionedAt' in body['data']['tour']
     assert len(body['data']['provisionedTables']) == 6
 
-    table = dynamodb_mock.Table('test-tour-master-table')
     saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
     assert saved['name'] == 'Updated Test Tour'
     assert saved['startDate'] == '2026-02-12'
+    assert 'provisionedAt' in saved
 
 
 def test_update_tour_default_provisioning_false_skips_provisioning(dynamodb_mock):
@@ -329,28 +334,27 @@ def test_update_tour_default_provisioning_false_skips_provisioning(dynamodb_mock
     assert saved['name'] == 'Updated Test Tour'
 
 
-def test_update_tour_provision_only_defaults_provisioning_true(dynamodb_mock):
-    """provisionOnly=true implies provisioning=true when provisioning is omitted."""
+def test_update_tour_rejects_repeated_provisioning(dynamodb_mock):
+    """PUT /v1/tours rejects provisioning after provisionedAt is set."""
     update_tour = _load_tours_handler('update_tour')
     event = _make_auth_event(
         method='PUT',
         groups=['ADMINISTRATOR'],
         body={
             'tourId': MOCK_TOUR_ID,
-            'provisionOnly': True,
+            'provisioning': True,
         },
     )
 
     response = update_tour.lambda_handler(event, None)
 
-    assert response['statusCode'] == 200
+    assert response['statusCode'] == 400
     body = json.loads(response['body'])
-    assert body['data']['provisioning'] is True
-    assert len(body['data']['provisionedTables']) == 6
+    assert 'already provisioned' in body['error']['message']
 
 
-def test_update_tour_provisioning_false_conflicts_with_provision_only(dynamodb_mock):
-    """provisioning=false with provisionOnly=true is rejected."""
+def test_update_tour_rejects_legacy_provision_only(dynamodb_mock):
+    """PUT /v1/tours rejects the replaced provisionOnly request field."""
     update_tour = _load_tours_handler('update_tour')
     event = _make_auth_event(
         method='PUT',
@@ -358,7 +362,6 @@ def test_update_tour_provisioning_false_conflicts_with_provision_only(dynamodb_m
         body={
             'tourId': MOCK_TOUR_ID,
             'provisionOnly': True,
-            'provisioning': False,
         },
     )
 
@@ -367,26 +370,24 @@ def test_update_tour_provisioning_false_conflicts_with_provision_only(dynamodb_m
     assert response['statusCode'] == 400
 
 
-def test_update_tour_provision_only_skips_master_update(dynamodb_mock):
-    """provisionOnly reruns provisioning without updating TourMaster."""
-    update_tour = _load_tours_handler('update_tour')
+def test_provision_tour_reruns_without_changing_provisioned_at(dynamodb_mock):
+    """Dedicated provisioning endpoint preserves the original TourMaster item."""
+    provision_tour = _load_tours_handler('provision_tour')
+    original_timestamp = MOCK_TOURS[0]['provisionedAt']
     event = _make_auth_event(
         method='PUT',
         groups=['ADMINISTRATOR'],
-        body={
-            'tourId': MOCK_TOUR_ID,
-            'provisionOnly': True,
-            'name': 'Should Not Be Saved',
-        },
+        path_params={'tourId': MOCK_TOUR_ID},
     )
 
-    response = update_tour.lambda_handler(event, None)
+    response = provision_tour.lambda_handler(event, None)
 
     assert response['statusCode'] == 200
     body = json.loads(response['body'])
     assert body['success'] is True
-    assert body['data']['provisionOnly'] is True
     assert body['data']['tour']['name'] == MOCK_TOURS[0]['name']
+    assert body['data']['tour']['provisionedAt'] == original_timestamp
+    assert len(body['data']['provisionedTables']) == 6
 
     table = dynamodb_mock.Table('test-tour-master-table')
     saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
@@ -394,6 +395,26 @@ def test_update_tour_provision_only_skips_master_update(dynamodb_mock):
 
     dynamodb_client = boto3.client('dynamodb', region_name='us-east-1')
     dynamodb_client.describe_table(TableName=f'test-stack-Artifacts-{MOCK_TOUR_ID}')
+
+
+def test_provision_tour_rejects_unprovisioned_tour(dynamodb_mock):
+    """Dedicated provisioning endpoint is only for re-provisioning."""
+    provision_tour = _load_tours_handler('provision_tour')
+    table = dynamodb_mock.Table('test-tour-master-table')
+    unprovisioned_tour = {**MOCK_TOURS[0]}
+    unprovisioned_tour.pop('provisionedAt')
+    table.put_item(Item=unprovisioned_tour)
+    event = _make_auth_event(
+        method='PUT',
+        groups=['ADMINISTRATOR'],
+        path_params={'tourId': MOCK_TOUR_ID},
+    )
+
+    response = provision_tour.lambda_handler(event, None)
+
+    assert response['statusCode'] == 400
+    body = json.loads(response['body'])
+    assert 'have not been provisioned' in body['error']['message']
 
 
 if __name__ == '__main__':

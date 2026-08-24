@@ -113,12 +113,13 @@ Lambda functions resolve shared table names via environment variables (set by SA
 1. **Provisioning:** Tour-specific tables are created when a new tour is provisioned. Two methods are available:
    - **CLI Script (Deployment Method):** `scripts/provision_tour.py` or `make provision-tour` — runs locally or in CI/CD pipelines, creates Tour record + 6 tables via boto3 directly
    - **API Endpoint (Runtime Method):** `POST /v1/tours` — used by external apps (e.g., Check-In App) to create tours programmatically. By default this creates only the TourMaster record; sending `provisioning=true` provisions tour-specific tables in the same request. The actual integration from external apps is out of scope for this project; this API capability is provided for their use.
-   - **API Repair/Update Method:** `PUT /v1/tours` — updates an existing TourMaster record and, when requested, reruns provisioning. By default `provisioning=false`, so only the TourMaster record is updated. Sending `provisioning=true` reruns provisioning; existing tour-specific tables are ignored so the call can create missing tables or newly defined table types. `provisionOnly=true` skips TourMaster updates and only reruns provisioning; `provisioning` defaults to `true` when `provisionOnly=true` and `provisioning` is omitted, and `provisioning=false` combined with `provisionOnly=true` is rejected.
+   - **API Update Method:** `PUT /v1/tours` — updates an existing TourMaster record. Sending `provisioning=true` provisions tables only when `provisionedAt` is absent; successful provisioning records `provisionedAt`. Repeat provisioning requests are rejected.
+   - **API Repair Method:** `PUT /v1/tours/{tourId}/provision` — reruns idempotent provisioning for a tour with `provisionedAt` to create missing or newly defined table types. It does not modify TourMaster, including `provisionedAt`.
 2. **Active use:** Lambda functions resolve tour-specific table names using `{STACK_NAME}-{TableType}-{tourId}`
 3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
 4. **De-provisioning:** For one-off usage, the operator can delete tour tables or the entire stack
 
-Provisioning methods create the same tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) with identical schemas and configurations. `POST /v1/tours` always creates the Tour record in the shared TourMaster table, but creates tour-specific tables only when the request includes `provisioning=true`; this request flag is not stored in TourMaster. `PUT /v1/tours` similarly only reruns provisioning when `provisioning=true` (or implied `true` via `provisionOnly=true`); this request flag is likewise not stored in TourMaster. Rerun provisioning is idempotent for existing tables and creates only missing tables. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
+Provisioning methods create the same tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) with identical schemas and configurations. `POST /v1/tours` creates the Tour record in the shared TourMaster table and creates tour-specific tables only when the request includes `provisioning=true`; successful provisioning stores `provisionedAt`. `PUT /v1/tours` may provision only a tour without `provisionedAt`. The dedicated `PUT /v1/tours/{tourId}/provision` repair endpoint is idempotent for existing tables and creates only missing table types without changing TourMaster. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
 
 ### Key Design Benefits
 
@@ -711,7 +712,9 @@ For use by external applications (e.g., Check-In App):
 2. When the request includes `provisioning=true`, the Lambda temporarily sets status to PROVISIONING and creates 6 DynamoDB tables using the same shared provisioning logic
 3. Tables are created with on-demand billing, encryption, and standard tags
 4. Once all requested tables are active, Tour status is updated to PLANNING
-5. The provisioning Lambda requires `dynamodb:CreateTable`, `dynamodb:DescribeTable`, and `dynamodb:TagResource` permissions
+5. On successful provisioning, the TourMaster record stores `provisionedAt`
+6. `PUT /tours` can provision only when `provisionedAt` is absent; `PUT /tours/{tourId}/provision` re-provisions missing table types without changing this timestamp
+7. The provisioning Lambdas require `dynamodb:CreateTable`, `dynamodb:DescribeTable`, and `dynamodb:TagResource` permissions
 
 > **Note:** The API method is provided for external app integration (e.g., Check-In App creating new tours). The actual integration from these external apps is out of scope for this project.
 

@@ -76,6 +76,7 @@ tour-data-api/
 │   │   │   ├── get_active.py          # GET /v1/tours/active
 │   │   │   ├── get_tour.py            # GET /v1/tours/{tourId}
 │   │   │   ├── list_tours.py          # GET /v1/tours
+│   │   │   ├── provision_tour.py      # PUT /v1/tours/{tourId}/provision
 │   │   │   └── update_tour.py         # PUT /v1/tours
 │   │   └── users/
 │   │       ├── __init__.py
