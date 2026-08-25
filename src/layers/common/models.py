@@ -211,6 +211,7 @@ class Tour:
     startDate: str
     endDate: str
     status: TourStatus
+    rideCount: int
     description: Optional[str] = None
     provisionedAt: Optional[str] = None
     archivedAt: Optional[str] = None

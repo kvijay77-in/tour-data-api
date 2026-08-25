@@ -212,7 +212,8 @@ make provision-tour \
   TOUR_ID=TOT-2026 \
   TOUR_NAME="Tour of Tamilnadu 2026" \
   START_DATE=2026-02-10 \
-  END_DATE=2026-02-17
+  END_DATE=2026-02-17 \
+  RIDE_COUNT=8
 
 # Using Python script directly (more options available)
 python scripts/provision_tour.py \
@@ -221,6 +222,7 @@ python scripts/provision_tour.py \
   --name "Tour of Tamilnadu 2026" \
   --start-date 2026-02-10 \
   --end-date 2026-02-17 \
+  --ride-count 8 \
   --description "Season 2: Chera Nadu II" \
   --environment dev
 ```
@@ -233,6 +235,7 @@ make provision-tour \
   TOUR_NAME="Tour of Tamilnadu 2026" \
   START_DATE=2026-02-10 \
   END_DATE=2026-02-17 \
+  RIDE_COUNT=8 \
   ENV=prod
 ```
 
@@ -251,6 +254,7 @@ curl -X POST https://<api-url>/v1/tours \
     "name": "Tour of Tamilnadu 2026",
     "startDate": "2026-02-10",
     "endDate": "2026-02-17",
+    "rideCount": 8,
     "description": "Season 2: Chera Nadu II"
   }'
 ```
@@ -266,6 +270,7 @@ curl -X POST https://<api-url>/v1/tours \
     "name": "Tour of Tamilnadu 2026",
     "startDate": "2026-02-10",
     "endDate": "2026-02-17",
+    "rideCount": 8,
     "description": "Season 2: Chera Nadu II",
     "provisioning": true
   }'

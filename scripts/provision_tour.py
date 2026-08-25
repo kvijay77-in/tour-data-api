@@ -15,6 +15,7 @@ Usage:
         --name "Tour of Tamilnadu 2026" \\
         --start-date 2026-02-10 \\
         --end-date 2026-02-17 \\
+        --ride-count 8 \\
         --description "Annual coastal cycling tour" \\
         --environment dev
 
@@ -40,7 +41,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'layers'
 if not os.environ.get('AWS_DEFAULT_REGION') and not boto3.Session().region_name:
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
 
-from validation import validate_tour_id, validate_iso_date, ValidationError
+from validation import validate_tour_id, validate_iso_date, validate_ride_count, ValidationError
 from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from tour_provisioning import provision_tour_tables
 
@@ -82,6 +83,7 @@ def provision_tour(args):
     name = args.name
     start_date = args.start_date
     end_date = args.end_date
+    ride_count = args.ride_count
     description = args.description
     environment = args.environment
     region = args.region
@@ -103,6 +105,12 @@ def provision_tour(args):
 
     if end_date < start_date:
         print("Error: end-date must be on or after start-date")
+        sys.exit(1)
+
+    try:
+        validate_ride_count(ride_count, 'ride-count')
+    except ValidationError as e:
+        print(f"Error: {e}")
         sys.exit(1)
 
     # Set environment variables for shared utilities
@@ -145,6 +153,7 @@ def provision_tour(args):
         'startDate': start_date,
         'endDate': end_date,
         'status': TourStatus.PROVISIONING.value,
+        'rideCount': ride_count,
         'createdAt': now,
         'updatedAt': now,
     }
@@ -210,7 +219,8 @@ Examples:
     --tour-id TOT-2026 \\
     --name "Tour of Tamilnadu 2026" \\
     --start-date 2026-02-10 \\
-    --end-date 2026-02-17
+    --end-date 2026-02-17 \\
+    --ride-count 8
 
   # Provision with all options
   python scripts/provision_tour.py \\
@@ -219,6 +229,7 @@ Examples:
     --name "Tour de France 2026" \\
     --start-date 2026-07-01 \\
     --end-date 2026-07-23 \\
+    --ride-count 23 \\
     --description "Annual summer tour" \\
     --environment prod \\
     --region eu-west-1 \\
@@ -248,6 +259,10 @@ Both methods create the same Tour record and tour-specific tables.
     parser.add_argument(
         '--end-date', required=True,
         help='Tour end date (YYYY-MM-DD)'
+    )
+    parser.add_argument(
+        '--ride-count', required=True, type=int,
+        help='Total number of rides planned for the tour (positive integer)'
     )
     parser.add_argument(
         '--description', default='',

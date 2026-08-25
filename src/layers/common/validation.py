@@ -476,6 +476,25 @@ def validate_positive_number(value: float, field_name: str) -> None:
         )
 
 
+def validate_ride_count(value: Any, field_name: str = "rideCount") -> None:
+    """
+    Validate the total number of rides planned for a tour
+
+    Args:
+        value: Value to validate
+        field_name: Name of the field being validated
+
+    Raises:
+        ValidationError: If value is not a positive integer
+    """
+    # bool is a subclass of int and must be rejected explicitly
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValidationError(
+            f"{field_name} must be a positive integer",
+            {"field": field_name, "value": value}
+        )
+
+
 def validate_ride_stages(stages: Any) -> List[Dict[str, Any]]:
     """Validate and normalize ride stages payload."""
     if not isinstance(stages, list) or not stages:

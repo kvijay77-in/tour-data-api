@@ -114,9 +114,9 @@ lint: ## Lint Python code
 format: ## Format Python code
 	find src -name "*.py" -not -path "*/\.*" | xargs $(PYTHON) -m black
 
-provision-tour: ## Provision a new tour (usage: make provision-tour TOUR_ID=TOT-2026 TOUR_NAME="Tour of Tamilnadu 2026" START_DATE=2026-02-10 END_DATE=2026-02-17)
-	@if [ -z "$(TOUR_ID)" ] || [ -z "$(TOUR_NAME)" ] || [ -z "$(START_DATE)" ] || [ -z "$(END_DATE)" ]; then \
-		echo "Usage: make provision-tour TOUR_ID=<id> TOUR_NAME=\"<name>\" START_DATE=YYYY-MM-DD END_DATE=YYYY-MM-DD [STACK_NAME=dev] [ENV=dev] [DESCRIPTION=\"...\"]"; \
+provision-tour: ## Provision a new tour (usage: make provision-tour TOUR_ID=TOT-2026 TOUR_NAME="Tour of Tamilnadu 2026" START_DATE=2026-02-10 END_DATE=2026-02-17 RIDE_COUNT=8)
+	@if [ -z "$(TOUR_ID)" ] || [ -z "$(TOUR_NAME)" ] || [ -z "$(START_DATE)" ] || [ -z "$(END_DATE)" ] || [ -z "$(RIDE_COUNT)" ]; then \
+		echo "Usage: make provision-tour TOUR_ID=<id> TOUR_NAME=\"<name>\" START_DATE=YYYY-MM-DD END_DATE=YYYY-MM-DD RIDE_COUNT=<n> [STACK_NAME=dev] [ENV=dev] [DESCRIPTION=\"...\"]"; \
 		exit 1; \
 	fi
 	$(PYTHON) scripts/provision_tour.py \
@@ -125,6 +125,7 @@ provision-tour: ## Provision a new tour (usage: make provision-tour TOUR_ID=TOT-
 		--name "$(TOUR_NAME)" \
 		--start-date $(START_DATE) \
 		--end-date $(END_DATE) \
+		--ride-count $(RIDE_COUNT) \
 		--environment $(or $(ENV),dev) \
 		$(if $(DESCRIPTION),--description "$(DESCRIPTION)",) \
 		$(if $(SUBSCRIPTION_ID),--subscription-id $(SUBSCRIPTION_ID),)

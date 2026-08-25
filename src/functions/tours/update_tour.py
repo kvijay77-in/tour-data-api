@@ -18,7 +18,7 @@ from response import (
     internal_error_response
 )
 from dynamodb_utils import get_item, put_item
-from validation import validate_tour_id, validate_iso_date, ValidationError
+from validation import validate_tour_id, validate_iso_date, validate_ride_count, ValidationError
 from models import TourStatus, utc_now_iso
 from tour_provisioning import provision_tour_tables
 from rbac import require_permission, Permission
@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 
 dynamodb_client = boto3.client('dynamodb')
 
-TOUR_UPDATE_FIELDS = {'name', 'startDate', 'endDate', 'description', 'status'}
+TOUR_UPDATE_FIELDS = {'name', 'startDate', 'endDate', 'description', 'status', 'rideCount'}
 
 
 def _validate_optional_bool(value, field_name):
@@ -55,6 +55,9 @@ def _validate_update_fields(updates, merged_tour):
             raise ValidationError("endDate must be a string in YYYY-MM-DD format")
         validate_iso_date(updates['endDate'], 'endDate')
 
+    if 'rideCount' in updates:
+        validate_ride_count(updates['rideCount'])
+
     if merged_tour['endDate'] < merged_tour['startDate']:
         raise ValidationError("endDate must be on or after startDate")
 
@@ -77,6 +80,7 @@ def lambda_handler(event, context):
         startDate: ISO 8601 date (optional)
         endDate: ISO 8601 date (optional)
         description: Tour description (optional)
+        rideCount: Total number of rides planned for the tour (optional, positive integer)
         status: Tour status (optional)
     """
     try:

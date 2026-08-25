@@ -119,7 +119,7 @@ def lambda_handler(event, context):
 
         # Validate optional rider profile fields
         try:
-            validate_rider_profile_optional_fields(updates, require_mandatory_fields=FalseuP)
+            validate_rider_profile_optional_fields(updates, require_mandatory_fields=False)
         except ValidationError as e:
             return unprocessable_content_response(str(e))
 

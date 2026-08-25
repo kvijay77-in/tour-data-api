@@ -187,6 +187,7 @@ Provisioning methods create the same tour-specific DynamoDB tables (TourRider, R
 | startDate | String | ISO 8601 date |
 | endDate | String | ISO 8601 date |
 | status | String | PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED |
+| rideCount | Number | Total number of rides planned for the tour (required, positive integer) |
 | description | String | Tour description |
 | provisionedAt | String | ISO 8601 timestamp (when tour tables were created) |
 | archivedAt | String | ISO 8601 timestamp (when tour was archived) |
@@ -202,6 +203,7 @@ Provisioning methods create the same tour-specific DynamoDB tables (TourRider, R
 - `tourId` is free-form, set by tour admin at creation time
 - `tourId` must be unique and valid as a DynamoDB table name suffix (allowed chars: `a-zA-Z0-9_.-`, 3-50 chars, must start with letter or number)
 - `PROVISIONING` status indicates tour tables are being created
+- `rideCount` records the total rides planned for the tour; a tour day can have more than one ride, so it is not derived from the tour date range
 - `ARCHIVED` status indicates tour data has been exported and/or tour-specific tables deleted
 - Status flow: PLANNING → PROVISIONING → ACTIVE → COMPLETED → ARCHIVED
 

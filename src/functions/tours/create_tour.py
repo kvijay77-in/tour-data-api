@@ -19,7 +19,10 @@ from response import (
     conflict_response, internal_error_response
 )
 from dynamodb_utils import get_item, put_item
-from validation import validate_tour_id, validate_iso_date, validate_required_fields, ValidationError
+from validation import (
+    validate_tour_id, validate_iso_date, validate_required_fields,
+    validate_ride_count, ValidationError
+)
 from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from tour_provisioning import provision_tour_tables
 from rbac import require_permission, Permission
@@ -38,6 +41,7 @@ def lambda_handler(event, context):
         name: Tour name (required)
         startDate: ISO 8601 date (required)
         endDate: ISO 8601 date (required)
+        rideCount: Total number of rides planned for the tour (required, positive integer)
         description: Tour description (optional)
         provisioning: Whether to provision tour-specific tables (optional, default false)
     
@@ -59,7 +63,7 @@ def lambda_handler(event, context):
         
         # Validate required fields
         try:
-            validate_required_fields(body, ['tourId', 'name', 'startDate', 'endDate'])
+            validate_required_fields(body, ['tourId', 'name', 'startDate', 'endDate', 'rideCount'])
         except ValidationError as e:
             return bad_request_response(str(e))
         
@@ -80,6 +84,11 @@ def lambda_handler(event, context):
         
         if body['endDate'] < body['startDate']:
             return bad_request_response("endDate must be on or after startDate")
+        
+        try:
+            validate_ride_count(body['rideCount'])
+        except ValidationError as e:
+            return bad_request_response(str(e))
         
         # Check tourId uniqueness
         existing = get_item(
@@ -102,6 +111,7 @@ def lambda_handler(event, context):
             'startDate': body['startDate'],
             'endDate': body['endDate'],
             'status': TourStatus.PROVISIONING.value if provisioning else TourStatus.PLANNING.value,
+            'rideCount': body['rideCount'],
             'createdAt': now,
             'updatedAt': now,
         }

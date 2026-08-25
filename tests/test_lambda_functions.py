@@ -208,6 +208,7 @@ def test_create_tour_defaults_to_master_record_only(dynamodb_mock):
             'name': 'New Test Tour',
             'startDate': '2026-06-01',
             'endDate': '2026-06-10',
+            'rideCount': 12,
         },
     )
 
@@ -217,6 +218,7 @@ def test_create_tour_defaults_to_master_record_only(dynamodb_mock):
     body = json.loads(response['body'])
     assert body['success'] is True
     assert body['data']['status'] == TourStatus.PLANNING.value
+    assert body['data']['rideCount'] == 12
     assert 'provisioning' not in body['data']
     assert 'provisionedAt' not in body['data']
 
@@ -241,6 +243,7 @@ def test_create_tour_provisions_tables_when_requested(dynamodb_mock):
             'name': 'Provisioned Test Tour',
             'startDate': '2026-06-01',
             'endDate': '2026-06-10',
+            'rideCount': 12,
             'provisioning': True,
         },
     )
