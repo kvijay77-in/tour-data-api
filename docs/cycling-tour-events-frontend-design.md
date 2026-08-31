@@ -81,7 +81,7 @@ Added to `src/types/navigation.ts`, following the existing route param conventio
 | `EventScan` | `{ eventId: string; occurrenceId: string }` | Stack, pushed from `MainTabs` or `OccurrenceManagement` | `hasPermission(role, Permission.EVENT_SCAN)` |
 | `RiderProgress` | `{ riderId: string }` | Stack | any authenticated user with `Permission.READ` |
 | `OccurrenceDashboard` | `{ eventId: string; occurrenceId: string }` | Stack | `Permission.DASHBOARD` |
-| `BaggageReconciliation` | `{ occurrenceId: string }` | Stack | `Permission.DASHBOARD` |
+| `BaggageReconciliation` | `{ eventId: string; occurrenceId: string }` | Stack | `Permission.DASHBOARD` |
 | `HotelManagement` | none | Stack, from `TourManagement` | `isAdministrator` |
 | `HotelAllocationUpload` | none | Stack, `onClose` modal-style | `hasPermission(role, Permission.HOTEL_ALLOC_MANAGE)` |
 | `HotelAllocationAdjust` | `{ riderId: string; stayDate: string }` | Stack, `onClose` modal-style | `hasPermission(role, Permission.HOTEL_ALLOC_MANAGE)` |

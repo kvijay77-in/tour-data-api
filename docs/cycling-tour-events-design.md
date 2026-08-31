@@ -233,7 +233,8 @@ Unchanged mechanism from the existing model, extended to the 5 new table types:
 | Attribute | Type | Description |
 |---|---|---|
 | `eventId` | String | Parent event definition (partition key) |
-| `occurrenceId` | String | `{eventId}#{date}#{seq}` (sort key). See §6. |
+| `dateSeq` | String | `{date}#{seq}` (sort key) — deliberately `date`-first so `SK begins_with date` serves "today's occurrences for this event" directly |
+| `occurrenceId` | String | `{eventId}#{date}#{seq}` — the globally-unique, cross-table reference value used as the foreign key in `EventActivityRecord.occurrenceId` and in `linkedOccurrenceRef`. See §6. Derivable from `eventId` + `dateSeq`, but stored so other tables never need to reconstruct it. |
 | `date` | String | `YYYY-MM-DD` |
 | `seq` | Number | Same-day repeat number (mirrors `rideNo` + `date` in `Ride-{tourId}`) |
 | `status` | String | `PLANNED`, `ACTIVE`, `COMPLETED`, `CANCELLED` |
@@ -244,26 +245,27 @@ Unchanged mechanism from the existing model, extended to the 5 new table types:
 | `cancelReason` | String | Optional free-text reason |
 | `disabledActivityIds` | List\<String\> | Per-occurrence activity disable overrides (union with `enabled=false` on the definition) |
 | `selfServiceEnabled` | Boolean | Live per-occurrence flag; defaults from `Event.allowSelfService` at creation and can be toggled independently thereafter |
-| `linkedOccurrenceRef` | String | Optional `occurrenceId` of the paired Baggage Unloading/Loading occurrence for reconciliation (D5) |
+| `linkedOccurrenceRef` | String | Optional `occurrenceId` (fully-qualified, `{eventId}#{date}#{seq}`) of the paired Baggage Unloading/Loading occurrence for reconciliation (D5) |
 | `restrictToAssignedUsers` | Boolean | Occurrence-level default inherited from activities unless a caller overrides per-activity; informational only, enforcement is always per-activity |
 | `createdAt` | String | ISO 8601 timestamp |
 | `updatedAt` | String | ISO 8601 timestamp |
 | `updatedBy` | String | Cognito `sub` of last updater |
 
 **Indexes:**
-- Primary Key: `eventId` (partition key), `occurrenceId` (sort key)
+- Primary Key: `eventId` (partition key), `dateSeq` (sort key) — the `date`-first sort key supports `SK begins_with date` within the partition
 - GSI1: `date` (partition key), `eventId` (sort key) — for "all occurrences on this date across all events" (dashboard/home-screen queries), mirroring `Ride-{tourId}` GSI1 on `date`
 - GSI2: `status` (partition key), `date` (sort key) — for "all ACTIVE occurrences" across events, mirroring the `Ride-{tourId}` status GSI
 
 **Item-count estimate:** For a 15-day tour: 1 (Day 0 Registration) + up to 14 × 2 (loading/unloading, one pair per hotel night) ≈ 30 items per tour.
 
-**Access patterns served:** "get today's occurrences for event X" (primary key query, `PK=eventId`, `SK` `begins_with` date); "get all occurrences today across events" (GSI1); "get all currently ACTIVE occurrences" (GSI2); "find the paired occurrence for reconciliation" (`linkedOccurrenceRef` direct lookup).
+**Access patterns served:** "get today's occurrences for event X" (primary key query, `PK=eventId`, `SK` `begins_with` date via `dateSeq`); "get all occurrences today across events" (GSI1); "get all currently ACTIVE occurrences" (GSI2); "find the paired occurrence for reconciliation" (`linkedOccurrenceRef` direct lookup by fully-qualified `occurrenceId`).
 
 **Example item:**
 
 ```json
 {
   "eventId": "EVT-BAGLOAD",
+  "dateSeq": "2026-02-12#1",
   "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
   "date": "2026-02-12",
   "seq": 1,
@@ -670,7 +672,7 @@ Per-rider progress across all events (used by the rider progress stepper and `to
 
 ### 8.17 Reconciliation — GET .../occurrences/{occurrenceId}/reconciliation
 
-Only valid for an occurrence whose event's `linkedOccurrenceRef` pairing exists.
+Only valid for an occurrence whose own `linkedOccurrenceRef` (§5.2) is set.
 
 - Required permission: `DASHBOARD`
 - Success (200): `{ "success": true, "data": { "loadedCount", "unloadedCount", "missingRiderIds": [ "R12", "R57" ] } }`
