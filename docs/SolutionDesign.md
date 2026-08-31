@@ -2,6 +2,8 @@ This document covers the solution design aspects of the Data models and related 
 
 This is an evolving document and hence latest info must be referred to at all times.
 
+The Cycling Tour Events engine (Day 0 Registration, Baggage Loading/Unloading, Hotel logistics) is designed in full in [cycling-tour-events-design.md](cycling-tour-events-design.md) (backend, authoritative for all shared contracts) and [cycling-tour-events-frontend-design.md](cycling-tour-events-frontend-design.md) (`tour-mgmt-app`/`tour-rider-app`), implementing [cycling-tour-events.md](cycling-tour-events.md). The five new tour-specific tables (`Event`, `EventOccurrence`, `EventActivityRecord`, `Hotel`, `HotelStay`) and the `EVENT_MANAGE`/`EVENT_OCCURRENCE_MANAGE`/`EVENT_SCAN`/`HOTEL_ALLOC_MANAGE` permissions referenced below are defined in full there.
+
 # Design Principles:  
 
 - DynamoDB tables must be used to allow cost saving.
@@ -87,7 +89,7 @@ These tables exist for the lifetime of the deployment and are defined in `templa
 
 ### Tour-Specific Tables (Provisioned at Runtime)
 
-These tables are created dynamically when a tour admin provisions a new tour, and can be archived/deleted when a tour is completed. The table set is no longer six; event support adds four new tour-specific table types and the full runtime provisioned set is now ten tables.
+These tables are created dynamically when a tour admin provisions a new tour, and can be archived/deleted when a tour is completed. The table set is no longer six; event support adds five new tour-specific table types (`Event`, `EventOccurrence`, `EventActivityRecord`, `Hotel`, `HotelStay` — the event definition and its occurrences are split into two tables, see [cycling-tour-events-design.md](cycling-tour-events-design.md) §2/§4/§5) and the full runtime provisioned set is now eleven tables.
 
 | Table | Purpose |
 |---|---|
@@ -97,7 +99,8 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 | **User-{tourId}** | Admin/staff user assignments for the specific tour |
 | **Notification-{tourId}** | Notifications for tour riders (announcements, alerts, personal messages) |
 | **Artifacts-{tourId}** | Metadata registry for the specific tour's S3-backed tour and ride artifacts |
-| **Event-{tourId}** | Event definitions and event occurrences for non-check-in QR activities |
+| **Event-{tourId}** | Event definitions (activities embedded) for non-check-in QR activities |
+| **EventOccurrence-{tourId}** | Dated occurrences of an event definition |
 | **EventActivityRecord-{tourId}** | Scan-level records for event activity completion |
 | **Hotel-{tourId}** | Hotel master data for tour logistics |
 | **HotelStay-{tourId}** | Per-night rider hotel allocation records |
@@ -108,7 +111,7 @@ All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables 
 
 Examples (stack name: `dev`, tour ID: `TOT-2026`):
 - Shared: `dev-RiderProfile`, `dev-RiderTours`, `dev-RiderCognitoUser`, `dev-TourMaster`, `dev-AppConfig`
-- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`, `dev-Artifacts-TOT-2026`, `dev-Event-TOT-2026`, `dev-EventActivityRecord-TOT-2026`, `dev-Hotel-TOT-2026`, `dev-HotelStay-TOT-2026`
+- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`, `dev-Artifacts-TOT-2026`, `dev-Event-TOT-2026`, `dev-EventOccurrence-TOT-2026`, `dev-EventActivityRecord-TOT-2026`, `dev-Hotel-TOT-2026`, `dev-HotelStay-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
 
@@ -123,7 +126,7 @@ Lambda functions resolve shared table names via environment variables (set by SA
 3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
 4. **De-provisioning:** For one-off usage, the operator can delete tour tables or the entire stack
 
-Provisioning methods create the same tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts, Event, EventActivityRecord, Hotel, HotelStay) with identical schemas and configurations. `POST /v1/tours` creates the Tour record in the shared TourMaster table and creates tour-specific tables only when the request includes `provisioning=true`; successful provisioning stores `provisionedAt`. `PUT /v1/tours` may provision only a tour without `provisionedAt`. The dedicated `PUT /v1/tours/{tourId}/provision` repair endpoint is idempotent for existing tables and creates only missing table types without changing TourMaster. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
+Provisioning methods create the same tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts, Event, EventOccurrence, EventActivityRecord, Hotel, HotelStay) with identical schemas and configurations. `POST /v1/tours` creates the Tour record in the shared TourMaster table and creates tour-specific tables only when the request includes `provisioning=true`; successful provisioning stores `provisionedAt`. `PUT /v1/tours` may provision only a tour without `provisionedAt`. The dedicated `PUT /v1/tours/{tourId}/provision` repair endpoint is idempotent for existing tables and creates only missing table types without changing TourMaster. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
 
 ### Key Design Benefits
 
@@ -784,6 +787,12 @@ For regular check-ins, pit stop access is stage-aware. A user with `PS_1_USER` m
 | TOUR_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | USER_LIST | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | DASHBOARD | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| EVENT_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| EVENT_OCCURRENCE_MANAGE | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| EVENT_SCAN | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| HOTEL_ALLOC_MANAGE | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+`EVENT_MANAGE`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_SCAN`, and `HOTEL_ALLOC_MANAGE` are added by the Cycling Tour Events engine; no new Cognito groups are introduced. Full detail, including the `eventAssignments` + hotel-match second authorisation layer enforced on top of `EVENT_SCAN`, is in [cycling-tour-events-design.md](cycling-tour-events-design.md) §9.
 
 API Gateway HTTP API serialises the `cognito:groups` claim as a comma-separated string when forwarding it to Lambda — this is handled transparently by `rbac.get_user_groups()`.
 
