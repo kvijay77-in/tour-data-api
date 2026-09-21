@@ -21,7 +21,7 @@ from response import (
     error_response,
 )
 from validation import validate_tour_id, validate_rider_id, ValidationError
-from models import TourRiderStatus, utc_now_iso
+from models import BaggageStatus, TourRiderStatus, utc_now_iso
 from dynamodb_utils import get_tour_item, update_tour_item
 from rbac import Permission, require_permission
 
@@ -83,15 +83,19 @@ def lambda_handler(event, context):
             tour_id=tour_id,
             key={'riderId': rider_id},
             update_expression=(
-                'SET #status = :status, updatedAt = :updatedAt '
-                'REMOVE prevStatus, exitedAt, exitedBy'
+                'SET #status = :status, baggageStatus = :baggageStatus, updatedAt = :updatedAt '
+                'REMOVE prevStatus, exitedAt, exitedBy, '
+                'baggageExitedAt, baggageExitedBy, baggageReleasedAt, '
+                'baggageReleasedBy, baggageExitNote'
             ),
             expression_values={
                 ':status': prev_status,
                 ':updatedAt': utc_now_iso(),
+                ':baggageStatus': BaggageStatus.ACTIVE.value,
             },
             expression_names={'#status': 'status'}
         )
+        updated['baggageStatus'] = BaggageStatus.ACTIVE.value
 
         return success_response(updated)
 

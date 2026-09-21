@@ -13,6 +13,8 @@ Route: POST /v1/tours/{tourId}/riders/{riderId}/exit
 import sys
 sys.path.insert(0, '/opt/python')
 
+import json
+
 from logger import get_logger
 from response import (
 	success_response,
@@ -20,9 +22,10 @@ from response import (
 	not_found_response,
 	internal_error_response,
 	conflict_response,
+	error_response,
 )
 from validation import validate_tour_id, validate_rider_id, ValidationError
-from models import TourRiderStatus, utc_now_iso
+from models import BaggageStatus, TourRiderStatus, utc_now_iso
 from dynamodb_utils import get_tour_item, update_tour_item
 from rbac import Permission, require_permission
 
@@ -59,6 +62,19 @@ def lambda_handler(event, context):
 		except ValidationError as e:
 			return bad_request_response(str(e))
 
+		try:
+			body = json.loads(event.get('body') or '{}')
+		except json.JSONDecodeError:
+			return bad_request_response("Invalid JSON in request body")
+
+		baggage_disposition = body.get('baggageDisposition')
+		if baggage_disposition not in {BaggageStatus.RETAINED.value, BaggageStatus.WITH_RIDER.value}:
+			return error_response(
+				error_code='BAGGAGE_DISPOSITION_REQUIRED',
+				message='Choose whether baggage is retained or released before exiting this rider.',
+				status_code=400,
+			)
+
 		existing = get_tour_item(
 			table_type='TourRider',
 			tour_id=tour_id,
@@ -76,25 +92,39 @@ def lambda_handler(event, context):
 
 		exited_by = _get_claim(event, 'sub', 'system')
 		now = utc_now_iso()
+		update_expression = (
+			'SET #status = :status, '
+			'prevStatus = :prevStatus, '
+			'exitedAt = :exitedAt, '
+			'exitedBy = :exitedBy, '
+			'baggageStatus = :baggageStatus, '
+			'baggageExitNote = :baggageExitNote, '
+			'updatedAt = :updatedAt'
+		)
+		expression_values = {
+			':status': TourRiderStatus.EXITED.value,
+			':prevStatus': current_status,
+			':exitedAt': now,
+			':exitedBy': exited_by,
+			':baggageStatus': baggage_disposition,
+			':baggageExitNote': body.get('note'),
+			':updatedAt': now,
+		}
+		if baggage_disposition == BaggageStatus.RETAINED.value:
+			update_expression += ', baggageExitedAt = :baggageExitedAt, baggageExitedBy = :baggageExitedBy REMOVE baggageReleasedAt, baggageReleasedBy'
+			expression_values[':baggageExitedAt'] = now
+			expression_values[':baggageExitedBy'] = exited_by
+		else:
+			update_expression += ', baggageReleasedAt = :baggageReleasedAt, baggageReleasedBy = :baggageReleasedBy REMOVE baggageExitedAt, baggageExitedBy'
+			expression_values[':baggageReleasedAt'] = now
+			expression_values[':baggageReleasedBy'] = exited_by
 
 		updated = update_tour_item(
 			table_type='TourRider',
 			tour_id=tour_id,
 			key={'riderId': rider_id},
-			update_expression=(
-				'SET #status = :status, '
-				'prevStatus = :prevStatus, '
-				'exitedAt = :exitedAt, '
-				'exitedBy = :exitedBy, '
-				'updatedAt = :updatedAt'
-			),
-			expression_values={
-				':status': TourRiderStatus.EXITED.value,
-				':prevStatus': current_status,
-				':exitedAt': now,
-				':exitedBy': exited_by,
-				':updatedAt': now,
-			},
+			update_expression=update_expression,
+			expression_values=expression_values,
 			expression_names={'#status': 'status'}
 		)
 

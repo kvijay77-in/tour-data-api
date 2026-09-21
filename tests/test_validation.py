@@ -10,6 +10,11 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'layers', 'common'))
 
 from validation import (
+    validate_activity_id,
+    validate_event_id,
+    validate_hotel_id,
+    validate_occurrence_id,
+    validate_upload_id,
     validate_rider_id,
     validate_tour_id,
     validate_ride_id,
@@ -107,6 +112,59 @@ class TestStageIdValidation:
         for stage_id in invalid_ids:
             with pytest.raises(ValidationError):
                 validate_stage_id(stage_id)
+
+
+class TestEventIdValidation:
+    def test_valid_event_ids(self):
+        for event_id in ['EVT-REG', 'EVT-BAGLOAD', 'EVT-A1']:
+            validate_event_id(event_id)
+
+    def test_invalid_event_ids(self):
+        for event_id in ['evt-reg', 'EVT-', 'EVT-BAG_LOAD', 'EVENT-1']:
+            with pytest.raises(ValidationError):
+                validate_event_id(event_id)
+
+
+class TestActivityIdValidation:
+    def test_valid_activity_ids(self):
+        for activity_id in ['ACT-001', 'ACT-010', 'ACT-999']:
+            validate_activity_id(activity_id)
+
+    def test_invalid_activity_ids(self):
+        for activity_id in ['ACT-1', 'act-001', 'ACT001']:
+            with pytest.raises(ValidationError):
+                validate_activity_id(activity_id)
+
+
+class TestOccurrenceIdValidation:
+    def test_valid_occurrence_ids(self):
+        validate_occurrence_id('EVT-BAGLOAD#2026-02-12#1')
+
+    def test_invalid_occurrence_ids(self):
+        for occurrence_id in ['EVT-BAGLOAD#2026/02/12#1', 'EVT-BAGLOAD#2026-02-12#0', 'BAD#2026-02-12#1']:
+            with pytest.raises(ValidationError):
+                validate_occurrence_id(occurrence_id)
+
+
+class TestHotelIdValidation:
+    def test_valid_hotel_ids(self):
+        for hotel_id in ['HTL-MDU-01', 'HTL-CHE-10']:
+            validate_hotel_id(hotel_id)
+
+    def test_invalid_hotel_ids(self):
+        for hotel_id in ['HTL-MD-01', 'HTL-mdu-01', 'HOTEL-MDU-01']:
+            with pytest.raises(ValidationError):
+                validate_hotel_id(hotel_id)
+
+
+class TestUploadIdValidation:
+    def test_valid_upload_ids(self):
+        validate_upload_id('UPL-000042')
+
+    def test_invalid_upload_ids(self):
+        for upload_id in ['UPL-42', 'upload-000042', 'UPL000042']:
+            with pytest.raises(ValidationError):
+                validate_upload_id(upload_id)
 
 
 class TestDateValidation:

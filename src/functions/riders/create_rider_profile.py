@@ -150,6 +150,7 @@ def lambda_handler(event, context):
             'emergencyContact': body['emergencyContact'],
             'dateOfBirth': body['dateOfBirth'],
             'gender': body['gender'],
+            'dietaryPreference': body.get('dietaryPreference'),
             'address': body['address'],
             'createdAt': now,
             'updatedAt': now

@@ -103,6 +103,7 @@ def lambda_handler(event, context):
             'personalCode',
             'dateOfBirth',
             'gender',
+            'dietaryPreference',
             'address',
         ]
         updates = {k: v for k, v in body.items() if k in updatable_fields}

@@ -36,6 +36,39 @@ tour-data-api/
 │   │   │   ├── get_ride_checkins.py   # GET /v1/tours/{tourId}/rides/{rideId}/checkins
 │   │   │   ├── get_rider_checkins.py  # GET /v1/tours/{tourId}/riders/{riderId}/checkins
 │   │   │   └── get_rider_ride_checkins.py # GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
+│   │   ├── events/
+│   │   │   ├── __init__.py
+│   │   │   ├── list_events.py         # GET /v1/tours/{tourId}/events
+│   │   │   ├── get_event.py           # GET /v1/tours/{tourId}/events/{eventId}
+│   │   │   ├── create_event.py        # POST /v1/tours/{tourId}/events
+│   │   │   ├── update_event.py        # PUT /v1/tours/{tourId}/events/{eventId}
+│   │   │   ├── list_occurrences.py    # GET /v1/tours/{tourId}/events/{eventId}/occurrences
+│   │   │   ├── get_occurrence.py      # GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}
+│   │   │   ├── create_occurrence.py   # POST /v1/tours/{tourId}/events/{eventId}/occurrences
+│   │   │   ├── update_occurrence.py   # PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}
+│   │   │   ├── get_activity_overrides.py # GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides
+│   │   │   ├── update_activity_overrides.py # PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides
+│   │   │   ├── start_occurrence.py    # POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start
+│   │   │   ├── complete_occurrence.py # POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete
+│   │   │   ├── cancel_occurrence.py   # POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel
+│   │   │   ├── create_activity_record.py # POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records
+│   │   │   ├── cancel_activity_record.py # POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel
+│   │   │   ├── get_dashboard.py       # GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard
+│   │   │   ├── get_dashboard_progress.py # GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress
+│   │   │   ├── get_rider_progress.py  # GET /v1/tours/{tourId}/riders/{riderId}/events/progress
+│   │   │   ├── get_reconciliation.py  # GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation
+│   │   │   └── get_bootstrap.py       # GET /v1/tours/{tourId}/events/bootstrap
+│   │   ├── hotels/
+│   │   │   ├── __init__.py
+│   │   │   ├── list_hotels.py         # GET /v1/tours/{tourId}/hotels
+│   │   │   ├── create_hotel.py        # POST /v1/tours/{tourId}/hotels
+│   │   │   ├── update_hotel.py        # PUT /v1/tours/{tourId}/hotels/{hotelId}
+│   │   │   ├── get_hotel_stays_by_date.py # GET /v1/tours/{tourId}/hotelstays?date={date}
+│   │   │   ├── get_hotel_stays_by_rider.py # GET /v1/tours/{tourId}/riders/{riderId}/hotelstays
+│   │   │   ├── get_hotel_stays_by_hotel.py # GET /v1/tours/{tourId}/hotels/{hotelId}/hotelstays?date={date}
+│   │   │   ├── update_hotel_stay.py   # PUT /v1/tours/{tourId}/hotelstays/{stayDate}/{riderId}
+│   │   │   ├── presign_upload.py      # POST /v1/tours/{tourId}/hotelstays/uploads/presign
+│   │   │   └── get_upload_status.py   # GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}
 │   │   ├── config/
 │   │   │   ├── __init__.py
 │   │   │   └── get_config.py          # GET /v1/config
@@ -53,6 +86,7 @@ tour-data-api/
 │   │   │   ├── get_tour_riders.py     # GET /v1/tours/{tourId}/riders
 │   │   │   ├── get_tour_rider_names.py # GET /v1/tours/{tourId}/riders/names
 │   │   │   ├── register_tour_rider.py # POST /v1/tours/{tourId}/riders
+│   │   │   ├── release_rider_baggage.py # POST /v1/tours/{tourId}/riders/{riderId}/baggage/release
 │   │   │   ├── update_rider_profile.py # PUT /v1/riders/profile/{profileId}
 │   │   │   ├── link_rider_cognito_user.py # GET|POST|DELETE /v1/riders/link/{cognitoUserName}
 │   │   │   ├── upload_profile_picture.py # POST /v1/riders/profile/{profileId}/picture
@@ -89,7 +123,9 @@ tour-data-api/
 │   │       ├── list_managed_users.py  # GET /v1/admin/usermgmt/users
 │   │       ├── list_role_groups.py    # GET /v1/admin/usermgmt/roles
 │   │       ├── list_tour_users.py     # GET /v1/tours/{tourId}/users
+│   │       ├── create_tour_user.py    # POST /v1/tours/{tourId}/users
 │   │       ├── update_managed_user.py # PUT /v1/admin/usermgmt/users/{cognitoUserId}
+│   │       ├── update_tour_user.py    # PUT /v1/tours/{tourId}/users/{userId}
 │   │       └── usermgmt_common.py     # Shared Cognito admin user management helpers
 │   │   └── notifications/
 │   │       ├── __init__.py
@@ -101,6 +137,7 @@ tour-data-api/
 │           ├── __init__.py
 │           ├── requirements.txt       # Layer dependencies
 │           ├── dynamodb_utils.py      # DynamoDB operations (shared + tour-specific)
+│           ├── event_engine.py        # Shared events/hotels/tour-user business logic helpers
 │           ├── logger.py              # Logging utilities
 │           ├── models.py              # Data models and enums
 │           ├── rbac.py                # RBAC utilities: Permission enum, group→permission mapping, enforcement helpers
@@ -115,6 +152,8 @@ tour-data-api/
 │   ├── test_checkin_enhancements.py  # Check-in business logic tests (QR, manual, fallback)
 │   ├── test_rbac.py                   # RBAC utility and handler enforcement tests
 │   ├── test_rider_app_apis.py        # Rider-app API Lambda function tests
+│   ├── test_rider_exit_apis.py       # Rider exit + baggage lifecycle API tests
+│   ├── test_event_engine_apis.py     # Event engine, hotel, and tour-user API tests
 │   ├── test_tour_provisioning.py     # Tour provisioning utility tests
 │   ├── test_validation.py            # Validation utility tests
 │   └── fixtures/
@@ -194,4 +233,3 @@ tour-data-api/
 ### Local Development Files (Not in Git)
 - **`venv/` or `.venv/`**: Python virtual environment for local development
 - **`.aws-sam/`**: SAM build artifacts and deployment packages
-
