@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import os
+import re
 import uuid
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
@@ -739,9 +740,7 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         return error_response("ACTIVITY_NOT_FOUND", "Activity not found.", status_code=404)
 
     if occurrence.get("status") != EventOccurrenceStatus.ACTIVE.value:
-        closed_at = occurrence.get("completedAt") or occurrence.get("cancelledAt")
-        if not closed_at or body["timestamp"] >= closed_at:
-            return error_response("OCCURRENCE_NOT_ACTIVE", "Occurrence is not active.", status_code=409)
+        return error_response("OCCURRENCE_NOT_ACTIVE", "Occurrence is not active.", status_code=409)
 
     access_denied = _check_event_scan_access(event, tour_id, event_definition, occurrence, activity, body["riderId"])
     if access_denied:
@@ -1362,7 +1361,7 @@ def get_hotel_upload_status(event: Dict[str, Any]) -> Dict[str, Any]:
 
 def _validate_user_role(role: str) -> None:
     valid_roles = [member.value for member in UserRole]
-    if role not in valid_roles and not role.startswith("PS_"):
+    if role not in valid_roles and not re.fullmatch(r"PS_\d+_USER", role or ""):
         raise ValidationError(
             f"Invalid role. Must be one of: {', '.join(valid_roles)} or PS_<n>_USER",
             {"field": "role", "value": role},
@@ -1417,11 +1416,6 @@ def create_tour_user(event: Dict[str, Any]) -> Dict[str, Any]:
         _validate_event_assignments(tour_id, body.get("eventAssignments"))
         if body.get("hotelId"):
             validate_hotel_id(body["hotelId"])
-            if body["role"] != UserRole.HOTEL_STAFF.value:
-                raise ValidationError(
-                    "hotelId is only allowed for HOTEL_STAFF users",
-                    {"field": "hotelId", "value": body["hotelId"]},
-                )
             if not get_tour_item("Hotel", tour_id, {"hotelId": body["hotelId"]}):
                 raise ValidationError(
                     "hotelId references a hotel that does not exist.",
@@ -1477,9 +1471,6 @@ def update_tour_user(event: Dict[str, Any]) -> Dict[str, Any]:
             _validate_event_assignments(tour_id, body.get("eventAssignments"))
         if "hotelId" in body and body.get("hotelId") is not None:
             validate_hotel_id(body["hotelId"])
-            role_for_validation = body.get("role", item.get("role"))
-            if role_for_validation != UserRole.HOTEL_STAFF.value:
-                raise ValidationError("hotelId is only allowed for HOTEL_STAFF users", {"field": "hotelId"})
             if not get_tour_item("Hotel", tour_id, {"hotelId": body["hotelId"]}):
                 raise ValidationError(
                     "hotelId references a hotel that does not exist.",

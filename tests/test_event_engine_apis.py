@@ -503,3 +503,100 @@ def test_create_activity_record_requires_type_code_for_non_opt_out(event_engine_
     assert response['statusCode'] == 400
     body = json.loads(response['body'])
     assert body['error']['message'] == 'typeCode is required for this activity record.'
+
+
+def test_update_event_definition_updates_allowed_codes_and_activities(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from create_event import lambda_handler as create_event_handler
+    from update_event import lambda_handler as update_event_handler
+
+    create_event_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID},
+            method='POST',
+            body={
+                'eventId': 'EVT-UPD',
+                'eventName': 'Needs Update',
+                'eventType': 'SINGLE',
+                'location': 'Venue',
+                'sequenceEnforced': False,
+                'defaultAllowedTypeCodes': ['1'],
+                'activities': [{'activityId': 'ACT-001', 'name': 'Desk', 'sequenceNo': 1}],
+            },
+        ),
+        None,
+    )
+
+    response = update_event_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-UPD'},
+            method='PUT',
+            body={
+                'defaultAllowedTypeCodes': ['1'],
+                'activities': [
+                    {'activityId': 'ACT-001', 'name': 'Desk Updated', 'sequenceNo': 1},
+                    {'activityId': 'ACT-002', 'name': 'Badge', 'sequenceNo': 2, 'allowedTypeCodes': ['1']},
+                ],
+                'sequenceEnforced': True,
+            },
+        ),
+        None,
+    )
+
+    assert response['statusCode'] == 200
+    body = json.loads(response['body'])
+    assert body['data']['sequenceEnforced'] is True
+    assert len(body['data']['activities']) == 2
+    assert body['data']['activities'][0]['name'] == 'Desk Updated'
+    assert body['data']['activities'][1]['activityId'] == 'ACT-002'
+
+
+def test_update_event_definition_rejects_invalid_activity_order(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from create_event import lambda_handler as create_event_handler
+    from update_event import lambda_handler as update_event_handler
+
+    create_event_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID},
+            method='POST',
+            body={
+                'eventId': 'EVT-BAD',
+                'eventName': 'Bad Update Event',
+                'eventType': 'SINGLE',
+                'location': 'Venue',
+                'sequenceEnforced': False,
+                'defaultAllowedTypeCodes': ['1'],
+                'activities': [{'activityId': 'ACT-001', 'name': 'Desk', 'sequenceNo': 1}],
+            },
+        ),
+        None,
+    )
+
+    response = update_event_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-BAD'},
+            method='PUT',
+            body={
+                'activities': [
+                    {'activityId': 'ACT-002', 'name': 'Badge', 'sequenceNo': 2},
+                    {'activityId': 'ACT-001', 'name': 'Desk', 'sequenceNo': 1},
+                ]
+            },
+        ),
+        None,
+    )
+
+    assert response['statusCode'] == 400
+    body = json.loads(response['body'])
+    assert body['error']['message'] == 'activities must be ordered by ascending sequenceNo'
