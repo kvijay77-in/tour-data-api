@@ -27,6 +27,10 @@ ALLOWED_ARTIFACT_CONTENT_TYPES = {
     'application/octet-stream',
 }
 ARTIFACT_CATEGORIES = {'tour', 'ride'}
+DIETARY_PREFERENCE_VALUES = {'VEG', 'NON_VEG'}
+EVENT_TYPES = {'SINGLE', 'REPEATING'}
+EVENT_OCCURRENCE_STATUSES = {'PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'}
+BAGGAGE_STATUSES = {'ACTIVE', 'RETAINED', 'WITH_RIDER'}
 
 
 class ValidationError(Exception):
@@ -173,6 +177,51 @@ def validate_stage_id(stage_id: str) -> None:
         )
 
 
+def validate_event_id(event_id: str) -> None:
+    """Validate event identifier format."""
+    if not re.match(r'^EVT-[A-Z0-9]{2,20}$', event_id or ''):
+        raise ValidationError(
+            f"Invalid Event ID format: {event_id}. Expected format: EVT-BAGLOAD",
+            {"field": "eventId", "value": event_id}
+        )
+
+
+def validate_activity_id(activity_id: str) -> None:
+    """Validate activity identifier format."""
+    if not re.match(r'^ACT-\d{3}$', activity_id or ''):
+        raise ValidationError(
+            f"Invalid Activity ID format: {activity_id}. Expected format: ACT-001",
+            {"field": "activityId", "value": activity_id}
+        )
+
+
+def validate_occurrence_id(occurrence_id: str) -> None:
+    """Validate occurrence identifier format."""
+    if not re.match(r'^EVT-[A-Z0-9]{2,20}#\d{4}-\d{2}-\d{2}#[1-9]\d*$', occurrence_id or ''):
+        raise ValidationError(
+            f"Invalid occurrenceId format: {occurrence_id}",
+            {"field": "occurrenceId", "value": occurrence_id}
+        )
+
+
+def validate_hotel_id(hotel_id: str) -> None:
+    """Validate hotel identifier format."""
+    if not re.match(r'^HTL-[A-Z]{3}-\d{2}$', hotel_id or ''):
+        raise ValidationError(
+            f"Invalid hotelId format: {hotel_id}. Expected format: HTL-MDU-01",
+            {"field": "hotelId", "value": hotel_id}
+        )
+
+
+def validate_upload_id(upload_id: str) -> None:
+    """Validate upload identifier format."""
+    if not re.match(r'^UPL-\d{6}$', upload_id or ''):
+        raise ValidationError(
+            f"Invalid uploadId format: {upload_id}. Expected format: UPL-000042",
+            {"field": "uploadId", "value": upload_id}
+        )
+
+
 def validate_iso_date(date_str: str, field_name: str = "date") -> None:
     """
     Validate ISO 8601 date format (YYYY-MM-DD)
@@ -308,6 +357,62 @@ def validate_required_fields(data: Dict[str, Any], required_fields: List[str]) -
         )
 
 
+def validate_event_type(event_type: str) -> None:
+    if event_type not in EVENT_TYPES:
+        raise ValidationError(
+            f"Invalid eventType. Supported values: {', '.join(sorted(EVENT_TYPES))}",
+            {"field": "eventType", "value": event_type}
+        )
+
+
+def validate_event_occurrence_status(status: str) -> None:
+    if status not in EVENT_OCCURRENCE_STATUSES:
+        raise ValidationError(
+            f"Invalid occurrence status. Supported values: {', '.join(sorted(EVENT_OCCURRENCE_STATUSES))}",
+            {"field": "status", "value": status}
+        )
+
+
+def validate_baggage_status(status: str) -> None:
+    if status not in BAGGAGE_STATUSES:
+        raise ValidationError(
+            f"Invalid baggageStatus. Supported values: {', '.join(sorted(BAGGAGE_STATUSES))}",
+            {"field": "baggageStatus", "value": status}
+        )
+
+
+def validate_allowed_type_codes(allowed_type_codes: Any, field_name: str = "allowedTypeCodes") -> None:
+    if allowed_type_codes is None:
+        return
+    if not isinstance(allowed_type_codes, list) or not all(isinstance(code, str) and code.strip() for code in allowed_type_codes):
+        raise ValidationError(
+            f"{field_name} must be a list of non-empty strings",
+            {"field": field_name, "value": allowed_type_codes}
+        )
+
+
+def validate_variant_options(variant_options: Any) -> None:
+    if variant_options is None:
+        return
+    if not isinstance(variant_options, list) or not all(isinstance(option, str) and option.strip() for option in variant_options):
+        raise ValidationError(
+            "variantOptions must be a list of non-empty strings",
+            {"field": "variantOptions", "value": variant_options}
+        )
+
+
+def validate_sharing_with(sharing_with: Any) -> None:
+    if sharing_with is None:
+        return
+    if not isinstance(sharing_with, list):
+        raise ValidationError(
+            "sharingWith must be a list of rider IDs",
+            {"field": "sharingWith", "value": sharing_with}
+        )
+    for rider_id in sharing_with:
+        validate_rider_id(rider_id)
+
+
 def validate_rider_profile_optional_fields(
     data: Dict[str, Any],
     require_mandatory_fields: bool = False,
@@ -336,6 +441,19 @@ def validate_rider_profile_optional_fields(
             raise ValidationError(
                 "Invalid gender. Supported values: Male, Female, Other, Prefer not to say",
                 {"field": "gender", "value": gender}
+            )
+
+    if 'dietaryPreference' in data and data.get('dietaryPreference') is not None:
+        dietary_preference = data.get('dietaryPreference')
+        if not isinstance(dietary_preference, str):
+            raise ValidationError(
+                "dietaryPreference must be a string",
+                {"field": "dietaryPreference", "value": dietary_preference}
+            )
+        if dietary_preference not in DIETARY_PREFERENCE_VALUES:
+            raise ValidationError(
+                "Invalid dietaryPreference. Supported values: VEG, NON_VEG",
+                {"field": "dietaryPreference", "value": dietary_preference}
             )
 
     if 'emergencyContact' in data:

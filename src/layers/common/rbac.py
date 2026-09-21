@@ -90,6 +90,21 @@ class Permission(str, Enum):
     RIDER_SELF_UPDATE = "RIDER_SELF_UPDATE"
     """Allow a rider to Create/Update their own profile (name, email, phone)."""
 
+    EVENT_MANAGE = "EVENT_MANAGE"
+    """Create/update event definitions."""
+
+    EVENT_OCCURRENCE_MANAGE = "EVENT_OCCURRENCE_MANAGE"
+    """Create/update/start/complete/cancel event occurrences."""
+
+    EVENT_SCAN = "EVENT_SCAN"
+    """Create/cancel event activity scan records."""
+
+    HOTEL_ALLOC_MANAGE = "HOTEL_ALLOC_MANAGE"
+    """Manage hotel master data and room allocations."""
+
+    USER_MANAGE = "USER_MANAGE"
+    """Create/update tour-scoped user assignment records."""
+
 
 # ============================================================================
 # GROUP → PERMISSION MAPPING
@@ -112,6 +127,11 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.RIDER_EXIT,
         Permission.ARTIFACT_MANAGE,
         Permission.RIDER_SELF_UPDATE,
+        Permission.EVENT_MANAGE,
+        Permission.EVENT_OCCURRENCE_MANAGE,
+        Permission.EVENT_SCAN,
+        Permission.HOTEL_ALLOC_MANAGE,
+        Permission.USER_MANAGE,
     ],
     "SUPER_USER": [
         Permission.READ,
@@ -122,10 +142,14 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.DASHBOARD,
         Permission.NOTIFICATION_MANAGE,
         Permission.RIDER_EXIT,
+        Permission.EVENT_OCCURRENCE_MANAGE,
+        Permission.EVENT_SCAN,
+        Permission.HOTEL_ALLOC_MANAGE,
     ],
     "HOTEL_STAFF": [
         Permission.READ,
         Permission.CHECKIN,
+        Permission.EVENT_SCAN,
     ],
     "GUEST": [
         Permission.READ,
@@ -143,6 +167,7 @@ PIT_STOP_GROUP_PERMISSIONS = {
     Permission.CHECKIN,
     Permission.PIT_STOP_MANAGE,
     Permission.DASHBOARD,
+    Permission.EVENT_SCAN,
 }
 
 ROLE_PRIORITY_ORDER = (
@@ -436,3 +461,59 @@ def require_pit_stop_stage_access(
         f"Assigned stages: {sorted(assigned_stage_numbers)}"
     )
     return forbidden_response(deny_message)
+
+
+def require_event_assignment_access(
+    event: Dict[str, Any],
+    tour_id: str,
+    occurrence: Dict[str, Any],
+    rider_id: Optional[str] = None,
+    activity_id: Optional[str] = None,
+    is_baggage_event: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Enforce eventAssignments, assignedActivityIds, and hotel match restrictions for EVENT_SCAN."""
+    from dynamodb_utils import get_tour_item
+
+    user_id = (
+        event.get('requestContext', {})
+        .get('authorizer', {})
+        .get('jwt', {})
+        .get('claims', {})
+        .get('sub')
+    )
+    if not user_id:
+        return forbidden_response("Access denied. User identity is missing.")
+
+    user_record = get_tour_item('User', tour_id, {'userId': user_id})
+    if not user_record:
+        return forbidden_response("You are not assigned to this tour.")
+
+    event_id = occurrence.get('eventId')
+    occurrence_date = occurrence.get('date')
+    assignments = user_record.get('eventAssignments') or []
+    assignment_match = False
+    for assignment in assignments:
+        if assignment.get('eventId') != event_id:
+            continue
+        dates = assignment.get('dates')
+        if dates == 'ALL' or dates == ["ALL"]:
+            assignment_match = True
+            break
+        if isinstance(dates, list) and occurrence_date in dates:
+            assignment_match = True
+            break
+
+    if assignments and not assignment_match:
+        return forbidden_response("You are not assigned to this event today.")
+
+    assigned_activity_ids = user_record.get('assignedActivityIds') or []
+    if assigned_activity_ids and activity_id and activity_id not in assigned_activity_ids:
+        return forbidden_response("You are not assigned to this event activity.")
+
+    if is_baggage_event and rider_id:
+        stay_date = occurrence_date
+        room_allocation = get_tour_item('RoomAllocation', tour_id, {'stayDate': stay_date, 'riderId': rider_id})
+        if not room_allocation or room_allocation.get('hotelId') != user_record.get('hotelId'):
+            return forbidden_response("This rider is not staying at your assigned hotel tonight.")
+
+    return None
