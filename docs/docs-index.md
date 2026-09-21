@@ -16,6 +16,9 @@ This page provides a guide to all project documentation.
 | [Requirements](Requirements.md) | Detailed functional and non-functional requirements, use cases, and business rules |
 | [Solution Design](SolutionDesign.md) | Architecture documentation, data model specifications, and technical design |
 | [Tour Artifacts Design](tour-artifacts-handling-design.md) | Tour and ride artifact management design — S3 storage, metadata model, read/write APIs |
+| [Cycling Tour Events – Change Requirement](cycling-tour-events.md) | Frozen change requirement for the generic events engine (Day 0 Registration, baggage handling, hotel logistics) |
+| [Cycling Tour Events – Backend Design](cycling-tour-events-design.md) | Authoritative backend design: data model, API contracts, RBAC, provisioning |
+| [Cycling Tour Events – Frontend Design](cycling-tour-events-frontend-design.md) | `tour-mgmt-app` / `tour-rider-app` screens, navigation, offline design |
 | [Project Structure](project-structure.md) | Project folder organization, file structure, and code organization |
 
 ## Quick Navigation
