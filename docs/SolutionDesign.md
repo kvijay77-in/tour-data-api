@@ -87,7 +87,7 @@ These tables exist for the lifetime of the deployment and are defined in `templa
 
 ### Tour-Specific Tables (Provisioned at Runtime)
 
-These tables are created dynamically when a tour admin provisions a new tour, and can be archived/deleted when a tour is completed:
+These tables are created dynamically when a tour admin provisions a new tour, and can be archived/deleted when a tour is completed. The table set is no longer six; event support adds four new tour-specific table types and the full runtime provisioned set is now ten tables.
 
 | Table | Purpose |
 |---|---|
@@ -97,6 +97,10 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 | **User-{tourId}** | Admin/staff user assignments for the specific tour |
 | **Notification-{tourId}** | Notifications for tour riders (announcements, alerts, personal messages) |
 | **Artifacts-{tourId}** | Metadata registry for the specific tour's S3-backed tour and ride artifacts |
+| **Event-{tourId}** | Event definitions and event occurrences for non-check-in QR activities |
+| **EventActivityRecord-{tourId}** | Scan-level records for event activity completion |
+| **Hotel-{tourId}** | Hotel master data for tour logistics |
+| **HotelStay-{tourId}** | Per-night rider hotel allocation records |
 
 ### Table Naming Convention
 
@@ -104,14 +108,14 @@ All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables 
 
 Examples (stack name: `dev`, tour ID: `TOT-2026`):
 - Shared: `dev-RiderProfile`, `dev-RiderTours`, `dev-RiderCognitoUser`, `dev-TourMaster`, `dev-AppConfig`
-- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`, `dev-Artifacts-TOT-2026`
+- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`, `dev-Artifacts-TOT-2026`, `dev-Event-TOT-2026`, `dev-EventActivityRecord-TOT-2026`, `dev-Hotel-TOT-2026`, `dev-HotelStay-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
 
 ### Tour Lifecycle and Table Management
 
 1. **Provisioning:** Tour-specific tables are created when a new tour is provisioned. Two methods are available:
-   - **CLI Script (Deployment Method):** `scripts/provision_tour.py` or `make provision-tour` — runs locally or in CI/CD pipelines, creates Tour record + 6 tables via boto3 directly
+   - **CLI Script (Deployment Method):** `scripts/provision_tour.py` or `make provision-tour` — runs locally or in CI/CD pipelines, creates the Tour record plus the full runtime table set via boto3 directly
    - **API Endpoint (Runtime Method):** `POST /v1/tours` — used by external apps (e.g., Check-In App) to create tours programmatically. By default this creates only the TourMaster record; sending `provisioning=true` provisions tour-specific tables in the same request. The actual integration from external apps is out of scope for this project; this API capability is provided for their use.
    - **API Update Method:** `PUT /v1/tours` — updates an existing TourMaster record. Sending `provisioning=true` provisions tables only when `provisionedAt` is absent; successful provisioning records `provisionedAt`. Repeat provisioning requests are rejected.
    - **API Repair Method:** `PUT /v1/tours/{tourId}/provision` — reruns idempotent provisioning for a tour with `provisionedAt` to create missing or newly defined table types. It does not modify TourMaster, including `provisionedAt`.
@@ -119,7 +123,7 @@ Lambda functions resolve shared table names via environment variables (set by SA
 3. **Archival:** Tour admin archives a completed tour → data can be exported to S3 → tour-specific tables can be deleted
 4. **De-provisioning:** For one-off usage, the operator can delete tour tables or the entire stack
 
-Provisioning methods create the same tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) with identical schemas and configurations. `POST /v1/tours` creates the Tour record in the shared TourMaster table and creates tour-specific tables only when the request includes `provisioning=true`; successful provisioning stores `provisionedAt`. `PUT /v1/tours` may provision only a tour without `provisionedAt`. The dedicated `PUT /v1/tours/{tourId}/provision` repair endpoint is idempotent for existing tables and creates only missing table types without changing TourMaster. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
+Provisioning methods create the same tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts, Event, EventActivityRecord, Hotel, HotelStay) with identical schemas and configurations. `POST /v1/tours` creates the Tour record in the shared TourMaster table and creates tour-specific tables only when the request includes `provisioning=true`; successful provisioning stores `provisionedAt`. `PUT /v1/tours` may provision only a tour without `provisionedAt`. The dedicated `PUT /v1/tours/{tourId}/provision` repair endpoint is idempotent for existing tables and creates only missing table types without changing TourMaster. The shared provisioning logic resides in `src/layers/common/tour_provisioning.py`.
 
 ### Key Design Benefits
 
