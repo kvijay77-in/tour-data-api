@@ -1,6 +1,6 @@
 # Tour Data API
 
-Backend REST API for cycling tour management system. A serverless application built with AWS SAM, Lambda, and DynamoDB to manage rider check-ins, tour rides, and rider profiles.
+Backend REST API for cycling tour management system. A serverless application built with AWS SAM, Lambda, and DynamoDB to manage rider check-ins, tour rides, rider profiles, event operations, hotel logistics, and tour staff assignments.
 
 ## 📋 Overview
 
@@ -10,6 +10,8 @@ This API supports managing cycling tours with approximately 100 riders, 7-8 ride
 - **Tour Management**: Tour lifecycle, rider enrollment
 - **Ride Management**: Daily ride scheduling, route planning
 - **Check-in System**: Recording rider arrivals at checkpoints (Normal/Not Riding/Quit Riding)
+- **Event Engine**: Event definitions, occurrences, activity scans, dashboards, and reconciliation
+- **Hotel Logistics**: Hotel master data, nightly room allocations, and upload-status tracking
 - **Tour Artifacts**: Upload, store, and retrieve tour-level and ride-level artifacts (maps, GPX files, elevation charts, rider booklets) in S3
 - **Dashboard**: Real-time ride status and statistics
 - **User Management**: Admin and staff access control
@@ -20,8 +22,8 @@ This API supports managing cycling tours with approximately 100 riders, 7-8 ride
 - **Runtime[^1]**: Python 3.14*
 - **Infrastructure**: AWS SAM (Serverless Application Model)
 - **Authentication**: AWS Cognito with JWT tokens
-- **Storage**: DynamoDB (2 shared tables + tour-specific tables provisioned at runtime), S3 (rider photos, archive exports)
-- **Functions**: 20 Lambda functions handling tours, riders, rides, check-ins, and users
+- **Storage**: DynamoDB (5 shared tables + 11 tour-specific tables provisioned at runtime), S3 (rider photos, artifact uploads, archive exports)
+- **Functions**: Lambda handlers across tours, riders, rides, check-ins, artifacts, events, hotels, notifications, and users
 - **CI/CD**: GitHub Actions with automated testing and multi-environment deployment
 
 [^1]: Supports 3.11 to 3.14. 3.14 is the default.
@@ -32,13 +34,23 @@ The system uses a **hybrid table strategy**:
 
 **Shared Tables (SAM-managed):**
 - **RiderProfile**: Rider personal information (persists across tours)
-- **Tour**: Tour details, status, and lifecycle data
+- **RiderTours**: Rider participation lifecycle by `profileId + tourId`
+- **RiderCognitoUser**: Mapping between Cognito rider username and rider profile ID
+- **TourMaster**: Tour details, status, and lifecycle data
+- **AppConfig**: Shared platform configuration used by multiple clients
 
-**Tour-Specific Tables (provisioned at runtime per tour):**
+**Tour-Specific Tables (provisioned at runtime per tour, 11 total):**
 - **TourRider-{tourId}**: Rider participation in a specific tour
 - **Ride-{tourId}**: Daily ride schedule and routes for a tour
 - **CheckIn-{tourId}**: Rider check-ins at destinations for a tour
 - **User-{tourId}**: Admin/staff user accounts for a tour
+- **Notification-{tourId}**: Tour rider notifications
+- **Artifacts-{tourId}**: Tour and ride artifact metadata
+- **Event-{tourId}**: Event definitions
+- **EventOccurrence-{tourId}**: Dated event occurrences
+- **EventActivityLogs-{tourId}**: Event activity completion records
+- **Hotel-{tourId}**: Tour hotel master data
+- **RoomAllocation-{tourId}**: Per-night rider room allocations
 
 Tour-specific tables are created when a tour is provisioned and can be archived/deleted when a tour is complete (`POST /v1/tours/{tourId}/archive`).
 
@@ -49,7 +61,7 @@ Tour-specific tables can be created through two methods:
 1. **CLI Script (Deployment Method):** `make provision-tour` or `python scripts/provision_tour.py` — for initial setup or CI/CD pipelines
 2. **API Endpoint (Runtime Method):** `POST /v1/tours` — for external apps (e.g., Check-In App) to create tours programmatically
 
-Both methods create the same Tour record and 6 tour-specific tables. See [Deployment Guide → After Deployment: Provisioning a Tour](docs/deployment-guide.md#after-deployment-provisioning-a-tour) for details.
+Both methods create the same Tour record and the same 11 tour-specific tables. See [Deployment Guide → After Deployment: Provisioning a Tour](docs/deployment-guide.md#after-deployment-provisioning-a-tour) for details.
 
 ## Business Rules
 
@@ -116,6 +128,9 @@ Authorization: Bearer <jwt-token>
 - `GET /v1/tours/{tourId}/riders/names` - Get all registered riders with riderId and name only
 - `POST /v1/tours/{tourId}/riders` - Register rider for a tour
 - `GET /v1/tours/{tourId}/riders/{riderId}` - Get tour rider details
+- `POST /v1/tours/{tourId}/riders/{riderId}/exit` - Exit rider from tour with baggage disposition
+- `POST /v1/tours/{tourId}/riders/{riderId}/exit/cancel` - Cancel rider exit
+- `POST /v1/tours/{tourId}/riders/{riderId}/baggage/release` - Mark retained baggage as returned to rider
 - `GET /v1/tours/{tourId}/riders/{riderId}/statistics` - Get rider statistics
 
 #### Rides
@@ -138,6 +153,41 @@ Authorization: Bearer <jwt-token>
 - `GET /v1/users/me` - Get current user
 - `GET /v1/users/cognito` - List Cognito users with only `sub` and `name`
 - `GET /v1/tours/{tourId}/users` - List tour users
+- `POST /v1/tours/{tourId}/users` - Create a tour-scoped user assignment
+- `PUT /v1/tours/{tourId}/users/{userId}` - Update a tour-scoped user assignment
+
+#### Events
+- `GET /v1/tours/{tourId}/events` - List event definitions
+- `GET /v1/tours/{tourId}/events/{eventId}` - Get event definition
+- `POST /v1/tours/{tourId}/events` - Create event definition
+- `PUT /v1/tours/{tourId}/events/{eventId}` - Update event definition
+- `GET /v1/tours/{tourId}/events/{eventId}/occurrences` - List occurrences for an event
+- `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` - Get occurrence details
+- `POST /v1/tours/{tourId}/events/{eventId}/occurrences` - Create occurrence
+- `PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` - Update occurrence
+- `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` - Get activity overrides
+- `PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` - Update activity overrides
+- `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start` - Start occurrence
+- `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete` - Complete occurrence
+- `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` - Cancel occurrence
+- `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records` - Create activity record
+- `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel` - Cancel activity record
+- `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` - Get event dashboard
+- `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` - Get lightweight event dashboard progress
+- `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` - Get reconciliation payload
+- `GET /v1/tours/{tourId}/events/bootstrap` - Get offline/bootstrap payload
+- `GET /v1/tours/{tourId}/riders/{riderId}/events/progress` - Get rider event progress
+
+#### Hotels
+- `GET /v1/tours/{tourId}/hotels` - List hotels
+- `POST /v1/tours/{tourId}/hotels` - Create hotel
+- `PUT /v1/tours/{tourId}/hotels/{hotelId}` - Update hotel
+- `GET /v1/tours/{tourId}/hotelstays?date={date}` - List room allocations for a stay date
+- `GET /v1/tours/{tourId}/riders/{riderId}/hotelstays` - List room allocations for a rider
+- `GET /v1/tours/{tourId}/hotels/{hotelId}/hotelstays?date={date}` - List room allocations for a hotel/date
+- `PUT /v1/tours/{tourId}/hotelstays/{stayDate}/{riderId}` - Upsert a single-night room allocation
+- `POST /v1/tours/{tourId}/hotelstays/uploads/presign` - Generate upload URL for hotel allocation CSV
+- `GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}` - Get hotel allocation upload status
 
 #### Notifications
 - `GET /v1/tours/{tourId}/notifications` - List notifications (supports optional `?type=` and `?riderId=`)
@@ -187,7 +237,7 @@ For detailed API specifications, mandatory attributes, and validation rules, see
 For detailed project organization and folder structure, see [docs/project-structure.md](docs/project-structure.md).
 
 **Quick Overview:**
-- `src/functions/` - Lambda function handlers (checkins, riders, rides, tours, users)
+- `src/functions/` - Lambda function handlers (artifacts, checkins, events, hotels, notifications, riders, rides, tours, users)
 - `src/layers/common/` - Shared utilities and dependencies
 - `docs/` - Requirements, architecture, and design documentation
 - `tests/` - Unit and integration tests

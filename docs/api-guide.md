@@ -76,6 +76,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}` | Get tour rider | [Riders](#riders) | ✅ | ❌
 | Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit` | Mark rider as exited from tour | [Riders](#riders) | ✅ | ❌
 | Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit/cancel` | Cancel rider exit and restore previous status | [Riders](#riders) | ✅ | ❌
+| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/baggage/release` | Mark retained baggage as released back to the rider | [Riders](#riders) | ✅ | ❌
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) | ✅ | ❌
 | Artifacts | POST | `/v1/artifacts/tour/presign-upload` | Generate presigned upload URL for a tour artifact | [Artifacts](#artifacts) | ✅ | ❌
 | Artifacts | POST | `/v1/artifacts/ride/presign-upload` | Generate presigned upload URL for a ride artifact | [Artifacts](#artifacts) | ✅ | ❌
@@ -101,9 +102,40 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard` | Get dashboard payload | [Check-Ins](#check-ins) | ✅ | ❌
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | Get lightweight dashboard progress payload | [Check-Ins](#check-ins) | ✅ | ❌
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | Get rider popup details for selected ride | [Check-Ins](#check-ins) |✅ | ❌
+| Events | GET | `/v1/tours/{tourId}/events` | List event definitions | [Events](#events) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}` | Get event definition | [Events](#events) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events` | Create event definition | [Events](#events) | ✅ | ❌ |
+| Events | PUT | `/v1/tours/{tourId}/events/{eventId}` | Update event definition | [Events](#events) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences` | List occurrences | [Events](#events) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | Get occurrence | [Events](#events) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences` | Create occurrence | [Events](#events) | ✅ | ❌ |
+| Events | PUT | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | Update occurrence | [Events](#events) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | Get activity overrides | [Events](#events) | ✅ | ❌ |
+| Events | PUT | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | Update activity overrides | [Events](#events) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start` | Start occurrence | [Events](#events) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete` | Complete occurrence | [Events](#events) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` | Cancel occurrence | [Events](#events) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records` | Create activity record | [Events](#events) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel` | Cancel activity record | [Events](#events) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | Get event dashboard | [Events](#events) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | Get event dashboard progress | [Events](#events) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | Get event reconciliation payload | [Events](#events) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/bootstrap` | Get event bootstrap payload | [Events](#events) | ✅ | ✅ |
+| Events | GET | `/v1/tours/{tourId}/riders/{riderId}/events/progress` | Get rider event progress | [Events](#events) | ✅ | ✅ |
+| Hotels | GET | `/v1/tours/{tourId}/hotels` | List hotels | [Hotels](#hotels) | ✅ | ❌ |
+| Hotels | POST | `/v1/tours/{tourId}/hotels` | Create hotel | [Hotels](#hotels) | ✅ | ❌ |
+| Hotels | PUT | `/v1/tours/{tourId}/hotels/{hotelId}` | Update hotel | [Hotels](#hotels) | ✅ | ❌ |
+| Hotels | GET | `/v1/tours/{tourId}/hotelstays` | List hotel stays by date | [Hotels](#hotels) | ✅ | ❌ |
+| Hotels | GET | `/v1/tours/{tourId}/riders/{riderId}/hotelstays` | List hotel stays for a rider | [Hotels](#hotels) | ✅ | ✅ |
+| Hotels | GET | `/v1/tours/{tourId}/hotels/{hotelId}/hotelstays` | List hotel stays for a hotel/date | [Hotels](#hotels) | ✅ | ❌ |
+| Hotels | PUT | `/v1/tours/{tourId}/hotelstays/{stayDate}/{riderId}` | Upsert a single-night room allocation | [Hotels](#hotels) | ✅ | ❌ |
+| Hotels | POST | `/v1/tours/{tourId}/hotelstays/uploads/presign` | Generate upload URL for hotel allocations CSV | [Hotels](#hotels) | ✅ | ❌ |
+| Hotels | GET | `/v1/tours/{tourId}/hotelstays/uploads/{uploadId}` | Get hotel allocation upload status | [Hotels](#hotels) | ✅ | ❌ |
 | Users | GET | `/v1/users/me` | Get current user claims | [Users](#users) | ✅ | ✅
 | Users | GET | `/v1/users/cognito` | List Cognito users with only `sub` and `name` | [Users](#users) | ✅ | ❌
 | Users | GET | `/v1/tours/{tourId}/users` | List tour users | [Users](#users) | ✅ | ❌
+| Users | POST | `/v1/tours/{tourId}/users` | Create a tour-scoped user assignment | [Users](#users) | ✅ | ❌ |
+| Users | PUT | `/v1/tours/{tourId}/users/{userId}` | Update a tour-scoped user assignment | [Users](#users) | ✅ | ❌ |
 | Admin UserMgmt | GET | `/v1/admin/usermgmt/roles` | List assignable Cognito groups | [Admin User Management](#admin-user-management) | ✅ | ❌
 | Admin UserMgmt | GET | `/v1/admin/usermgmt/users` | List Cognito users with roles | [Admin User Management](#admin-user-management) | ✅ | ❌
 | Admin UserMgmt | POST | `/v1/admin/usermgmt/users` | Create Cognito user and assign roles | [Admin User Management](#admin-user-management) | ✅ | ❌
@@ -130,8 +162,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/active` | None | None | None | No body required |
 | `GET /v1/tours/{tourId}` | `tourId` (required) | None | None | `tourId`: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]` |
 | `GET /v1/tours` | None | `status` (optional) | None | `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED` |
-| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate, rideCount`; Optional: `description, provisioning` | `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer (total rides planned for the tour, may exceed the number of tour days); `provisioning` is boolean, defaults to `false`, is not stored in TourMaster, and provisions 6 tour tables only when `true`; successful provisioning sets `provisionedAt` |
-| `PUT /v1/tours` | None | None | Required: `tourId`; Optional: `name, startDate, endDate, description, rideCount, status, provisioning` | Tour must exist; `tourId` format; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer; `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; `provisioning` is boolean and defaults to `false`; when `provisioning=false`, only TourMaster is updated; when `provisioning=true`, provisioning is allowed only when `provisionedAt` is absent, then it creates 6 tables and sets `provisionedAt`; repeat provisioning is rejected |
+| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate, rideCount`; Optional: `description, provisioning` | `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer (total rides planned for the tour, may exceed the number of tour days); `provisioning` is boolean, defaults to `false`, is not stored in TourMaster, and provisions 11 tour tables only when `true`; successful provisioning sets `provisionedAt` |
+| `PUT /v1/tours` | None | None | Required: `tourId`; Optional: `name, startDate, endDate, description, rideCount, status, provisioning` | Tour must exist; `tourId` format; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer; `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; `provisioning` is boolean and defaults to `false`; when `provisioning=false`, only TourMaster is updated; when `provisioning=true`, provisioning is allowed only when `provisionedAt` is absent, then it creates 11 tables and sets `provisionedAt`; repeat provisioning is rejected |
 | `PUT /v1/tours/{tourId}/provision` | `tourId` (required) | None | None | Tour must exist and have `provisionedAt`; reruns idempotent provisioning to create only missing or newly defined table types; does not modify TourMaster, including `provisionedAt` |
 | `POST /v1/tours/{tourId}/archive` | `tourId` (required) | `exportToS3` (optional, default true), `deleteTables` (optional, default true) | None | Tour exists; status must be `ACTIVE` or `COMPLETED`; ARCHIVED cannot be archived again |
 
@@ -154,9 +186,58 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/{tourId}/riders/names` | `tourId` (required) | None | None | Returns lightweight list with `riderId`, `name`, and `personalCode`; requires authenticated user with `READ` permission |
 | `POST /v1/tours/{tourId}/riders` | `tourId` (required) | None | Required: `profileId`; Optional: `riderId, experienceLevel, medicalConditions, specialRequirements` | Tour exists with status `PLANNING/ACTIVE`; profile exists; duplicate profile registration rejected (`ALREADY_REGISTERED`); generates temp riderId if omitted |
 | `GET /v1/tours/{tourId}/riders/{riderId}` | `tourId, riderId` (required) | None | None | `tourId` format; `riderId` format `R1..R999` |
-| `POST /v1/tours/{tourId}/riders/{riderId}/exit` | `tourId, riderId` (required) | None | None | Updates existing row only; sets `status=EXITED`, `prevStatus=<previous status>`, `exitedAt`, `exitedBy`, and `updatedAt`; returns `409 RIDER_ALREADY_EXITED` when already exited; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
-| `POST /v1/tours/{tourId}/riders/{riderId}/exit/cancel` | `tourId, riderId` (required) | None | None | Valid only when current status is `EXITED`; restores `status` from `prevStatus`; removes `prevStatus`, `exitedAt`, `exitedBy`; returns `400 INVALID_EXIT_CANCEL_INVOCATION` for non-EXITED status; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
+| `POST /v1/tours/{tourId}/riders/{riderId}/exit` | `tourId, riderId` (required) | None | Required: `baggageDisposition` | Updates existing row only; sets `status=EXITED`, `prevStatus=<previous status>`, `exitedAt`, `exitedBy`, and `updatedAt`; `baggageDisposition` must be `RETAINED` or `WITH_RIDER`; returns `409 RIDER_ALREADY_EXITED` when already exited; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
+| `POST /v1/tours/{tourId}/riders/{riderId}/exit/cancel` | `tourId, riderId` (required) | None | None | Valid only when current status is `EXITED`; restores `status` from `prevStatus`; removes `prevStatus`, `exitedAt`, `exitedBy`, and associated baggage-exit metadata; returns `400 INVALID_EXIT_CANCEL_INVOCATION` for non-EXITED status; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
+| `POST /v1/tours/{tourId}/riders/{riderId}/baggage/release` | `tourId, riderId` (required) | None | None | Valid only when the rider's baggage status is `RETAINED`; transitions baggage state to `WITH_RIDER` and records release audit metadata; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
 | `GET /v1/tours/{tourId}/riders/{riderId}/statistics` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must exist in tour |
+
+#### Events
+
+| Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
+|---|---|---|---|---|
+| `GET /v1/tours/{tourId}/events` | `tourId` (required) | None | None | Requires `READ`; returns all event definitions for the tour |
+| `GET /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | None | Requires `READ`; `eventId` format `EVT-...`; returns `404 EVENT_NOT_FOUND` when absent |
+| `POST /v1/tours/{tourId}/events` | `tourId` (required) | None | Required: `eventId, eventName, eventType, location, activities`; Optional: `sequenceEnforced, defaultAllowedTypeCodes, allowSelfService` | Requires `EVENT_MANAGE`; validates event/activity IDs, allowed type codes, and ascending `sequenceNo`; duplicate event IDs rejected |
+| `PUT /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | Optional: `eventName, eventType, location, sequenceEnforced, allowSelfService, defaultAllowedTypeCodes, activities` | Requires `EVENT_MANAGE`; same event/activity validations as create for supplied fields |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | None | None | Requires `READ`; lists occurrences for the event |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; `occurrenceId` format `EVT-...#YYYY-MM-DD#seq` |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | None | Required: `date, seq`; Optional: `startTime, linkedOccurrenceRef, notes, activityOverrides` | Requires `EVENT_OCCURRENCE_MANAGE`; duplicate occurrence rejected |
+| `PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | Optional occurrence fields including `date, seq, startTime, linkedOccurrenceRef, notes, activityOverrides` | Requires `EVENT_OCCURRENCE_MANAGE`; validates supplied fields |
+| `GET/PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | `tourId, eventId, occurrenceId` (required) | None | For PUT: `activityOverrides` | GET requires `READ`; PUT requires `EVENT_OCCURRENCE_MANAGE` |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start` | `tourId, eventId, occurrenceId` (required) | None | Optional: `startedAt` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `ACTIVE` |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete` | `tourId, eventId, occurrenceId` (required) | None | Optional: `completedAt` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `COMPLETED` |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` | `tourId, eventId, occurrenceId` (required) | None | Optional: `cancelledAt` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `CANCELLED` |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records` | `tourId, eventId, occurrenceId` (required) | None | Required: `activityId, riderId, method, timestamp`; Optional: `typeCode, outcome, variantSelected` | Requires `EVENT_SCAN`; occurrence must be `ACTIVE`; `typeCode` is required unless `outcome=OPTED_OUT`; sequence and activity restrictions enforced |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel` | `tourId, eventId, occurrenceId, recordId` (required) | None | None | Requires `EVENT_SCAN`; retains the record and marks it cancelled with audit fields |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; aggregated occurrence dashboard payload |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; lightweight progress refresh payload |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; reconciliation payload for activity completion versus expected riders |
+| `GET /v1/tours/{tourId}/events/bootstrap` | `tourId` (required) | None | None | Requires `READ`; bootstrap payload for event definitions, upcoming occurrences, and supporting lookup data |
+| `GET /v1/tours/{tourId}/riders/{riderId}/events/progress` | `tourId, riderId` (required) | None | None | Requires `READ`; rider-centric event progress summary |
+
+#### Hotels
+
+| Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
+|---|---|---|---|---|
+| `GET /v1/tours/{tourId}/hotels` | `tourId` (required) | None | None | Requires `READ`; lists hotel master records only |
+| `POST /v1/tours/{tourId}/hotels` | `tourId` (required) | None | Required: `hotelId, name, city, address` | Requires `HOTEL_ALLOC_MANAGE`; `hotelId` format `HTL-AAA-99`; duplicate hotel rejected |
+| `PUT /v1/tours/{tourId}/hotels/{hotelId}` | `tourId, hotelId` (required) | None | Optional: `name, city, address, phone, contactName, notes` | Requires `HOTEL_ALLOC_MANAGE`; updates supplied fields only |
+| `GET /v1/tours/{tourId}/hotelstays` | `tourId` (required) | `date` (required) | None | Requires `READ`; returns `RoomAllocation` rows for one stay date |
+| `GET /v1/tours/{tourId}/riders/{riderId}/hotelstays` | `tourId, riderId` (required) | None | None | Requires `READ`; returns hotel stays for a rider |
+| `GET /v1/tours/{tourId}/hotels/{hotelId}/hotelstays` | `tourId, hotelId` (required) | `date` (required) | None | Requires `READ`; returns hotel stays for one hotel/date |
+| `PUT /v1/tours/{tourId}/hotelstays/{stayDate}/{riderId}` | `tourId, stayDate, riderId` (required) | None | Required: `hotelId, roomNo`; Optional: `roomCapacity, sharingWith, checkInDate, checkOutDate` | Requires `HOTEL_ALLOC_MANAGE`; validates reciprocal sharing and room-capacity constraints |
+| `POST /v1/tours/{tourId}/hotelstays/uploads/presign` | `tourId` (required) | None | None | Requires `HOTEL_ALLOC_MANAGE`; returns `uploadId`, presigned CSV upload URL, and S3 key |
+| `GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}` | `tourId, uploadId` (required) | None | None | Requires `HOTEL_ALLOC_MANAGE`; returns upload processing status |
+
+#### Users
+
+| Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
+|---|---|---|---|---|
+| `GET /v1/users/me` | None | None | None | Returns current JWT claims as seen by the API |
+| `GET /v1/users/cognito` | None | None | None | Requires `READ`; returns Cognito users with minimal fields |
+| `GET /v1/tours/{tourId}/users` | `tourId` (required) | None | None | Requires `USER_LIST`; lists tour-scoped user assignments |
+| `POST /v1/tours/{tourId}/users` | `tourId` (required) | None | Required: `userId, username, email, name, role`; Optional: `status, assignedStage, hotelId, eventAssignments, assignedActivityIds` | Requires `USER_MANAGE`; validates referenced hotels/events and tour-scoped assignment fields |
+| `PUT /v1/tours/{tourId}/users/{userId}` | `tourId, userId` (required) | None | Optional: `username, email, name, role, status, assignedStage, hotelId, eventAssignments, assignedActivityIds` | Requires `USER_MANAGE`; validates supplied referenced hotels/events and updates only provided fields |
 
 #### Artifacts
 
@@ -429,6 +510,7 @@ Example conflict response when `profileId` already exists (`409`):
 | GET riders | ✅ | ✅ | ✅ | ✅ | ✅ |
 | POST rider exit | ✅ | ✅ | ❌ | ❌ | ❌ |
 | POST rider exit cancel | ✅ | ✅ | ❌ | ❌ | ❌ |
+| POST rider baggage release | ✅ | ✅ | ❌ | ❌ | ❌ |
 | GET rides | ✅ | ✅ | ✅ | ✅ | ✅ |
 | GET dashboard | ✅ | ✅ | ✅ | ❌ | ✅ |
 | GET dashboard progress | ✅ | ✅ | ✅ | ❌ | ✅ |
@@ -442,6 +524,12 @@ Example conflict response when `profileId` already exists (`409`):
 | POST open ride | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST start ride | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST close ride | ✅ | ❌ | ❌ | ❌ | ❌ |
+| GET event/hotel read APIs | ✅ | ✅ | ✅ | ✅ | ✅ |
+| POST/PUT event definitions | ✅ | ❌ | ❌ | ❌ | ❌ |
+| POST/PUT/start/complete/cancel occurrences | ✅ | ✅ | ❌ | ❌ | ❌ |
+| POST event activity record / cancel event record | ✅ | ✅ | ✅ | ✅ | ❌ |
+| POST/PUT hotels and hotel stays | ✅ | ✅ | ❌ | ❌ | ❌ |
+| POST/PUT tour users | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Manual check-in | ✅ | ✅ | ❌ | ❌ | ❌ |
 | POST notification (create) | ✅ | ✅ | ❌ | ❌ | ❌ |
 | POST riders/profile (create) | Any authenticated user | | | | |
@@ -464,8 +552,13 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
    - `TOUR_MANAGE`: create/archive tours
   - `RIDE_MANAGE`: create/update/open/start/close rides
   - `PIT_STOP_MANAGE`: open/close pit-stop stages
-  - `RIDER_EXIT`: mark rider as `EXITED` and cancel rider exit (ADMINISTRATOR and SUPER_USER only)
+  - `RIDER_EXIT`: mark rider as `EXITED`, release retained baggage, and cancel rider exit (ADMINISTRATOR and SUPER_USER only)
   - `CHECKIN`: create check-ins, with additional stage-aware enforcement for `PS_<n>_USER` roles on regular pit-stop check-ins
+  - `EVENT_MANAGE`: create/update event definitions
+  - `EVENT_OCCURRENCE_MANAGE`: create/update/start/complete/cancel event occurrences
+  - `EVENT_SCAN`: create/cancel event activity records
+  - `HOTEL_ALLOC_MANAGE`: manage hotels and room allocations
+  - `USER_MANAGE`: create/update tour-scoped user assignments
 
 ### Pit Stop Role Rules
 
