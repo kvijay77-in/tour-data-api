@@ -54,7 +54,8 @@ tour-mgmt-app/
 │   │       ├── BaggageReconciliationScreen.tsx
 │   │       ├── HotelManagementScreen.tsx
 │   │       ├── HotelAllocationUploadScreen.tsx
-│   │       └── HotelAllocationAdjustScreen.tsx
+│   │       ├── HotelAllocationAdjustScreen.tsx
+│   │       └── TourUserAssignmentScreen.tsx
 │   ├── context/
 │   │   └── EventSessionContext.tsx       # New, mirrors RideSessionContext
 │   ├── services/
@@ -85,6 +86,7 @@ Added to `src/types/navigation.ts`, following the existing route param conventio
 | `HotelManagement` | none | Stack, from `TourManagement` | `isAdministrator` |
 | `HotelAllocationUpload` | none | Stack, `onClose` modal-style | `hasPermission(role, Permission.HOTEL_ALLOC_MANAGE)` |
 | `HotelAllocationAdjust` | `{ riderId: string; stayDate: string }` | Stack, `onClose` modal-style | `hasPermission(role, Permission.HOTEL_ALLOC_MANAGE)` |
+| `TourUserAssignment` | `{ userId: string }` | Stack, `onClose` modal-style | `hasPermission(role, Permission.USER_MANAGE)` |
 
 All new routes are registered in `AppStackParamList` inside the same conditional block already used for `TourManagement`/`UserOnboarding`, gated per the table above rather than solely on `isAdministrator`, since `EVENT_OCCURRENCE_MANAGE`, `EVENT_SCAN`, and `HOTEL_ALLOC_MANAGE` are also held by `SUPER_USER`/`HOTEL_STAFF`/pit-stop roles per backend §9.2.
 
@@ -115,9 +117,15 @@ Each new screen gets an equivalent wrapper; wrappers do no logic beyond destruct
 
 **List screen layout (prose):** Header "Event Definitions" with a "+ New Event" action. Below, a scrollable list of cards, one per event: `eventName`, `eventType` badge (`SINGLE`/`REPEATING`), `location`, and activity count. Tapping a card navigates to `EventDefinitionEditor` with `eventId`.
 
-**Editor screen layout:** Top section — event-level fields (`eventName`, `eventType`, `location`, `sequenceEnforced` toggle, `defaultScanType` picker, `allowSelfService` toggle). Below — an ordered, drag-reorderable list of activity rows, each showing `name`, `sequenceNo`, `enabled`/`mandatory`/`allowOptOut` toggles, `scanType` picker, `prerequisiteActivityIds` multi-select (restricted to earlier activities), `restrictToAssignedUsers` toggle (defaults `true` per backend D15), and `variantOptions` chip-input. A "+ Add Activity" row is appended at the end. Save button posts the full definition (backend §8.4/§8.5).
+**Editor screen layout:** Top section — event-level fields (`eventName`, `eventType`, `location`, `sequenceEnforced` toggle, `defaultAllowedTypeCodes` multi-select sourced live from `AppConfig` `ID_CODE_TYPE` (backend §4.3, fetched via the existing `GET /v1/config` call — never a hardcoded RIDER/BAGGAGE toggle), `allowSelfService` toggle). Below — an ordered, drag-reorderable list of activity rows, each showing `name`, `sequenceNo`, `enabled`/`mandatory`/`allowOptOut` toggles, an `allowedTypeCodes` multi-select (same `ID_CODE_TYPE` source; empty selection means "inherit the event's `defaultAllowedTypeCodes`", shown as a placeholder chip reading "Inherits: {resolved names}"), `prerequisiteActivityIds` multi-select (restricted to earlier activities), `restrictToAssignedUsers` toggle (defaults `true` per backend D15), and `variantOptions` chip-input. A "+ Add Activity" row is appended at the end. Save button posts the full definition (backend §8.4/§8.5).
 
-**States:** loading (skeleton cards), empty (list screen shows "No events yet" + CTA), error (`StatusMessage kind: 'error'` with retry), offline (banner: "Event definitions require a connection to edit" — definitions are never offline-editable, §7.8), permission-denied (screen not reachable — route hidden per §3.1).
+**Form factor priority (web-first, mobile fallback):** per product-owner refinement, this is the one screen in this design that is designed **web-first** rather than mobile-first, because drag-reordering a multi-row activity list with three multi-selects per row is materially harder to use one-handed on a phone than a definitional, low-frequency (created once, edited rarely) admin task deserves.
+
+- **Web / tablet layout (primary):** two-column layout — event-level fields in a fixed left rail, the activity list as a full-width, drag-reorderable table (one row per activity, all fields visible inline as table cells: name, sequence, toggles, multi-selects) on the right. Drag-reorder uses pointer drag-and-drop (no long-press gesture needed). "+ Add Activity" appends a new table row without navigating away.
+- **Mobile fallback layout:** the same fields are shown, but the activity list becomes a vertical list of **expandable cards** (one per activity, collapsed to `name` + `sequenceNo` + enabled/mandatory badges by default; tapping expands the card to reveal the remaining fields) rather than a table, since table columns do not fit a phone width. Reordering uses explicit "Move up"/"Move down" icon buttons per card instead of drag-and-drop, which is unreliable on small touch targets. All other behaviour (validation, save, API calls) is identical to the web layout — this is a layout-only fallback, not a reduced feature set.
+- Both layouts share the same component logic and API calls; only the activity-list container and reorder-interaction components are swapped based on a breakpoint (matching the existing responsive-breakpoint convention already used elsewhere in `tour-mgmt-app`, rather than a separate mobile-only screen).
+
+**States:** loading (skeleton cards/rows), empty (list screen shows "No events yet" + CTA), error (`StatusMessage kind: 'error'` with retry), offline (banner: "Event definitions require a connection to edit" — definitions are never offline-editable, §7.8), permission-denied (screen not reachable — route hidden per §3.1).
 
 **Validation messages:** "Activity name is required.", "At least one activity is required.", "Prerequisite activities must come before this activity in sequence.", "Variant options require at least two values." — all client-side pre-checks mirroring backend `400 VALIDATION_ERROR` (backend §8.25); server error messages are surfaced verbatim on top of these when the API rejects.
 
@@ -131,25 +139,32 @@ Each new screen gets an equivalent wrapper; wrappers do no logic beyond destruct
 
 **Permissions:** `EVENT_OCCURRENCE_MANAGE` (backend §9.2).
 
-**Layout:** A **read-only definition header** at the top of the screen — `eventName`, `location`, `sequenceEnforced`, and the activity list rendered as read-only chips (name + mandatory/enabled state only, no editing controls; per finding 1 the definition is never edited from this screen). Below the header, a list of occurrences for the event, each row showing `date`, `seq`, `status` badge, and action buttons appropriate to state: `Start` (when `PLANNED`), `Complete`/`Cancel` (when `ACTIVE`). A "+ New Occurrence" action opens a small form for `date` + `seq`. Each occurrence row also exposes a "Disabled activities" chip-toggle set and a "Self-service" switch, both writing to `disabledActivityIds`/`selfServiceEnabled` (backend §8.9).
+**Layout:** A **read-only definition header** at the top of the screen — `eventName`, `location`, `sequenceEnforced`, and the activity list rendered as read-only chips (name + mandatory/enabled state only, no editing controls; per finding 1 the definition is never edited from this screen). Below the header, a list of occurrences for the event, each row showing `date`, `seq`, `status` badge, and action buttons appropriate to state: `Start` (when `PLANNED`), `Complete`/`Cancel` (when `ACTIVE`). A "+ New Occurrence" action opens a small form for `date` + `seq`. Each occurrence row also exposes an **"Activity overrides"** panel, one row per activity, each with an "Adjust for this occurrence" action that opens the per-activity override editor (below) writing to `activityOverrides` (backend §5.2a, §8.9a) — replacing any earlier flat "disable activity"/single self-service toggle model.
+
+**Per-activity override editor:** for the selected activity, three optional overrides plus a note: `enabled` (on/off, defaults to the activity's own `enabled`), `selfServiceEnabled` (on/off, defaults to the occurrence-wide `selfServiceEnabled` default), `allowedTypeCodes` (multi-select narrowing the activity's effective allowed types for this occurrence only, same `ID_CODE_TYPE` source as backend §4.3), and a free-text `note` explaining the day-specific reason (for example "Self-service drop-off for one day only — hotel short-staffed"). Leaving all three override fields unset and saving removes the override entry entirely (backend §8.9a merge/removal rule). Saved overrides are shown as a small badge on the activity chip in the occurrence header (for example "Self-service (Day 3 only)") so the day-specific change is visible at a glance without opening the editor.
+
+**Form factor priority (web-first for create/major edits, mobile quick-actions for day-of changes):** per product-owner refinement, creating an event's initial run of occurrences and any multi-field edit is a planning-time task best done web-first; but a single override — for example "the hotel is short-staffed today, switch baggage loading to self-service for today only" — is exactly the kind of last-minute, on-site, one-handed decision that must also work quickly on a phone.
+
+- **Full-edit operations (web-first, adaptive to mobile):** creating an occurrence, bulk-generating a `REPEATING` event's date range, and editing more than one override field at once. On web/tablet these use the full per-activity override editor described above, laid out as a side panel; on mobile the same editor is reachable but presented as a full-screen sheet (not a quick-action), since these are inherently multi-field operations.
+- **Mobile quick-actions (mobile-first, also available on web):** a small, fixed set of single-tap toggles surfaced directly on the occurrence row without opening the full editor — specifically: toggle `enabled` off/on for one activity, toggle `selfServiceEnabled` off/on for one activity, and `Start`/`Complete`/`Cancel` the occurrence itself. Each quick-action is a single API call (backend §8.9a PUT with only that one field set, using the merge/upsert semantics) with an inline confirmation toast rather than a navigation to another screen, so it can be done in seconds from a phone at the hotel front desk. `allowedTypeCodes` narrowing and the free-text `note` are **not** quick-actions — they always route to the full editor, since they involve a multi-select/text-entry interaction that a single-tap toggle cannot express.
 
 **States:** loading, empty ("No occurrences yet for this event"), error, offline (occurrence create/start/complete/cancel are online-only administrative actions — banner shown, actions disabled), permission-denied (route hidden).
 
 **Interactions:** tapping `Start`/`Complete`/`Cancel` shows a confirmation dialog before calling backend §8.10/§8.11/§8.12; `Complete` confirmation surfaces `outstandingMandatoryCount` from the response if non-zero, e.g. "3 riders have outstanding mandatory activities. Complete anyway?".
 
-**API calls:** backend §8.6–§8.12.
+**API calls:** backend §8.6–§8.12/§8.9a.
 
 **Navigation:** in from `EventDefinitionList` (admin) or a dedicated "Occurrences" entry point; out via back; each occurrence row's "Scan" action pushes `EventScan`.
 
 ### 4.3 Event Scan screen
 
-**Purpose:** Record `EventActivityRecord` scans (backend §5.3, §8.13). Modelled directly on `CheckInScreen.tsx`.
+**Purpose:** Record `EventActivityLogs` scans (backend §5.3, §8.13). Modelled directly on `CheckInScreen.tsx`.
 
 **Permissions:** `EVENT_SCAN` (backend §9.2), further narrowed by the second authorisation layer (backend §9.3) — a denied scan surfaces the exact `RIDER_NOT_ASSIGNED`/`HOTEL_MISMATCH` message from backend §8.25.
 
 **Layout (3-section, matching `CheckInScreen`):**
 
-1. **Activity selector + scanner.** An activity picker (chips or dropdown) restricted to `enabled` activities not in the occurrence's `disabledActivityIds`; the currently selected activity determines the allowed ID Code type(s) passed to `resolveScannedRiderId()` (§8.1). Below, the camera scanner (mounted only `useIsFocused`, via `useCameraPermissions`) plus a manual-entry fallback field, matching `CheckInScreen`'s pattern exactly.
+1. **Activity selector + scanner.** An activity picker (chips or dropdown) restricted to activities whose *effective* `enabled` state (activity definition, then narrowed by any occurrence-level `activityOverrides` entry, backend §5.2a) is `true` for this occurrence; the currently selected activity's *effective* `allowedTypeCodes` — resolved as the activity's own value if non-empty, else the event's `defaultAllowedTypeCodes` (backend §4.3), then further narrowed for this occurrence only if an `activityOverrides` entry sets its own `allowedTypeCodes` (backend §5.2a) — determines the allowed ID Code type(s) passed to `resolveScannedRiderId()` (§8.1). Below, the camera scanner (mounted only `useIsFocused`, via `useCameraPermissions`) plus a manual-entry fallback field, matching `CheckInScreen`'s pattern exactly.
 2. **Confirmation card.** Shows resolved rider name/photo, the selected activity, an auto-submit toggle, and scan-cooldown behaviour identical to `CheckInScreen` (`processingRef`/`scanCooldownUntilRef` guards, `playScanTick` on scan, `playSuccess`/`playFailure` on outcome). When the activity has `variantOptions`, a variant prompt (radio buttons, e.g. VEG/NON_VEG) appears before submit and defaults to the rider's `dietaryPreference` if the API returns it via the bootstrap payload (backend §8.24). When the activity has `allowOptOut=true`, an "Opt out" secondary action is shown alongside the primary "Confirm" action, submitting `outcome: "OPTED_OUT"`.
 3. **Rolling recent-log.** Last N scans for this occurrence, newest first, showing rider name, activity, outcome, and a "cancel" affordance calling backend §8.14 with a confirmation dialog.
 
@@ -215,29 +230,31 @@ Each new screen gets an equivalent wrapper; wrappers do no logic beyond destruct
 
 ### 4.8 Hotel allocation CSV upload
 
-**Purpose:** Bulk-load `HotelStay` records via the S3 presigned-upload + async-processing flow (backend §8.21/§8.22, design decision D11).
+**Purpose:** Bulk-load `RoomAllocation` records via the S3 presigned-upload + async-processing flow (backend §8.21/§8.22, design decision D11), with a **strict all-or-nothing apply** (backend §8.22a/§8.22b, D21) — the frontend must never present a "partially applied" outcome, since one cannot occur.
 
-**Layout (`onClose` modal-style, matching admin screen convention):** File-pick button (native document picker), selected-file name display, "Upload" action. On upload: progress bar tracking the S3 `PUT`, then a "Processing…" spinner while polling. On completion: summary ("{successCount} of {rowCount} rows applied") and, if `errorCount > 0`, a row-level error table with columns Row, Code, Message — each row number mapped directly back to the source CSV so the organiser can locate and fix it, plus a "Retry" action that re-opens the file picker for a corrected file.
+**Layout (`onClose` modal-style, matching admin screen convention):** File-pick button (native document picker), selected-file name display, "Upload" action. On upload: progress bar tracking the S3 `PUT`, then a "Validating…" spinner while polling. On completion, exactly one of two outcomes is shown — never a mixed one:
+- **Applied:** a success banner "{appliedCount} allocations applied for {rowCount} rows." with a "Done" action closing the modal.
+- **Rejected:** an error banner "This file was not applied — fix the {errorCount} issue(s) below and re-upload the corrected file. No allocations were changed." followed by a row-level error table with columns Row, Code, Message — each row number mapped directly back to the source CSV so the organiser can locate and fix it — plus a "Choose another file" action that re-opens the file picker. The banner's wording is deliberately explicit that **nothing was written**, so the organiser does not assume the valid-looking rows went through.
 
 **Flow detail:**
 1. Screen calls backend §8.21 to get `{ uploadId, uploadUrl, s3Key, expiresIn }`.
 2. App performs the S3 `PUT` of the picked CSV file to `uploadUrl`, tracking progress via the HTTP client's upload-progress callback.
-3. App polls backend §8.22 with the returned `uploadId` on a fixed interval (e.g. every 3s) until `status` is `COMPLETED` or `FAILED`, capped at a maximum poll duration with a "still processing — check back later" fallback message.
-4. Errors are rendered from the `errors[]` array in the poll response, each `{ row, code, message }` mapped 1:1 to a table row.
+3. App polls backend §8.22 with the returned `uploadId` on a fixed interval (e.g. every 3s) until `status` is `APPLIED` or `REJECTED`, capped at a maximum poll duration with a "still validating — check back later" fallback message.
+4. On `REJECTED`, errors are rendered from the `errors[]` array in the poll response, each `{ row, code, message }` mapped 1:1 to a table row; on `APPLIED`, `appliedCount` is shown and no error table is rendered.
 
-**States:** loading (initial presign call), uploading (progress bar), processing (poll spinner), error (presign failure, S3 PUT failure, or `FAILED` status), offline (upload is online-only — screen shows "Connect to the internet to upload hotel allocations" and disables the file picker).
+**States:** loading (initial presign call), uploading (progress bar), validating (poll spinner, labelled "Validating…" rather than "Processing…" to make clear nothing is applied yet), error (presign failure, S3 `PUT` failure, or `REJECTED` status — both are "expected" outcomes handled in-screen per §9, not thrown exceptions), offline (upload is online-only — screen shows "Connect to the internet to upload hotel allocations" and disables the file picker).
 
 **API calls:** backend §8.21/§8.22.
 
 ### 4.9 Manual hotel allocation adjustment
 
-**Purpose:** Single-night edit of one rider's `HotelStay` (backend §8.20).
+**Purpose:** Single-night edit of one rider's `RoomAllocation` (backend §8.20).
 
-**Layout:** A **read-only rider profile display** at the top (name, photo, `riderId` — per finding 1/finding 15, rider profile fields are never editable here), followed by an editable form for `hotelId` (picker), `roomNo`, and `sharingWith` (rider picker, optional) for the single `stayDate` passed via route params. A **room-clash warning** banner appears inline the moment the chosen `hotelId`+`roomNo` combination is already occupied by a non-reciprocal rider for that date (client-side pre-check against the cached `hotelStayStore`, backed by a final server-side check on save).
+**Layout:** A **read-only rider profile display** at the top (name, photo, `riderId` — per finding 1/finding 15, rider profile fields are never editable here), followed by an editable form for `hotelId` (picker), `roomNo`, `roomCapacity` (stepper, `2` or `3`, defaults `2`, backend §5.4/D19), and `sharingWith` (rider **multi-select**, optional, capped to `roomCapacity - 1` selections so the room's total occupancy including the current rider cannot exceed `roomCapacity`) for the single `stayDate` passed via route params. A **room-clash warning** banner appears inline the moment the chosen `hotelId`+`roomNo` combination is already occupied by a non-reciprocal rider for that date (client-side pre-check against the cached `hotelStayStore`, backed by a final server-side check on save). A **capacity warning** banner appears inline the moment the selected `sharingWith` list would exceed `roomCapacity` (client-side pre-check; the picker itself also disables further selections once the cap is reached).
 
 **States:** loading, error, offline (edit is online-only administrative action; if a cached room-clash check cannot be performed offline because the local cache is stale, the warning is suppressed and a "verify online before saving" note is shown instead), permission-denied (route hidden).
 
-**Validation messages:** "Room number is required.", room-clash banner text: "Room {roomNo} at {hotelName} is already allocated to {otherRiderName} on {stayDate}." (mirrors backend `409 ROOM_CLASH` message, backend §8.25), "The paired rider does not confirm this room sharing." (mirrors `409 NON_RECIPROCAL_SHARING`).
+**Validation messages:** "Room number is required.", room-clash banner text: "Room {roomNo} at {hotelName} is already allocated to {otherRiderName} on {stayDate}." (mirrors backend `409 ROOM_CLASH` message, backend §8.25), "The paired rider's record does not confirm this room sharing." (mirrors `409 NON_RECIPROCAL_SHARING`), "Room {roomNo} cannot hold more than {roomCapacity} riders on this date." (mirrors `409 ROOM_CAPACITY_EXCEEDED`).
 
 **API calls:** backend §8.20; hotel list from §8.18; existing stays from §8.19 (by-hotel query) for clash pre-checking.
 
@@ -247,7 +264,7 @@ Each new screen gets an equivalent wrapper; wrappers do no logic beyond destruct
 
 **Purpose:** Extend the existing rider-exit screen/flow to require `baggageDisposition` (backend §8.23).
 
-**Layout:** The existing exit confirmation dialog gains a mandatory radio choice: "Baggage retained by organisers" (`RETAINED`) or "Baggage already released" (`RELEASED`), with the Confirm button disabled until one is chosen. Submitting without a choice is prevented client-side; if somehow submitted, the server's `400 BAGGAGE_DISPOSITION_REQUIRED` message ("Choose whether baggage is retained or released before exiting this rider.") is shown.
+**Layout:** The existing exit confirmation dialog gains a mandatory radio choice: "Baggage retained by organisers" (`RETAINED`) or "Rider is taking baggage now" (`WITH_RIDER`), with the Confirm button disabled until one is chosen. Submitting without a choice is prevented client-side; if somehow submitted, the server's `400 BAGGAGE_DISPOSITION_REQUIRED` message ("Choose whether baggage is retained or released before exiting this rider.") is shown.
 
 **Exit cancellation:** the existing cancel-exit action is unchanged in the UI; it now also restores `baggageStatus` server-side (backend §8.23) with no additional client UI required.
 
@@ -255,9 +272,27 @@ Each new screen gets an equivalent wrapper; wrappers do no logic beyond destruct
 
 **API calls:** backend §8.23.
 
-### 4.11 Extensions to existing user management screens
+### 4.11 User provisioning — create/update `User-{tourId}` assignments
 
-`UserOnboarding`/`UserModify` screens gain two new optional fields when creating/editing a `User-{tourId}` record: a `hotelId` picker (for `HOTEL_STAFF` users, backend §5.7) and an `eventAssignments` editor (multi-select of event + date-range/`"ALL"` pairs, backend §5.7). Both are rendered only when the target role is one that can hold `EVENT_SCAN`/`EVENT_OCCURRENCE_MANAGE` (ADMINISTRATOR, SUPER_USER, PS_\<n\>_USER, HOTEL_STAFF), matching the existing pattern of conditionally shown fields based on selected role.
+**Purpose:** Provide the screen flow for the previously-missing backend contract (backend §8.23a, D22) that creates/updates a `User-{tourId}` record's tour-assignment attributes: `role`, `assignedStage`, `hotelId`, `eventAssignments`, `assignedActivityIds`.
+
+**Permissions:** `USER_MANAGE` (backend §9.2) — entry points hidden unless held.
+
+**Relationship to existing user-management screens:** this is **not** a replacement for `UserOnboarding`/`UserModify` (which create/manage the Cognito identity via `/v1/admin/usermgmt/users` — unaffected by this design). It is a new step that follows identity creation: `UserOnboarding`'s existing "Save" success state gains a secondary action, "Assign to this tour →", which navigates straight into this screen pre-filled with the just-created `userId`; the screen is also reachable directly from a "Tour Assignments" entry on `TourManagement` for assigning an already-existing managed user.
+
+**Layout:** A **read-only identity header** at the top (`username`, `email`, `name` — sourced from the existing managed-user record, never re-entered or edited here) followed by an editable tour-assignment form: `role` picker (same options as `User-{tourId}.role`, backend §5.7 header), `assignedStage` (number stepper, shown only when `role=PS_<n>_USER`), `hotelId` (hotel picker, shown only when `role=HOTEL_STAFF`), `eventAssignments` editor (repeatable rows, each an event picker + a `dates` control that is either "All dates" or a specific multi-date picker), and `assignedActivityIds` (multi-select scoped to the activities of the events already chosen in `eventAssignments`, shown only when at least one event is assigned). Save calls `POST`/`PUT` backend §8.23a depending on whether a `User-{tourId}` record already exists for this `userId` (determined from the initial `GET /v1/tours/{tourId}/users` list load, backend existing endpoint).
+
+**States:** loading (fetching the current assignment, if any, plus the event/hotel pickers' source lists), empty (no existing assignment — form starts blank aside from the identity header), error, offline (assignment is online-only administrative action; banner shown, form disabled), permission-denied (route hidden).
+
+**Validation messages:** "Select a role.", `400 INVALID_EVENT_ASSIGNMENT` surfaced verbatim as "One or more assignments reference an event or hotel that does not exist." (backend §8.25) — shown inline next to the offending `eventAssignments`/`hotelId` field rather than as a generic top-of-screen error, since the field causing it is otherwise ambiguous; `404 USER_NOT_FOUND` (the identity was deleted between load and save) is shown as a full-screen message with a "Back to user list" action rather than a form-field error, since the form can no longer be saved at all.
+
+**API calls:** backend §8.23a; identity data and existing-assignment check from the existing `GET /v1/tours/{tourId}/users`.
+
+**Navigation:** in from `UserOnboarding`'s post-save action or from a new `TourManagement` → "Tour Assignments" entry; out via `onClose` back to the user list.
+
+### 4.12 Extensions to existing user management screens
+
+`UserOnboarding`/`UserModify` screens are otherwise unchanged by this design (they continue to own Cognito identity creation only); §4.11 above is the sole screen responsible for the fields added to `User-{tourId}` by this design.
 
 ## 5. Component design
 
@@ -281,7 +316,7 @@ interface EventSessionContextValue {
   selectedEventId: string | null;
   selectedOccurrenceId: string | null;
   selectedActivityId: string | null;
-  cachedRecords: EventActivityRecord[];       // records for the current occurrence, kept in sync with SQLite
+  cachedRecords: EventActivityLogs[];       // records for the current occurrence, kept in sync with SQLite
   setSelection: (eventId: string, occurrenceId: string, activityId?: string) => void;
   clearSelection: () => void;
   refreshCachedRecords: () => Promise<void>;
@@ -306,7 +341,7 @@ CREATE TABLE IF NOT EXISTS events (
   event_type TEXT NOT NULL,
   location TEXT,
   sequence_enforced INTEGER NOT NULL,
-  default_scan_type TEXT,
+  default_allowed_type_codes_json TEXT,
   allow_self_service INTEGER NOT NULL,
   activities_json TEXT NOT NULL,   -- serialized activities[] array, backend §5.1
   updated_at TEXT NOT NULL
@@ -318,7 +353,7 @@ CREATE TABLE IF NOT EXISTS event_occurrences (
   date TEXT NOT NULL,
   seq INTEGER NOT NULL,
   status TEXT NOT NULL,
-  disabled_activity_ids_json TEXT,
+  activity_overrides_json TEXT,   -- serialized activityOverrides[] array, backend §5.2a
   self_service_enabled INTEGER,
   linked_occurrence_ref TEXT,
   updated_at TEXT NOT NULL
@@ -342,12 +377,13 @@ CREATE TABLE IF NOT EXISTS event_activity_records (
 );
 
 -- hotelStayStore.ts
-CREATE TABLE IF NOT EXISTS hotel_stays (
+CREATE TABLE IF NOT EXISTS room_allocations (
   stay_date TEXT NOT NULL,
   rider_id TEXT NOT NULL,
   hotel_id TEXT NOT NULL,
   room_no TEXT,
-  sharing_with TEXT,
+  room_capacity INTEGER NOT NULL DEFAULT 2,
+  sharing_with_json TEXT,   -- serialized List<String> of rider IDs, backend §5.4/D19
   updated_at TEXT NOT NULL,
   PRIMARY KEY (stay_date, rider_id)
 );
@@ -413,9 +449,20 @@ function resolveScannedRiderId(
 
 ### 8.2 Per-activity allowed-type flow
 
-`EventScanScreen` (§4.3) computes `allowedTypes` from the selected activity's `scanType` (backend §5.1: `RIDER` or `BAGGAGE`). Because `BAGGAGE` covers type codes `3`–`8` (backend §6 / `docs/idcode-backend-api-change-request.md` §3), the screen passes the full set of currently-enabled `BAGGAGE`-typed `ID_CODE_TYPE` config entries (fetched via the existing `GET /v1/config` call) as `allowedTypes` when the activity's `scanType` is `BAGGAGE`, and `['RIDER']` when it is `RIDER`. On a successful resolution, `{ riderId, typeCode, bagLabel }` is passed directly into the activity-record submission (backend §8.13 request body).
+`EventScanScreen` (§4.3) computes `allowedTypes` from the selected activity's effective `allowedTypeCodes` (backend §4.3/§5.1 — resolved as `Activity.allowedTypeCodes` if non-empty, else `Event.defaultAllowedTypeCodes`), then, if the occurrence has an `activityOverrides` entry for that activity with its own `allowedTypeCodes` set, that override further **narrows** the resolved set for this occurrence only (it is not a fallback in the chain, but a per-occurrence restriction applied on top of it, §4.2/backend §5.2a). The screen never hardcodes `RIDER`/`BAGGAGE`: it resolves the effective code list to the matching `ID_CODE_TYPE` config entries (fetched via the existing `GET /v1/config` call) and passes those entries' codes as `allowedTypes`. On a successful resolution, `{ riderId, typeCode, bagLabel }` is passed directly into the activity-record submission (backend §8.13 request body).
 
 ## 9. Error and message catalogue
+
+### 9.1 Graceful handling of expected validation errors and 404s
+
+Per product-owner refinement, the apps must treat backend validation errors (`400`) and expected "not found" responses (`404`) as **normal, in-screen flow outcomes** — never as thrown/uncaught exceptions that crash a screen or fall back to a generic error boundary. This formalises a pattern already used ad hoc in a few screens (for example `EventScanScreen`'s duplicate/prerequisite handling, §4.3) into a rule for every screen in this design:
+
+- Every API call in `eventsApi.ts`/`hotelsApi.ts` returns a **discriminated-union outcome** (mirroring `checkInApi.ts`'s existing pattern, §2.1), not a thrown `ApiError` for the codes listed in the table below — callers `switch` on `outcome.type` rather than wrapping the call in `try/catch` for these expected cases. A `try/catch`/error boundary is reserved for genuinely unexpected failures (network loss mid-request, `500`s, malformed responses).
+- A `400 VALIDATION_ERROR` (or a named validation code such as `INVALID_EVENT_ASSIGNMENT`) is always shown **inline, next to the field that caused it** when the field is unambiguous (for example §4.11's `eventAssignments`/`hotelId` handling), and only falls back to a top-of-screen `StatusMessage kind: 'error'` when no single field is responsible.
+- A `404` always resolves to an explicit **next-step action** rather than a dead-end message: "not found because it was deleted elsewhere" screens (for example `404 USER_NOT_FOUND` in §4.11, `404 UPLOAD_NOT_FOUND`) show a full-screen message plus a button back to the owning list screen; "not found because the ID typed/scanned was wrong" screens (for example a manual rider-ID entry that doesn't resolve) show an inline retry affordance instead, since the user is expected to immediately correct their input.
+- No screen in this design shows a raw stack trace, a generic "Something went wrong" message, or a native alert/dialog for any code listed in §9.2 — those are reserved for the unexpected-failure path described above.
+
+### 9.2 Error code to message mapping
 
 Every backend error code from backend §8.25 maps to a user-facing message. Where the backend message already contains user-facing text (e.g. `BAGGAGE_NOT_IN_TOUR`), it is rendered verbatim; otherwise, the app supplies a message consistent with existing `StatusMessage` tone:
 
@@ -440,11 +487,15 @@ Every backend error code from backend §8.25 maps to a user-facing message. Wher
 | `HOTEL_ALREADY_EXISTS` | "A hotel with this ID already exists." | error |
 | `ROOM_CLASH` | verbatim from server | warning |
 | `NON_RECIPROCAL_SHARING` | verbatim from server | warning |
+| `ROOM_CAPACITY_EXCEEDED` | verbatim from server | warning |
 | `UPLOAD_NOT_FOUND` | "Upload not found." | error |
 | `BAGGAGE_DISPOSITION_REQUIRED` | verbatim from server | error |
 | `BAGGAGE_NOT_RETAINED` | "Baggage is not currently retained for this rider." | error |
 | `RECORD_NOT_FOUND` | "Activity record not found." | error |
 | `RECORD_ALREADY_CANCELLED` | "This activity record has already been cancelled." | info |
+| `USER_NOT_FOUND` | "User not found." (§4.11, next-step: back to user list) | error |
+| `USER_ALREADY_EXISTS` | "A user with this ID already exists." | error |
+| `INVALID_EVENT_ASSIGNMENT` | "One or more assignments reference an event or hotel that does not exist." (§4.11, shown inline next to the offending field) | error |
 
 ## 10. `tour-mgmt-app` task list
 
@@ -456,14 +507,14 @@ Every backend error code from backend §8.25 maps to a user-facing message. Wher
 | 4 | Generalise `resolveScannedRiderId()` | Signature and behaviour exactly per §8.1; existing check-in tests unaffected | None | `src/services/idcode/idCodeService.ts`, `src/constants/idCodes.ts` | 1 |
 | 5 | Implement `eventStore.ts`, `eventRecordStore.ts`, `hotelStayStore.ts` | DDL per §7.1; write-local-first + `pending_operations` integration | Task 3 | `src/services/database/*.ts` | 2 |
 | 6 | Implement `EventSessionContext` | Shape per §6.1 | Task 5 | `src/context/EventSessionContext.tsx` | 2 |
-| 7 | Build Event Definition list/editor screens | §4.1 states/validation implemented | Tasks 1–3 | `src/screens/events/EventDefinition*.tsx` | 2 |
-| 8 | Build Occurrence management screen | §4.2, including read-only definition header | Tasks 1–3, 6 | `src/screens/events/OccurrenceManagementScreen.tsx` | 2 |
-| 9 | Build Event Scan screen | §4.3, reusing/extracting `ScanConfirmationCard` | Tasks 1–6 | `src/screens/events/EventScanScreen.tsx` | 3 |
+| 7 | Build Event Definition list/editor screens | §4.1 states/validation implemented, including the web-first table layout and mobile expandable-card fallback | Tasks 1–3 | `src/screens/events/EventDefinition*.tsx` | 2 |
+| 8 | Build Occurrence management screen | §4.2, including read-only definition header, per-activity `activityOverrides` editor, and mobile quick-action toggles | Tasks 1–3, 6 | `src/screens/events/OccurrenceManagementScreen.tsx` | 2 |
+| 9 | Build Event Scan screen | §4.3, reusing/extracting `ScanConfirmationCard`, resolving effective `enabled`/`allowedTypeCodes` via `activityOverrides` | Tasks 1–6 | `src/screens/events/EventScanScreen.tsx` | 3 |
 | 10 | Build Rider Progress stepper | §4.4 | Tasks 1–3 | `src/screens/events/RiderProgressScreen.tsx`, `ActivityStepper` component | 3 |
 | 11 | Build Occurrence dashboard + Baggage reconciliation screens | §4.5, §4.6 | Tasks 1–3 | `src/screens/events/{OccurrenceDashboard,BaggageReconciliation}Screen.tsx` | 3 |
-| 12 | Build Hotel management, upload, and manual-adjustment screens | §4.7–§4.9 | Tasks 1–5 | `src/screens/events/Hotel*.tsx` | 3 |
-| 13 | Extend rider-exit UI with baggage disposition + release action | §4.10 | Task 3 | existing rider-exit screen/component | 2 |
-| 14 | Extend user management screens with `hotelId`/`eventAssignments` fields | §4.11 | Task 3 | existing `UserOnboarding`/`UserModify` screens | 3 |
+| 12 | Build Hotel management, upload (all-or-nothing outcome only, §4.8), and manual-adjustment (multi-select `sharingWith` + `roomCapacity`, §4.9) screens | §4.7–§4.9 | Tasks 1–5 | `src/screens/events/Hotel*.tsx` | 3 |
+| 13 | Extend rider-exit UI with baggage disposition (`RETAINED`/`WITH_RIDER`) + release action | §4.10 | Task 3 | existing rider-exit screen/component | 2 |
+| 14 | Build the `TourUserAssignment` screen for `User-{tourId}` create/update | §4.11 | Task 3 | `src/screens/events/TourUserAssignmentScreen.tsx` | 3 |
 | 15 | Sync service integration | §7.3/§7.4 new operation types handled by outbound/inbound timers | Task 5 | `src/services/sync/syncService.ts` | 2 |
 
 ## 11. `tour-rider-app` task list
@@ -476,11 +527,11 @@ Every backend error code from backend §8.25 maps to a user-facing message. Wher
 
 ## 12. Frontend test strategy
 
-**Unit:** `resolveScannedRiderId()` backwards-compatibility (existing `['RIDER']` behaviour byte-for-byte unchanged) and new `TYPE_NOT_ALLOWED_FOR_EVENT` path; `hasPermission` mapping for the four new backend permissions; SQLite DDL migration idempotency.
+**Unit:** `resolveScannedRiderId()` backwards-compatibility (existing `['RIDER']` behaviour byte-for-byte unchanged) and new `TYPE_NOT_ALLOWED_FOR_EVENT` path; `hasPermission` mapping for the five new backend permissions (including `USER_MANAGE`); SQLite DDL migration idempotency; `activityOverrides` effective-value resolution (activity → occurrence override → event default precedence, §4.3/backend §5.2a).
 
-**Component:** `EventScanScreen` state rendering for each state in §4.3 (loading/empty/error/offline/permission-denied/blocked-scan); `OccurrenceManagementScreen` read-only header rendering (activities must not be editable from this screen); room-clash banner rendering in `HotelAllocationAdjustScreen`.
+**Component:** `EventScanScreen` state rendering for each state in §4.3 (loading/empty/error/offline/permission-denied/blocked-scan); `OccurrenceManagementScreen` read-only header rendering (activities must not be editable from this screen) and per-activity override editor + mobile quick-action toggles (§4.2); room-clash and room-capacity banner rendering in `HotelAllocationAdjustScreen` (§4.9); `HotelAllocationUploadScreen` renders only the `Applied`/`Rejected` outcomes (§4.8) and never a partial-success state; `TourUserAssignmentScreen` field-level `INVALID_EVENT_ASSIGNMENT` rendering (§4.11); `EventDefinitionEditorScreen` renders the table layout above the web/mobile breakpoint and the expandable-card layout below it (§4.1).
 
-**Manual QA scenarios:** end-to-end scan of all 5 Day-0-Registration activities for one rider including a variant choice and an opt-out; end-to-end Baggage Loading → Baggage Unloading with one bag deliberately withheld to verify the reconciliation drill-down; wrong-hotel-staff scan producing the exact `HOTEL_MISMATCH` message; airplane-mode scan followed by reconnection and successful sync; CSV upload with a deliberately malformed row producing a row-mapped error.
+**Manual QA scenarios:** end-to-end scan of all 5 Day-0-Registration activities for one rider including a variant choice and an opt-out; end-to-end Baggage Loading → Baggage Unloading with one bag deliberately withheld to verify the reconciliation drill-down; wrong-hotel-staff scan producing the exact `HOTEL_MISMATCH` message; airplane-mode scan followed by reconnection and successful sync; CSV upload with a deliberately malformed row producing a full-batch rejection with zero rows applied (never a partial count); a mobile quick-action toggle of `selfServiceEnabled` for one activity on one occurrence, verified not to affect any other occurrence of the same event; a `roomCapacity=3` triple-sharing save followed by a fourth-rider attempt producing `ROOM_CAPACITY_EXCEEDED`.
 
 ## 13. Accessibility and field-usability notes
 
