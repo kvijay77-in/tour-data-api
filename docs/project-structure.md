@@ -54,7 +54,7 @@ tour-data-api/
 │   │   │   ├── create_activity_record.py # POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records
 │   │   │   ├── cancel_activity_record.py # POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel
 │   │   │   ├── get_dashboard.py       # GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard
-│   │   │   ├── get_dashboard_progress.py # GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress
+│   │   │   ├── get_event_dashboard_progress.py # GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress
 │   │   │   ├── get_rider_progress.py  # GET /v1/tours/{tourId}/riders/{riderId}/events/progress
 │   │   │   ├── get_reconciliation.py  # GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation
 │   │   │   └── get_bootstrap.py       # GET /v1/tours/{tourId}/events/bootstrap

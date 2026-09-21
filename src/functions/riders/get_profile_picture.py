@@ -13,7 +13,6 @@ import os
 import boto3
 
 from logger import get_logger, log_event
-from rbac import require_permission, Permission
 
 from response import (
     success_response, bad_request_response, not_found_response,
@@ -47,10 +46,6 @@ def lambda_handler(event, context):
     """
     try:
         log_event(logger, event)
-
-        deny = require_permission(event, Permission.READ)
-        if deny:
-            return deny
 
         profile_id = (event.get('pathParameters') or {}).get('profileId')
 

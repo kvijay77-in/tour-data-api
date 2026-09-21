@@ -349,6 +349,7 @@ class TestRequirePitStopStageAccess:
             Permission.CHECKIN,
             Permission.PIT_STOP_MANAGE,
             Permission.DASHBOARD,
+            Permission.EVENT_SCAN,
         }
 
     def test_multiple_groups_union_permissions(self):

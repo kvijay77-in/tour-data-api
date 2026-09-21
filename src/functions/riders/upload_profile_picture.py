@@ -17,7 +17,6 @@ import uuid
 import boto3
 
 from logger import get_logger, log_event
-from rbac import require_permission, Permission
 from response import (
     success_response, bad_request_response, not_found_response,
     internal_error_response
@@ -48,10 +47,6 @@ def lambda_handler(event, context):
     """
     try:
         log_event(logger, event)
-
-        deny = require_permission(event, Permission.RIDER_SELF_UPDATE)
-        if deny:
-            return deny
 
         # Extract profile ID from path parameters
         profile_id = event.get('pathParameters', {}).get('profileId')

@@ -1705,7 +1705,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/functions/checkins/
-      Handler: get_dashboard_progress.lambda_handler
+      Handler: get_event_dashboard_progress.lambda_handler
       Description: Get lightweight dashboard progress payload for a ride
       Timeout: 60
       Layers:

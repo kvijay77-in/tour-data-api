@@ -304,7 +304,7 @@ def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
     assert body['data']['tour']['name'] == 'Updated Test Tour'
     assert body['data']['tour']['status'] == TourStatus.PLANNING.value
     assert 'provisionedAt' in body['data']['tour']
-    assert len(body['data']['provisionedTables']) == 6
+    assert len(body['data']['provisionedTables']) == 11
 
     saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
     assert saved['name'] == 'Updated Test Tour'
@@ -390,7 +390,7 @@ def test_provision_tour_reruns_without_changing_provisioned_at(dynamodb_mock):
     assert body['success'] is True
     assert body['data']['tour']['name'] == MOCK_TOURS[0]['name']
     assert body['data']['tour']['provisionedAt'] == original_timestamp
-    assert len(body['data']['provisionedTables']) == 6
+    assert len(body['data']['provisionedTables']) == 11
 
     table = dynamodb_mock.Table('test-tour-master-table')
     saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
