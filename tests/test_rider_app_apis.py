@@ -139,7 +139,10 @@ def dynamodb_full_mock(aws_credentials):
                 {'AttributeName': 'cognitoUserName', 'AttributeType': 'S'}
             ],
             BillingMode='PAY_PER_REQUEST'
-        )
+        ).put_item(Item={
+            'cognitoUserName': 'test-user-123',
+            'profileId': 'P001'
+        })
 
         # Create shared RiderTours table
         rider_tours_table = dynamodb.create_table(

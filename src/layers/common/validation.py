@@ -215,9 +215,9 @@ def validate_hotel_id(hotel_id: str) -> None:
 
 def validate_upload_id(upload_id: str) -> None:
     """Validate upload identifier format."""
-    if not re.match(r'^UPL-\d{6}$', upload_id or ''):
+    if not re.match(r'^UPL-\d{6,12}$', upload_id or ''):
         raise ValidationError(
-            f"Invalid uploadId format: {upload_id}. Expected format: UPL-000042",
+            f"Invalid uploadId format: {upload_id}. Expected format: UPL-000042 or UPL-123456789012",
             {"field": "uploadId", "value": upload_id}
         )
 

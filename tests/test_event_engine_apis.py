@@ -419,3 +419,87 @@ def test_create_activity_record_allows_opt_out_without_type_code(event_engine_se
     body = json.loads(response['body'])
     assert body['data']['outcome'] == 'OPTED_OUT'
     assert body['data'].get('typeCode') is None
+
+
+def test_create_activity_record_requires_type_code_for_non_opt_out(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from create_activity_record import lambda_handler as create_activity_record_handler
+    from create_event import lambda_handler as create_event_handler
+    from create_occurrence import lambda_handler as create_occurrence_handler
+    from create_tour_user import lambda_handler as create_tour_user_handler
+    from start_occurrence import lambda_handler as start_occurrence_handler
+
+    create_event_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID},
+            method='POST',
+            body={
+                'eventId': 'EVT-REQ',
+                'eventName': 'Required Type Event',
+                'eventType': 'SINGLE',
+                'location': 'Venue',
+                'sequenceEnforced': False,
+                'defaultAllowedTypeCodes': ['1'],
+                'activities': [{'activityId': 'ACT-001', 'name': 'Desk', 'sequenceNo': 1}],
+            },
+        ),
+        None,
+    )
+    create_occurrence_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-REQ'},
+            method='POST',
+            body={'date': '2026-02-10', 'seq': 1},
+        ),
+        None,
+    )
+    start_occurrence_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-REQ', 'occurrenceId': 'EVT-REQ#2026-02-10#1'},
+            method='POST',
+            body={'startedAt': '2026-02-10T08:00:00Z'},
+        ),
+        None,
+    )
+    create_tour_user_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID},
+            method='POST',
+            body={
+                'userId': 'scanner-2',
+                'username': 'scanner2',
+                'email': 'scanner2@example.com',
+                'name': 'Scanner Two',
+                'role': 'SUPER_USER',
+                'status': 'ACTIVE',
+            },
+        ),
+        None,
+    )
+
+    response = create_activity_record_handler(
+        _event(
+            ['SUPER_USER'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-REQ', 'occurrenceId': 'EVT-REQ#2026-02-10#1'},
+            method='POST',
+            sub='scanner-2',
+            body={
+                'activityId': 'ACT-001',
+                'riderId': 'R1',
+                'method': 'MANUAL',
+                'timestamp': '2026-02-10T08:05:00Z',
+            },
+        ),
+        None,
+    )
+
+    assert response['statusCode'] == 400
+    body = json.loads(response['body'])
+    assert body['error']['message'] == 'typeCode is required for this activity record.'

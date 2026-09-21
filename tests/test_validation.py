@@ -160,6 +160,7 @@ class TestHotelIdValidation:
 class TestUploadIdValidation:
     def test_valid_upload_ids(self):
         validate_upload_id('UPL-000042')
+        validate_upload_id('UPL-123456789012')
 
     def test_invalid_upload_ids(self):
         for upload_id in ['UPL-42', 'upload-000042', 'UPL000042']:

@@ -17,6 +17,7 @@ import uuid
 import boto3
 
 from logger import get_logger, log_event
+from rbac import Permission, require_permission
 from response import (
     success_response, bad_request_response, not_found_response,
     forbidden_response,
@@ -28,6 +29,7 @@ from models import utc_now_iso
 logger = get_logger(__name__)
 
 s3_client = boto3.client('s3')
+RIDER_LINK_TABLE_ENV = 'RIDER_COGNITO_USER_TABLE'
 
 
 def _is_authenticated(event):
@@ -38,6 +40,35 @@ def _is_authenticated(event):
         .get('claims', {})
     )
     return bool(claims.get('sub'))
+
+
+def _get_authenticated_user(event):
+    claims = (
+        event.get('requestContext', {})
+        .get('authorizer', {})
+        .get('jwt', {})
+        .get('claims', {})
+    )
+    return claims.get('sub')
+
+
+def _authorize_profile_access(event, profile_id):
+    deny = require_permission(event, Permission.RIDER_SELF_UPDATE)
+    if not deny:
+        return None
+
+    user_id = _get_authenticated_user(event)
+    if not user_id:
+        return deny
+
+    rider_link = get_item(
+        table_name_env=RIDER_LINK_TABLE_ENV,
+        key={'cognitoUserName': user_id}
+    )
+    if rider_link and rider_link.get('profileId') == profile_id:
+        return None
+
+    return deny
 
 
 def lambda_handler(event, context):
@@ -76,6 +107,10 @@ def lambda_handler(event, context):
 
         if not existing_rider:
             return not_found_response("RiderProfile", profile_id)
+
+        deny = _authorize_profile_access(event, profile_id)
+        if deny:
+            return deny
 
         # Parse optional body
         content_type = 'image/jpeg'

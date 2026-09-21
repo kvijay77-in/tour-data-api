@@ -1275,7 +1275,7 @@ def upsert_hotel_stay(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _next_upload_id() -> str:
-    return f"UPL-{uuid.uuid4().int % 1000000:06d}"
+    return f"UPL-{uuid.uuid4().int % 1000000000000:012d}"
 
 
 def presign_hotel_upload(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -1395,7 +1395,7 @@ def _validate_event_assignments(tour_id: str, event_assignments: Any) -> None:
         validate_event_id(assignment.get("eventId"))
         if not _get_event_definition(tour_id, assignment.get("eventId")):
             raise ValidationError(
-                "One or more assignments reference an event or hotel that does not exist.",
+                "One or more eventAssignments reference an event that does not exist.",
                 {"field": "eventAssignments", "value": assignment.get("eventId")},
             )
         dates = assignment.get("dates")
@@ -1424,11 +1424,11 @@ def create_tour_user(event: Dict[str, Any]) -> Dict[str, Any]:
                 )
             if not get_tour_item("Hotel", tour_id, {"hotelId": body["hotelId"]}):
                 raise ValidationError(
-                    "One or more assignments reference an event or hotel that does not exist.",
+                    "hotelId references a hotel that does not exist.",
                     {"field": "hotelId", "value": body["hotelId"]},
                 )
     except ValidationError as exc:
-        code = "INVALID_EVENT_ASSIGNMENT" if exc.message.startswith("One or more assignments") else "VALIDATION_ERROR"
+        code = "INVALID_EVENT_ASSIGNMENT" if exc.details.get("field") == "eventAssignments" else "VALIDATION_ERROR"
         return error_response(code, exc.message, status_code=400, details=exc.details)
 
     if not _verify_managed_user_exists(body["userId"]):
@@ -1482,11 +1482,11 @@ def update_tour_user(event: Dict[str, Any]) -> Dict[str, Any]:
                 raise ValidationError("hotelId is only allowed for HOTEL_STAFF users", {"field": "hotelId"})
             if not get_tour_item("Hotel", tour_id, {"hotelId": body["hotelId"]}):
                 raise ValidationError(
-                    "One or more assignments reference an event or hotel that does not exist.",
+                    "hotelId references a hotel that does not exist.",
                     {"field": "hotelId", "value": body["hotelId"]},
                 )
     except ValidationError as exc:
-        code = "INVALID_EVENT_ASSIGNMENT" if exc.message.startswith("One or more assignments") else "VALIDATION_ERROR"
+        code = "INVALID_EVENT_ASSIGNMENT" if exc.details.get("field") == "eventAssignments" else "VALIDATION_ERROR"
         return error_response(code, exc.message, status_code=400, details=exc.details)
 
     for field in ("username", "email", "name", "role", "status", "assignedStage", "hotelId", "eventAssignments", "assignedActivityIds"):
