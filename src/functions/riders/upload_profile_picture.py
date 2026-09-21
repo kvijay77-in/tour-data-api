@@ -19,6 +19,7 @@ import boto3
 from logger import get_logger, log_event
 from response import (
     success_response, bad_request_response, not_found_response,
+    forbidden_response,
     internal_error_response
 )
 from dynamodb_utils import get_item
@@ -27,6 +28,16 @@ from models import utc_now_iso
 logger = get_logger(__name__)
 
 s3_client = boto3.client('s3')
+
+
+def _is_authenticated(event):
+    claims = (
+        event.get('requestContext', {})
+        .get('authorizer', {})
+        .get('jwt', {})
+        .get('claims', {})
+    )
+    return bool(claims.get('sub'))
 
 
 def lambda_handler(event, context):
@@ -47,6 +58,9 @@ def lambda_handler(event, context):
     """
     try:
         log_event(logger, event)
+
+        if not _is_authenticated(event):
+            return forbidden_response("Authenticated user context is required")
 
         # Extract profile ID from path parameters
         profile_id = event.get('pathParameters', {}).get('profileId')

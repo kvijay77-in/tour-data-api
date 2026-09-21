@@ -275,3 +275,147 @@ def test_create_hotel_and_tour_user(event_engine_setup):
         None,
     )
     assert user_response['statusCode'] == 201
+
+
+def test_event_read_endpoints_require_read_permission(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from create_event import lambda_handler as create_event_handler
+    from create_occurrence import lambda_handler as create_occurrence_handler
+    from get_activity_overrides import lambda_handler as get_activity_overrides_handler
+    from get_event import lambda_handler as get_event_handler
+    from list_events import lambda_handler as list_events_handler
+    from list_occurrences import lambda_handler as list_occurrences_handler
+
+    create_event_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID},
+            method='POST',
+            body={
+                'eventId': 'EVT-READ',
+                'eventName': 'Read Protected Event',
+                'eventType': 'SINGLE',
+                'location': 'Venue',
+                'sequenceEnforced': False,
+                'defaultAllowedTypeCodes': ['1'],
+                'activities': [{'activityId': 'ACT-001', 'name': 'Desk', 'sequenceNo': 1}],
+            },
+        ),
+        None,
+    )
+    create_occurrence_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-READ'},
+            method='POST',
+            body={'date': '2026-02-10', 'seq': 1},
+        ),
+        None,
+    )
+
+    for response in (
+        list_events_handler(_event([], {'tourId': MOCK_TOUR_ID}), None),
+        get_event_handler(_event([], {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-READ'}), None),
+        list_occurrences_handler(_event([], {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-READ'}), None),
+        get_activity_overrides_handler(
+            _event([], {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-READ', 'occurrenceId': 'EVT-READ#2026-02-10#1'}),
+            None,
+        ),
+    ):
+        assert response['statusCode'] == 403
+
+
+def test_create_activity_record_allows_opt_out_without_type_code(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from create_activity_record import lambda_handler as create_activity_record_handler
+    from create_event import lambda_handler as create_event_handler
+    from create_occurrence import lambda_handler as create_occurrence_handler
+    from create_tour_user import lambda_handler as create_tour_user_handler
+    from start_occurrence import lambda_handler as start_occurrence_handler
+
+    create_event_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID},
+            method='POST',
+            body={
+                'eventId': 'EVT-OPT',
+                'eventName': 'Optional Scan Event',
+                'eventType': 'SINGLE',
+                'location': 'Venue',
+                'sequenceEnforced': False,
+                'defaultAllowedTypeCodes': ['1'],
+                'activities': [
+                    {
+                        'activityId': 'ACT-001',
+                        'name': 'Desk',
+                        'sequenceNo': 1,
+                        'allowOptOut': True,
+                    }
+                ],
+            },
+        ),
+        None,
+    )
+    create_occurrence_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-OPT'},
+            method='POST',
+            body={'date': '2026-02-10', 'seq': 1},
+        ),
+        None,
+    )
+    start_occurrence_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-OPT', 'occurrenceId': 'EVT-OPT#2026-02-10#1'},
+            method='POST',
+            body={'startedAt': '2026-02-10T08:00:00Z'},
+        ),
+        None,
+    )
+    create_tour_user_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID},
+            method='POST',
+            body={
+                'userId': 'scanner-1',
+                'username': 'scanner',
+                'email': 'scanner@example.com',
+                'name': 'Scanner User',
+                'role': 'SUPER_USER',
+                'status': 'ACTIVE',
+            },
+        ),
+        None,
+    )
+
+    response = create_activity_record_handler(
+        _event(
+            ['SUPER_USER'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-OPT', 'occurrenceId': 'EVT-OPT#2026-02-10#1'},
+            method='POST',
+            sub='scanner-1',
+            body={
+                'activityId': 'ACT-001',
+                'riderId': 'R1',
+                'outcome': 'OPTED_OUT',
+                'method': 'MANUAL',
+                'timestamp': '2026-02-10T08:05:00Z',
+            },
+        ),
+        None,
+    )
+
+    assert response['statusCode'] == 201
+    body = json.loads(response['body'])
+    assert body['data']['outcome'] == 'OPTED_OUT'
+    assert body['data'].get('typeCode') is None

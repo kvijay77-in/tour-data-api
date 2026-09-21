@@ -16,6 +16,7 @@ from logger import get_logger, log_event
 
 from response import (
     success_response, bad_request_response, not_found_response,
+    forbidden_response,
     internal_error_response
 )
 from dynamodb_utils import get_item
@@ -26,6 +27,16 @@ s3_client = boto3.client('s3')
 
 DEFAULT_EXPIRY_SECONDS = 300
 MAX_EXPIRY_SECONDS = 3600
+
+
+def _is_authenticated(event):
+    claims = (
+        event.get('requestContext', {})
+        .get('authorizer', {})
+        .get('jwt', {})
+        .get('claims', {})
+    )
+    return bool(claims.get('sub'))
 
 
 def lambda_handler(event, context):
@@ -46,6 +57,9 @@ def lambda_handler(event, context):
     """
     try:
         log_event(logger, event)
+
+        if not _is_authenticated(event):
+            return forbidden_response("Authenticated user context is required")
 
         profile_id = (event.get('pathParameters') or {}).get('profileId')
 

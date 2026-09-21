@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import os
+import uuid
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -718,7 +719,7 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     if err:
         return err
     try:
-        validate_required_fields(body, ["activityId", "riderId", "typeCode", "method", "timestamp"])
+        validate_required_fields(body, ["activityId", "riderId", "method", "timestamp"])
         validate_activity_id(body["activityId"])
         validate_rider_id(body["riderId"])
         validate_iso_datetime(body["timestamp"], "timestamp")
@@ -746,14 +747,6 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     if access_denied:
         return access_denied
 
-    effective_allowed_type_codes = _effective_allowed_type_codes(event_definition, occurrence, activity)
-    if body["typeCode"] not in effective_allowed_type_codes:
-        return error_response(
-            "SCAN_TYPE_NOT_ALLOWED",
-            "The scanned type is not allowed for this event activity.",
-            status_code=400,
-        )
-
     rider = get_tour_item("TourRider", tour_id, {"riderId": body["riderId"]})
     if not rider:
         return error_response("RIDER_NOT_FOUND", "Rider not found.", status_code=404)
@@ -778,6 +771,18 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     if body.get("outcome") == EventRecordOutcome.OPTED_OUT.value and not activity.get("allowOptOut", False):
         return error_response("VALIDATION_ERROR", "This activity does not allow opt-out.", status_code=400)
 
+    type_code = body.get("typeCode")
+    requires_type_code = body.get("outcome") != EventRecordOutcome.OPTED_OUT.value
+    effective_allowed_type_codes = _effective_allowed_type_codes(event_definition, occurrence, activity)
+    if requires_type_code and not type_code:
+        return error_response("VALIDATION_ERROR", "typeCode is required for this activity record.", status_code=400)
+    if type_code and type_code not in effective_allowed_type_codes:
+        return error_response(
+            "SCAN_TYPE_NOT_ALLOWED",
+            "The scanned type is not allowed for this event activity.",
+            status_code=400,
+        )
+
     variant_options = activity.get("variantOptions") or []
     if variant_options and body.get("variantSelected") not in variant_options:
         return error_response("VALIDATION_ERROR", "variantSelected is required and must match variantOptions.", status_code=400)
@@ -793,7 +798,19 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         for record in records
         if record.get("riderId") == body["riderId"] and record.get("outcome") in {EventRecordOutcome.COMPLETED.value, EventRecordOutcome.OPTED_OUT.value}
     }
-    prerequisites = activity.get("prerequisiteActivityIds") or []
+    prerequisites = set(activity.get("prerequisiteActivityIds") or [])
+    if sequence_enforced:
+        current_sequence = activity.get("sequenceNo")
+        for candidate in event_definition.get("activities") or []:
+            candidate_sequence = candidate.get("sequenceNo")
+            candidate_id = candidate.get("activityId")
+            if candidate_id == body["activityId"] or candidate_sequence is None or current_sequence is None:
+                continue
+            if candidate_sequence >= current_sequence:
+                continue
+            if not _effective_activity_enabled(occurrence, candidate):
+                continue
+            prerequisites.add(candidate_id)
     if sequence_enforced or prerequisites:
         missing = [activity_id for activity_id in prerequisites if activity_id not in completed_activity_ids]
         if missing:
@@ -801,7 +818,7 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
 
     record_id = f"{body['riderId']}#{body['activityId']}#{body['timestamp']}"
     type_map = _get_enabled_id_code_types()
-    bag_label = ((type_map.get(body["typeCode"]) or {}).get("config", {}) or {}).get("name")
+    bag_label = ((type_map.get(type_code) or {}).get("config", {}) or {}).get("name")
     scanned_by = get_claim(event, "sub", "system")
     user_record = _load_user_assignment(tour_id, scanned_by) or {}
 
@@ -813,7 +830,7 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         activityName=activity.get("name"),
         riderId=body["riderId"],
         scannedBy=scanned_by,
-        typeCode=body["typeCode"],
+        typeCode=type_code,
         bagLabel=bag_label,
         outcome=EventRecordOutcome(body.get("outcome", EventRecordOutcome.COMPLETED.value)),
         variantSelected=body.get("variantSelected"),
@@ -1257,48 +1274,58 @@ def upsert_hotel_stay(event: Dict[str, Any]) -> Dict[str, Any]:
     return success_response(item)
 
 
-def _next_upload_id(tour_id: str) -> str:
-    items = scan_tour_items("Hotel", tour_id)
-    next_number = 1
-    for item in items:
-        hotel_id = str(item.get("hotelId", ""))
-        if hotel_id.startswith("UPLOAD#UPL-"):
-            try:
-                next_number = max(next_number, int(hotel_id.split("UPL-")[1]) + 1)
-            except ValueError:
-                continue
-    return f"UPL-{next_number:06d}"
+def _next_upload_id() -> str:
+    return f"UPL-{uuid.uuid4().int % 1000000:06d}"
 
 
 def presign_hotel_upload(event: Dict[str, Any]) -> Dict[str, Any]:
     tour_id = (event.get("pathParameters") or {}).get("tourId")
     if not tour_id:
         return bad_request_response("tourId is required in path")
-    upload_id = _next_upload_id(tour_id)
-    s3_key = f"tours/{tour_id}/uploads/hotel-allocation/{upload_id}.csv"
     bucket_name = os.environ.get("ARTIFACTS_BUCKET")
     if not bucket_name:
         return internal_error_response("Artifacts bucket not configured")
+    status_item = None
+    upload_id = None
+    s3_key = None
+    for _ in range(10):
+        upload_id = _next_upload_id()
+        s3_key = f"tours/{tour_id}/uploads/hotel-allocation/{upload_id}.csv"
+        now = utc_now_iso()
+        status_item = {
+            "hotelId": f"UPLOAD#{upload_id}",
+            "entityType": "UPLOAD_STATUS",
+            "uploadId": upload_id,
+            "status": "PENDING",
+            "rowCount": 0,
+            "errorCount": 0,
+            "errors": [],
+            "appliedCount": 0,
+            "processedAt": None,
+            "s3Key": s3_key,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        try:
+            put_tour_item(
+                "Hotel",
+                tour_id,
+                status_item,
+                condition_expression="attribute_not_exists(hotelId)",
+            )
+            break
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+            status_item = None
+    else:
+        return internal_error_response("Unable to allocate upload identifier")
+
     presigned_url = s3_client.generate_presigned_url(
         "put_object",
         Params={"Bucket": bucket_name, "Key": s3_key, "ContentType": "text/csv"},
         ExpiresIn=900,
     )
-    status_item = {
-        "hotelId": f"UPLOAD#{upload_id}",
-        "entityType": "UPLOAD_STATUS",
-        "uploadId": upload_id,
-        "status": "PENDING",
-        "rowCount": 0,
-        "errorCount": 0,
-        "errors": [],
-        "appliedCount": 0,
-        "processedAt": None,
-        "s3Key": s3_key,
-        "createdAt": utc_now_iso(),
-        "updatedAt": utc_now_iso(),
-    }
-    put_tour_item("Hotel", tour_id, status_item)
     return success_response(
         {
             "uploadId": upload_id,
