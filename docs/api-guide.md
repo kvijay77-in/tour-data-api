@@ -188,7 +188,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/{tourId}/riders/{riderId}` | `tourId, riderId` (required) | None | None | `tourId` format; `riderId` format `R1..R999` |
 | `POST /v1/tours/{tourId}/riders/{riderId}/exit` | `tourId, riderId` (required) | None | Required: `baggageDisposition` | Updates existing row only; sets `status=EXITED`, `prevStatus=<previous status>`, `exitedAt`, `exitedBy`, and `updatedAt`; `baggageDisposition` must be `RETAINED` or `WITH_RIDER`; returns `409 RIDER_ALREADY_EXITED` when already exited; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
 | `POST /v1/tours/{tourId}/riders/{riderId}/exit/cancel` | `tourId, riderId` (required) | None | None | Valid only when current status is `EXITED`; restores `status` from `prevStatus`; removes `prevStatus`, `exitedAt`, `exitedBy`, and associated baggage-exit metadata; returns `400 INVALID_EXIT_CANCEL_INVOCATION` for non-EXITED status; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
-| `POST /v1/tours/{tourId}/riders/{riderId}/baggage/release` | `tourId, riderId` (required) | None | None | Valid only when the rider's baggage status is `RETAINED`; transitions baggage state to `WITH_RIDER` and records release audit metadata; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
+| `POST /v1/tours/{tourId}/riders/{riderId}/baggage/release` | `tourId, riderId` (required) | None | Optional: `note` | Valid only when the rider's baggage status is `RETAINED`; transitions baggage state to `WITH_RIDER`, stores `note` as `baggageExitNote`, and records release audit metadata; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
 | `GET /v1/tours/{tourId}/riders/{riderId}/statistics` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must exist in tour |
 
 #### Events
@@ -199,19 +199,19 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | None | Requires `READ`; `eventId` format `EVT-...`; returns `404 EVENT_NOT_FOUND` when absent |
 | `POST /v1/tours/{tourId}/events` | `tourId` (required) | None | Required: `eventId, eventName, eventType, location, activities`; Optional: `sequenceEnforced, defaultAllowedTypeCodes, allowSelfService` | Requires `EVENT_MANAGE`; validates event/activity IDs, allowed type codes, and ascending `sequenceNo`; duplicate event IDs rejected |
 | `PUT /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | Optional: `eventName, eventType, location, sequenceEnforced, allowSelfService, defaultAllowedTypeCodes, activities` | Requires `EVENT_MANAGE`; same event/activity validations as create for supplied fields |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | None | None | Requires `READ`; lists occurrences for the event |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | `date` (optional), `status` (optional) | None | Requires `READ`; lists occurrences for the event, filterable by date and status |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; `occurrenceId` format `EVT-...#YYYY-MM-DD#seq` |
-| `POST /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | None | Required: `date, seq`; Optional: `startTime, linkedOccurrenceRef, notes, activityOverrides` | Requires `EVENT_OCCURRENCE_MANAGE`; duplicate occurrence rejected |
-| `PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | Optional occurrence fields including `date, seq, startTime, linkedOccurrenceRef, notes, activityOverrides` | Requires `EVENT_OCCURRENCE_MANAGE`; validates supplied fields |
-| `GET/PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | `tourId, eventId, occurrenceId` (required) | None | For PUT: `activityOverrides` | GET requires `READ`; PUT requires `EVENT_OCCURRENCE_MANAGE` |
-| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start` | `tourId, eventId, occurrenceId` (required) | None | Optional: `startedAt` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `ACTIVE` |
-| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete` | `tourId, eventId, occurrenceId` (required) | None | Optional: `completedAt` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `COMPLETED` |
-| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` | `tourId, eventId, occurrenceId` (required) | None | Optional: `cancelledAt` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `CANCELLED` |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | None | Required: `date, seq`; Optional: `selfServiceEnabled, linkedOccurrenceRef` | Requires `EVENT_OCCURRENCE_MANAGE`; duplicate occurrence rejected; `activityOverrides` cannot be set on create — use the activity-overrides endpoint below after the occurrence exists |
+| `PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | Optional: `selfServiceEnabled, linkedOccurrenceRef` only | Requires `EVENT_OCCURRENCE_MANAGE`; rejects with `409 OCCURRENCE_CLOSED` when the occurrence is `COMPLETED`/`CANCELLED`; does not accept `date`, `seq`, or `activityOverrides` |
+| `GET/PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | `tourId, eventId, occurrenceId` (required) | None | For PUT: `activityId` (required); Optional: `enabled, selfServiceEnabled, allowedTypeCodes, note` | GET requires `READ`; PUT is a single-activity upsert (not a full-list replace) requiring `EVENT_OCCURRENCE_MANAGE`; omitting all optional fields removes the override entry |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `ACTIVE`; `startedAt` is always server-set, no client override |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `COMPLETED`; `completedAt` is always server-set, no client override |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` | `tourId, eventId, occurrenceId` (required) | None | Optional: `cancelReason` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `CANCELLED`; `cancelledAt` is always server-set, no client override |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records` | `tourId, eventId, occurrenceId` (required) | None | Required: `activityId, riderId, method, timestamp`; Optional: `typeCode, outcome, variantSelected` | Requires `EVENT_SCAN`; occurrence must be `ACTIVE`; `typeCode` is required unless `outcome=OPTED_OUT`; sequence and activity restrictions enforced |
-| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel` | `tourId, eventId, occurrenceId, recordId` (required) | None | None | Requires `EVENT_SCAN`; retains the record and marks it cancelled with audit fields |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; aggregated occurrence dashboard payload |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; lightweight progress refresh payload |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; reconciliation payload for activity completion versus expected riders |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel` | `tourId, eventId, occurrenceId, recordId` (required) | None | Optional: `cancelReason` | Requires `EVENT_SCAN`; retains the record and marks it cancelled with audit fields |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; aggregated occurrence dashboard payload (response shape: §Event Engine & Hotel Response Shapes) |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; lightweight progress refresh payload |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; returns `loadedCount`, `unloadedCount`, and `missingRiderIds` (riders present in the loading occurrence but absent from the linked unloading occurrence); `400 NO_LINKED_OCCURRENCE` when the occurrence has no `linkedOccurrenceRef` |
 | `GET /v1/tours/{tourId}/events/bootstrap` | `tourId` (required) | None | None | Requires `READ`; bootstrap payload for event definitions, upcoming occurrences, and supporting lookup data |
 | `GET /v1/tours/{tourId}/riders/{riderId}/events/progress` | `tourId, riderId` (required) | None | None | Requires `READ`; rider-centric event progress summary |
 
@@ -220,8 +220,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
 | `GET /v1/tours/{tourId}/hotels` | `tourId` (required) | None | None | Requires `READ`; lists hotel master records only |
-| `POST /v1/tours/{tourId}/hotels` | `tourId` (required) | None | Required: `hotelId, name, city, address` | Requires `HOTEL_ALLOC_MANAGE`; `hotelId` format `HTL-AAA-99`; duplicate hotel rejected |
-| `PUT /v1/tours/{tourId}/hotels/{hotelId}` | `tourId, hotelId` (required) | None | Optional: `name, city, address, phone, contactName, notes` | Requires `HOTEL_ALLOC_MANAGE`; updates supplied fields only |
+| `POST /v1/tours/{tourId}/hotels` | `tourId` (required) | None | Required: `hotelId, name, city, address`; Optional: `contact, notes` | Requires `HOTEL_ALLOC_MANAGE`; `hotelId` format `HTL-AAA-99`; duplicate hotel rejected |
+| `PUT /v1/tours/{tourId}/hotels/{hotelId}` | `tourId, hotelId` (required) | None | Optional: `name, city, address, contact, notes` | Requires `HOTEL_ALLOC_MANAGE`; updates supplied fields only |
 | `GET /v1/tours/{tourId}/hotelstays` | `tourId` (required) | `date` (required) | None | Requires `READ`; returns `RoomAllocation` rows for one stay date |
 | `GET /v1/tours/{tourId}/riders/{riderId}/hotelstays` | `tourId, riderId` (required) | None | None | Requires `READ`; returns hotel stays for a rider |
 | `GET /v1/tours/{tourId}/hotels/{hotelId}/hotelstays` | `tourId, hotelId` (required) | `date` (required) | None | Requires `READ`; returns hotel stays for one hotel/date |
@@ -486,6 +486,125 @@ Example conflict response when `profileId` already exists (`409`):
   "expiresAt": "2026-02-20T00:00:00Z"
 }
 ```
+
+## Event Engine & Hotel Response Shapes
+
+Response shapes for the event engine and hotel endpoints introduced alongside `docs/cycling-tour-events-design.md`, verified against the implementation.
+
+#### GET .../occurrences/{occurrenceId}/dashboard
+```json
+{
+  "success": true,
+  "data": {
+    "occurrence": { "eventId": "EVT-BAGLOAD", "dateSeq": "2026-02-12#1", "status": "ACTIVE" },
+    "riders": [
+      { "riderId": "R57", "activities": [ { "activityId": "ACT-001", "status": "PENDING" } ] }
+    ],
+    "cancelled": [ ]
+  },
+  "timestamp": "2026-02-12T05:42:15Z"
+}
+```
+
+#### GET .../occurrences/{occurrenceId}/dashboard/progress
+```json
+{
+  "success": true,
+  "data": {
+    "totalRiders": 100,
+    "completedCount": 42,
+    "outstandingMandatoryCount": 3,
+    "optedOutCount": 5,
+    "flaggedCount": 0
+  },
+  "timestamp": "2026-02-12T05:42:15Z"
+}
+```
+
+#### GET /v1/tours/{tourId}/riders/{riderId}/events/progress
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      { "eventId": "EVT-BAGLOAD", "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "activityId": "ACT-003", "status": "COMPLETED" }
+    ]
+  },
+  "timestamp": "2026-02-12T05:42:15Z"
+}
+```
+Cancelled records are excluded. Optional `eventId` query param filters the list.
+
+#### GET .../occurrences/{occurrenceId}/reconciliation
+```json
+{
+  "success": true,
+  "data": {
+    "loadedCount": 98,
+    "unloadedCount": 96,
+    "missingRiderIds": ["R12", "R57"]
+  },
+  "timestamp": "2026-02-12T05:42:15Z"
+}
+```
+`400 NO_LINKED_OCCURRENCE` when the occurrence has no `linkedOccurrenceRef`.
+
+#### GET /v1/tours/{tourId}/events/bootstrap
+```json
+{
+  "success": true,
+  "data": {
+    "events": [ { "eventId": "EVT-REG", "activities": [ ] } ],
+    "activeOccurrences": [ { "eventId": "EVT-BAGLOAD", "dateSeq": "2026-02-12#1", "status": "ACTIVE" } ],
+    "riderBaggageStatus": [ { "riderId": "R57", "baggageStatus": "ACTIVE", "baggageReleasedAt": null } ],
+    "hotelStaysToday": [ { "stayDate": "2026-02-12", "riderId": "R57", "hotelId": "HTL-MDU-01", "roomNo": "204" } ]
+  },
+  "timestamp": "2026-02-12T05:42:15Z"
+}
+```
+Supports `If-None-Match` / `304 Not Modified`.
+
+#### GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}
+```json
+{
+  "success": true,
+  "data": {
+    "uploadId": "UPL-000042",
+    "status": "APPLIED",
+    "rowCount": 200,
+    "errorCount": 0,
+    "errors": [],
+    "appliedCount": 200,
+    "processedAt": "2026-02-01T10:05:00Z"
+  },
+  "timestamp": "2026-02-01T10:05:00Z"
+}
+```
+`status` is one of `PENDING`, `VALIDATING`, `REJECTED`, `APPLIED`; per D21, `APPLIED` only occurs when `errorCount=0` for the whole file (no partial apply).
+
+#### New error codes
+
+In addition to the standard `400`/`401`/`403`/`404`/`409`/`500` statuses above, the event engine and hotel endpoints introduce the codes below. See `docs/cycling-tour-events-design.md` §8.25 for the complete reference table.
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `EVENT_NOT_FOUND` / `EVENT_ALREADY_EXISTS` | 404 / 409 | Event definition lookup/create conflict |
+| `OCCURRENCE_NOT_FOUND` / `OCCURRENCE_ALREADY_EXISTS` / `OCCURRENCE_CLOSED` | 404 / 409 / 409 | Occurrence lookup/create/edit conflicts |
+| `INVALID_OCCURRENCE_TRANSITION` | 409 | Start/complete/cancel called from an invalid status |
+| `NO_LINKED_OCCURRENCE` | 400 | Reconciliation requested with no `linkedOccurrenceRef` |
+| `ACTIVITY_NOT_FOUND` | 404 | `activityId` not present/disabled on the event or occurrence |
+| `SCAN_TYPE_NOT_ALLOWED` | 400 | Scanned `typeCode` not in the activity's effective `allowedTypeCodes` |
+| `DUPLICATE_ACTIVITY_RECORD` | 409 | Rider already has a non-cancelled record for this activity+occurrence |
+| `PREREQUISITE_NOT_MET` | 409 | Sequence/prerequisite activity not yet completed |
+| `OCCURRENCE_NOT_ACTIVE` | 409 | Scan against a non-`ACTIVE` occurrence outside the late-sync grace window |
+| `BAGGAGE_NOT_IN_TOUR` | 409 | Rider's `baggageStatus=WITH_RIDER`, scan rejected |
+| `RIDER_NOT_ASSIGNED` / `HOTEL_MISMATCH` | 403 / 403 | Second-layer authorisation failures (`eventAssignments`, hotel match) |
+| `HOTEL_NOT_FOUND` / `HOTEL_ALREADY_EXISTS` | 404 / 409 | Hotel lookup/create conflict |
+| `ROOM_CLASH` / `NON_RECIPROCAL_SHARING` / `ROOM_CAPACITY_EXCEEDED` | 409 | Room allocation validation failures |
+| `UPLOAD_NOT_FOUND` | 404 | `uploadId` unknown |
+| `BAGGAGE_DISPOSITION_REQUIRED` / `BAGGAGE_NOT_RETAINED` | 400 / 409 | Rider exit/baggage release validation |
+| `RECORD_NOT_FOUND` / `RECORD_ALREADY_CANCELLED` | 404 / 409 | Activity record cancel conflicts |
+| `USER_NOT_FOUND` / `USER_ALREADY_EXISTS` / `INVALID_EVENT_ASSIGNMENT` | 404 / 409 / 400 | Tour user assignment validation |
 
 ## HTTP Status Codes
 

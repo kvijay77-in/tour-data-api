@@ -719,7 +719,7 @@ Transitions `ACTIVE → COMPLETED`. Does **not** require all mandatory activitie
 Creates one `EventActivityLogs`.
 
 - Required permission: `EVENT_SCAN`, plus the second authorisation layer (§9.3) when the activity has `restrictToAssignedUsers=true` (default) or the event is a baggage event
-- Request body: `activityId` (required), `riderId` (required — resolved client-side from the scanned ID Code, see frontend §8), `typeCode` (required — the `AppConfig` `ID_CODE_TYPE` `code` scanned; must be a member of the activity's effective `allowedTypeCodes`, §4.3), `outcome` (optional, default `COMPLETED`; `OPTED_OUT` only when the activity has `allowOptOut=true`), `variantSelected` (required when the activity has `variantOptions`), `method` (`QR_SCAN`|`MANUAL`), `timestamp` (required — client-supplied for offline support, §7.9)
+- Request body: `activityId` (required), `riderId` (required — resolved client-side from the scanned ID Code, see frontend §8), `typeCode` (required unless `outcome=OPTED_OUT` — the `AppConfig` `ID_CODE_TYPE` `code` scanned; must be a member of the activity's effective `allowedTypeCodes`, §4.3), `outcome` (optional, default `COMPLETED`; `OPTED_OUT` only when the activity has `allowOptOut=true`), `variantSelected` (required when the activity has `variantOptions`), `method` (`QR_SCAN`|`MANUAL`), `timestamp` (required — client-supplied for offline support, §7.9)
 - Success (201): `{ "success": true, "data": <created EventActivityLogs, §5.3> }`
 - Errors:
   - `400 VALIDATION_ERROR` — missing required field, or `variantSelected` missing/invalid for a variant activity
