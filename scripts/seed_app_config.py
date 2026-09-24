@@ -46,6 +46,19 @@ def build_seed_items(updated_by):
                 'personalCode': {'pattern': '^.(.{4})$', 'flags': '', 'group': 1},
             },
         },
+        {
+            'configType': 'HOTEL_CSV_FILE',
+            'configId': 'MAX-SIZE',
+            'enabled': True,
+            'description': 'Hotel room allocation CSV File Maximum Size',
+            'version': 1,
+            'updatedAt': now,
+            'updatedBy': updated_by,
+            'config': {
+                'maxSize': '5',
+                'maxSizeUnit': 'MB',
+            },
+        },
     ]
 
     id_code_types = [
