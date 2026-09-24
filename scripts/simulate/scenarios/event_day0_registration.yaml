@@ -1,0 +1,126 @@
+# =============================================================================
+# Event Engine Test Data Scenario — Day 0 Registration
+# =============================================================================
+# Populates the generic Events engine (Event / EventOccurrence /
+# EventActivityLogs tables) with a single "Day 0 Registration" event, using
+# riders already registered for the tour by a prior tour-data scenario
+# (e.g. tot_2026.yaml).
+#
+# By default (no extra flags) the event definition and today's occurrence are
+# created fresh — PLANNED, with zero activity records — so QR-scan testing
+# can start from the very beginning of the event.
+#
+# Usage:
+#   # Start fresh: create the event + a PLANNED occurrence with no scans yet
+#   python scripts/simulate/generate_data.py \
+#       --scenario scripts/simulate/scenarios/event_day0_registration.yaml
+#
+#   # Start with today's occurrence already partway through (per 'in_progress'
+#   # below), so manual testing can continue from that point
+#   python scripts/simulate/generate_data.py \
+#       --scenario scripts/simulate/scenarios/event_day0_registration.yaml \
+#       --include-in-progress
+#
+#   # Add/refresh only today's in-progress scans without touching the event
+#   # definition or re-creating the occurrence from scratch
+#   python scripts/simulate/generate_data.py \
+#       --scenario scripts/simulate/scenarios/event_day0_registration.yaml \
+#       --in-progress-only
+#
+#   # Preview generated items without writing to DynamoDB
+#   python scripts/simulate/generate_data.py \
+#       --scenario scripts/simulate/scenarios/event_day0_registration.yaml \
+#       --include-in-progress --dry-run
+# =============================================================================
+
+scenario:
+  type: event_data_generation
+  mode: create
+  name: "Day 0 Registration Event Simulation"
+  description: "Single-occurrence Day 0 Registration event for events-engine testing"
+
+aws:
+  stack_name: dev
+
+tour:
+  tour_id: TOT-2026
+
+# "today" is day_offset 0 for every occurrence below.
+date_strategy:
+  anchor_date: today
+
+# Riders are read from the existing TourRider-{tourId} table — this scenario
+# does not create riders itself.
+riders:
+  source: tour_riders
+  status_in: [REGISTERED, ACTIVE]
+
+events:
+  - event_id: EVT-REG
+    event_name: "Day 0 Registration"
+    event_type: SINGLE
+    location: "Tour start venue"
+    sequence_enforced: true
+    default_allowed_type_codes: ["1"]
+    allow_self_service: false
+    activities:
+      - activity_id: ACT-001
+        name: "ID Card collection"
+        sequence_no: 0
+        mandatory: true
+      - activity_id: ACT-002
+        name: "Indemnity Agreement signing"
+        sequence_no: 1
+        mandatory: true
+        prerequisite_activity_ids: [ACT-001]
+      - activity_id: ACT-003
+        name: "Jersey collection"
+        sequence_no: 2
+        mandatory: true
+        prerequisite_activity_ids: [ACT-002]
+      - activity_id: ACT-004
+        name: "Nutri-Pack collection"
+        sequence_no: 3
+        mandatory: false
+        allow_opt_out: true
+        prerequisite_activity_ids: [ACT-003]
+        variant_options: [VEG, NON_VEG]
+      - activity_id: ACT-005
+        name: "Goodies Bag collection"
+        sequence_no: 4
+        mandatory: false
+        allow_opt_out: true
+        prerequisite_activity_ids: [ACT-004]
+
+    occurrences:
+      # A historical occurrence (2 days before "today") fully completed by
+      # every rider — useful for dashboard/reconciliation-style testing.
+      - day_offset: -2
+        seq: 1
+        progress:
+          activity_outcomes:
+            ACT-004:
+              opted_out_ratio: 0.1
+              variant_split: { VEG: 0.5, NON_VEG: 0.5 }
+            ACT-005:
+              opted_out_ratio: 0.05
+
+      # Today's occurrence — the one used for live manual QR-scan testing.
+      # Left PLANNED with no records unless --include-in-progress is passed.
+      - day_offset: 0
+        seq: 1
+        in_progress:
+          status: ACTIVE
+          # Riders whose furthest completed activity is the given one.
+          # Any rider not listed here is left untouched (no records at all)
+          # so manual scanning can start them from ACT-001.
+          activity_distribution:
+            ACT-005: 10
+            ACT-004: 15
+            ACT-003: 20
+            ACT-002: 10
+            ACT-001: 5
+
+options:
+  clean_before_load: true
+  seed: 42

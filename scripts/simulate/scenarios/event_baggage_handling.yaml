@@ -1,0 +1,160 @@
+# =============================================================================
+# Event Engine Test Data Scenario — Baggage Loading / Unloading
+# =============================================================================
+# Populates the generic Events engine plus Hotel / RoomAllocation test data
+# for the paired Baggage Loading (origin hotel) and Baggage Unloading
+# (destination hotel) events, linked via linkedOccurrenceRef for
+# reconciliation testing. Riders are read from the existing
+# TourRider-{tourId} table populated by a prior tour-data scenario
+# (e.g. tot_2026.yaml).
+#
+# Usage:
+#   # Start fresh: create events/hotels/room-allocations + a PLANNED
+#   # occurrence pair for "today" with no scans yet
+#   python scripts/simulate/generate_data.py \
+#       --scenario scripts/simulate/scenarios/event_baggage_handling.yaml
+#
+#   # Start with today's occurrences already partway through, so manual
+#   # testing can continue from that point
+#   python scripts/simulate/generate_data.py \
+#       --scenario scripts/simulate/scenarios/event_baggage_handling.yaml \
+#       --include-in-progress
+#
+#   # Add/refresh only today's in-progress scans without re-creating events,
+#   # hotels, room allocations, or historical occurrences
+#   python scripts/simulate/generate_data.py \
+#       --scenario scripts/simulate/scenarios/event_baggage_handling.yaml \
+#       --in-progress-only
+#
+#   # Preview generated items without writing to DynamoDB
+#   python scripts/simulate/generate_data.py \
+#       --scenario scripts/simulate/scenarios/event_baggage_handling.yaml \
+#       --include-in-progress --dry-run
+# =============================================================================
+
+scenario:
+  type: event_data_generation
+  mode: create
+  name: "Baggage Loading/Unloading Event Simulation"
+  description: "Linked Baggage Loading/Unloading events with hotel stays for events-engine testing"
+
+aws:
+  stack_name: dev
+
+tour:
+  tour_id: TOT-2026
+
+# "today" is day_offset 0 for every occurrence/night below.
+date_strategy:
+  anchor_date: today
+
+# Riders are read from the existing TourRider-{tourId} table — this scenario
+# does not create riders itself.
+riders:
+  source: tour_riders
+  status_in: [REGISTERED, ACTIVE]
+
+hotels:
+  - hotel_id: HTL-CHD-01
+    name: "Hotel Chidambaram Residency"
+    city: Chidambaram
+    address: "1 Temple Street, Chidambaram"
+    contact: "+91-4144-123456"
+  - hotel_id: HTL-THJ-01
+    name: "Hotel Thanjavur Palace"
+    city: Thanjavur
+    address: "22 Palace Road, Thanjavur"
+    contact: "+91-4362-654321"
+
+# One hotel per configured night; riders are paired round-robin into
+# reciprocally-shared twin rooms.
+room_allocation:
+  room_capacity: 2
+  room_number_start: 201
+  nights:
+    - day_offset: -1
+      hotel_id: HTL-CHD-01
+    - day_offset: 0
+      hotel_id: HTL-THJ-01
+
+events:
+  - event_id: EVT-BAGLOAD
+    event_name: "Baggage Loading"
+    event_type: REPEATING
+    location: "Origin hotel"
+    sequence_enforced: true
+    default_allowed_type_codes: ["3", "4", "5", "6", "7", "8"]
+    allow_self_service: true
+    activities:
+      - activity_id: ACT-001
+        name: "Room pickup"
+        sequence_no: 0
+      - activity_id: ACT-002
+        name: "Handover for loading"
+        sequence_no: 1
+        mandatory: true
+        prerequisite_activity_ids: [ACT-001]
+      - activity_id: ACT-003
+        name: "Loaded to truck"
+        sequence_no: 2
+        mandatory: true
+        allowed_type_codes: ["3", "4", "5"]
+        prerequisite_activity_ids: [ACT-002]
+    occurrences:
+      # Historical, fully-reconciled pair (loading side).
+      - day_offset: -1
+        seq: 1
+        linked_event_id: EVT-BAGUNLOAD
+        progress: {}
+      # Today's live occurrence (loading side).
+      - day_offset: 0
+        seq: 1
+        linked_event_id: EVT-BAGUNLOAD
+        in_progress:
+          status: ACTIVE
+          activity_distribution:
+            ACT-003: 20
+            ACT-002: 15
+            ACT-001: 10
+
+  - event_id: EVT-BAGUNLOAD
+    event_name: "Baggage Unloading"
+    event_type: REPEATING
+    location: "Destination hotel"
+    sequence_enforced: true
+    default_allowed_type_codes: ["3", "4", "5", "6", "7", "8"]
+    allow_self_service: true
+    activities:
+      - activity_id: ACT-001
+        name: "Unloaded from truck"
+        sequence_no: 0
+        mandatory: true
+      - activity_id: ACT-002
+        name: "Sent to room"
+        sequence_no: 1
+        prerequisite_activity_ids: [ACT-001]
+      - activity_id: ACT-003
+        name: "Dropped at room"
+        sequence_no: 2
+        mandatory: true
+        prerequisite_activity_ids: [ACT-002]
+    occurrences:
+      # Historical, fully-reconciled pair (unloading side).
+      - day_offset: -1
+        seq: 1
+        linked_event_id: EVT-BAGLOAD
+        progress: {}
+      # Today's live occurrence (unloading side) — deliberately behind the
+      # loading side so reconciliation testing has a real gap to show.
+      - day_offset: 0
+        seq: 1
+        linked_event_id: EVT-BAGLOAD
+        in_progress:
+          status: ACTIVE
+          activity_distribution:
+            ACT-002: 8
+            ACT-001: 12
+
+options:
+  clean_before_load: true
+  seed: 42

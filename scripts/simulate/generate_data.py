@@ -48,6 +48,7 @@ import argparse
 import json
 import os
 import random
+import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -60,6 +61,7 @@ from boto3.dynamodb.conditions import Attr
 
 SCENARIO_TYPE_TOUR_DATA = 'tour_data_generation'
 SCENARIO_TYPE_PERSONAL_CODE = 'personal_code_update'
+SCENARIO_TYPE_EVENT_DATA = 'event_data_generation'
 SCENARIO_MODE_CREATE = 'create'
 SCENARIO_MODE_UPDATE = 'update'
 DEBUG_ENABLED = False
@@ -105,7 +107,7 @@ def get_scenario_type(config):
     scenario_type = scenario.get('type')
     validate_allowed_value(
         scenario_type,
-        {SCENARIO_TYPE_PERSONAL_CODE, SCENARIO_TYPE_TOUR_DATA},
+        {SCENARIO_TYPE_PERSONAL_CODE, SCENARIO_TYPE_TOUR_DATA, SCENARIO_TYPE_EVENT_DATA},
         'scenario.type',
     )
     return scenario_type
@@ -293,6 +295,28 @@ def fetch_tour(dynamodb, stack_name, tour_id):
     )
 
 
+def fetch_tour_riders(dynamodb, stack_name, tour_id, status_in=None, limit=None):
+    """
+    Fetch existing rider IDs from the tour-specific TourRider table.
+
+    Used by event-engine scenarios, which populate activity records against
+    riders already registered by a prior tour-data scenario run rather than
+    creating new riders themselves.
+    """
+    filter_expression = Attr('status').is_in(list(status_in)) if status_in else None
+    items = fetch_table_items(
+        dynamodb, stack_name, 'TourRider', tour_id=tour_id,
+        filter_expression=filter_expression,
+    )
+    rider_ids = sorted(
+        (item['riderId'] for item in items),
+        key=lambda rider_id: int(re.sub(r'\D', '', rider_id) or 0),
+    )
+    if limit is not None:
+        rider_ids = rider_ids[:limit]
+    return rider_ids
+
+
 def validate_scenario_contract(config):
     """Validate the common scenario header shared by all scenario types."""
     scenario = get_scenario_metadata(config)
@@ -306,6 +330,7 @@ def validate_scenario_contract(config):
     expected_mode = {
         SCENARIO_TYPE_PERSONAL_CODE: SCENARIO_MODE_UPDATE,
         SCENARIO_TYPE_TOUR_DATA: SCENARIO_MODE_CREATE,
+        SCENARIO_TYPE_EVENT_DATA: SCENARIO_MODE_CREATE,
     }[scenario_type]
     if mode != expected_mode:
         raise ValueError(
@@ -370,6 +395,70 @@ def validate_tour_data_scenario(config):
         raise ValueError(
             'Tour data scenario requires tour, tour_riders, and rides sections'
         )
+
+
+def validate_event_data_scenario(config):
+    """Validate the generic event-engine simulation scenario structure.
+
+    This only validates shape/structure — event, activity, and occurrence
+    *content* is entirely scenario-config driven and is never hardcoded here.
+    """
+    validate_scenario_contract(config)
+    if get_scenario_type(config) != SCENARIO_TYPE_EVENT_DATA:
+        raise ValueError(
+            f"scenario.type must be '{SCENARIO_TYPE_EVENT_DATA}'"
+        )
+
+    tour_cfg = require_mapping(config, 'tour', 'config')
+    if not tour_cfg.get('tour_id'):
+        raise ValueError('tour.tour_id is required')
+
+    events_cfg = require_list(config, 'events', 'config')
+    event_ids = set()
+    for event_index, event_cfg in enumerate(events_cfg, 1):
+        context = f"events[{event_index}]"
+        if not isinstance(event_cfg, dict):
+            raise ValueError(f"{context} must be a mapping")
+
+        event_id = event_cfg.get('event_id')
+        if not event_id:
+            raise ValueError(f"{context}.event_id is required")
+        if event_id in event_ids:
+            raise ValueError(f"Duplicate event_id '{event_id}' in events")
+        event_ids.add(event_id)
+
+        for required_field in ('event_name', 'event_type', 'location', 'sequence_enforced',
+                                'default_allowed_type_codes'):
+            if required_field not in event_cfg:
+                raise ValueError(f"{context}.{required_field} is required")
+
+        activities_cfg = require_list(event_cfg, 'activities', context)
+        for activity_index, activity_cfg in enumerate(activities_cfg, 1):
+            if not isinstance(activity_cfg, dict):
+                raise ValueError(f"{context}.activities[{activity_index}] must be a mapping")
+            for required_field in ('activity_id', 'name', 'sequence_no'):
+                if required_field not in activity_cfg:
+                    raise ValueError(
+                        f"{context}.activities[{activity_index}].{required_field} is required"
+                    )
+
+        occurrences_cfg = require_list(event_cfg, 'occurrences', context)
+        for occ_index, occurrence_cfg in enumerate(occurrences_cfg, 1):
+            if not isinstance(occurrence_cfg, dict):
+                raise ValueError(f"{context}.occurrences[{occ_index}] must be a mapping")
+            for required_field in ('day_offset', 'seq'):
+                if required_field not in occurrence_cfg:
+                    raise ValueError(
+                        f"{context}.occurrences[{occ_index}].{required_field} is required"
+                    )
+
+    for hotel_index, hotel_cfg in enumerate(config.get('hotels') or [], 1):
+        if not hotel_cfg.get('hotel_id'):
+            raise ValueError(f"hotels[{hotel_index}].hotel_id is required")
+
+    room_allocation_cfg = config.get('room_allocation')
+    if room_allocation_cfg is not None:
+        require_list(room_allocation_cfg, 'nights', 'room_allocation')
 
 
 def _normalize_personal_codes(config):
@@ -1839,6 +1928,510 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
 
 
 # ============================================================================
+# EVENT ENGINE SIMULATION (generic — event/activity/occurrence content is
+# entirely scenario-config driven; nothing about a specific event is
+# hardcoded here, only generic defaults for optional config fields)
+# ============================================================================
+
+EVENT_TABLE_TYPES = ['Event', 'EventOccurrence', 'EventActivityLogs', 'Hotel', 'RoomAllocation']
+
+EVENT_OCCURRENCE_STATUS_PLANNED = 'PLANNED'
+EVENT_OCCURRENCE_STATUS_ACTIVE = 'ACTIVE'
+EVENT_OCCURRENCE_STATUS_COMPLETED = 'COMPLETED'
+
+EVENT_RECORD_OUTCOME_COMPLETED = 'COMPLETED'
+EVENT_RECORD_OUTCOME_OPTED_OUT = 'OPTED_OUT'
+
+ACTIVITY_CONFIG_DEFAULTS = {
+    'enabled': True,
+    'mandatory': False,
+    'allowed_type_codes': [],
+    'allow_opt_out': False,
+    'prerequisite_activity_ids': [],
+    'restrict_to_assigned_users': True,
+    'variant_options': [],
+    'notes': '',
+}
+
+
+def resolve_anchor_date(config):
+    """Resolve the event scenario's 'today' anchor date, used as day_offset=0."""
+    anchor_cfg = (config.get('date_strategy') or {}).get('anchor_date', 'today')
+    if isinstance(anchor_cfg, str) and anchor_cfg.strip().lower() == 'today':
+        return date.today()
+    return date.fromisoformat(str(anchor_cfg))
+
+
+def build_hotel_items(config):
+    """Build Hotel-{tourId} items from the scenario's optional 'hotels' list."""
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    items = []
+    for hotel_cfg in config.get('hotels') or []:
+        items.append({
+            'hotelId': hotel_cfg['hotel_id'],
+            'name': hotel_cfg.get('name', hotel_cfg['hotel_id']),
+            'city': hotel_cfg.get('city'),
+            'address': hotel_cfg.get('address'),
+            'contact': hotel_cfg.get('contact'),
+            'notes': hotel_cfg.get('notes'),
+            'createdAt': now,
+            'updatedAt': now,
+        })
+    return [{k: v for k, v in item.items() if v is not None} for item in items]
+
+
+def build_room_allocation_items(config, anchor_date, rider_ids):
+    """
+    Build RoomAllocation-{tourId} items from the scenario's optional
+    'room_allocation' section, assigning riders round-robin into
+    reciprocally-shared rooms of the configured capacity, one hotel per
+    configured night.
+    """
+    room_cfg = config.get('room_allocation')
+    if not room_cfg:
+        return []
+
+    room_capacity = int(room_cfg.get('room_capacity', 2))
+    room_number_start = int(room_cfg.get('room_number_start', 201))
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    items = []
+    for night_cfg in room_cfg['nights']:
+        if 'day_offset' not in night_cfg or 'hotel_id' not in night_cfg:
+            raise ValueError("room_allocation.nights entries require day_offset and hotel_id")
+
+        stay_date = (anchor_date + timedelta(days=int(night_cfg['day_offset']))).isoformat()
+        hotel_id = night_cfg['hotel_id']
+
+        room_no = room_number_start
+        for group_start in range(0, len(rider_ids), room_capacity):
+            room_riders = rider_ids[group_start:group_start + room_capacity]
+            for rider_id in room_riders:
+                items.append({
+                    'stayDate': stay_date,
+                    'riderId': rider_id,
+                    'hotelId': hotel_id,
+                    'roomNo': str(room_no),
+                    'roomCapacity': room_capacity,
+                    'sharingWith': [r for r in room_riders if r != rider_id],
+                    'source': 'MANUAL',
+                    'createdAt': now,
+                    'updatedAt': now,
+                })
+            room_no += 1
+
+    return items
+
+
+def build_activity_item(activity_cfg, context):
+    """Convert one scenario-config activity entry into an Event.activities[] item."""
+    merged = {**ACTIVITY_CONFIG_DEFAULTS, **activity_cfg}
+    return {
+        'activityId': merged['activity_id'],
+        'name': merged['name'],
+        'sequenceNo': int(merged['sequence_no']),
+        'enabled': bool(merged['enabled']),
+        'mandatory': bool(merged['mandatory']),
+        'allowedTypeCodes': list(merged['allowed_type_codes']),
+        'allowOptOut': bool(merged['allow_opt_out']),
+        'prerequisiteActivityIds': list(merged['prerequisite_activity_ids']),
+        'restrictToAssignedUsers': bool(merged['restrict_to_assigned_users']),
+        'variantOptions': list(merged['variant_options']),
+        'notes': merged['notes'],
+    }
+
+
+def build_event_definition_item(event_cfg, event_index):
+    """Convert one scenario-config event entry into an Event-{tourId} item."""
+    context = f"events[{event_index}]"
+    activities = [
+        build_activity_item(activity_cfg, f"{context}.activities[{idx}]")
+        for idx, activity_cfg in enumerate(event_cfg['activities'], 1)
+    ]
+
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    return {
+        'eventId': event_cfg['event_id'],
+        'eventName': event_cfg['event_name'],
+        'eventType': event_cfg['event_type'],
+        'location': event_cfg['location'],
+        'sequenceEnforced': bool(event_cfg['sequence_enforced']),
+        'defaultAllowedTypeCodes': list(event_cfg['default_allowed_type_codes']),
+        'allowSelfService': bool(event_cfg.get('allow_self_service', False)),
+        'activities': activities,
+        'createdAt': now,
+        'updatedAt': now,
+        'updatedBy': 'simulation-script',
+    }
+
+
+def build_occurrence_item(event_id, occurrence_cfg, anchor_date, seed_in_progress):
+    """
+    Convert one scenario-config occurrence entry into an EventOccurrence item.
+
+    Status/timing is derived generically from day_offset relative to the
+    anchor ("today") date:
+      - day_offset < 0  -> COMPLETED (fully in the past)
+      - day_offset == 0 -> PLANNED by default ("start of event", fresh for
+        manual testing), or the configured in_progress status when
+        seed_in_progress is requested and the occurrence has an
+        'in_progress' block
+      - day_offset > 0  -> PLANNED (future, untouched)
+
+    Returns (item, meta) where meta carries day_offset/seq/linked_event_id
+    for the second-pass linked-occurrence resolution and record generation.
+    """
+    day_offset = int(occurrence_cfg['day_offset'])
+    seq = int(occurrence_cfg['seq'])
+    occurrence_date = (anchor_date + timedelta(days=day_offset)).isoformat()
+    date_seq = f"{occurrence_date}#{seq}"
+    occurrence_id = f"{event_id}#{date_seq}"
+    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    status = EVENT_OCCURRENCE_STATUS_PLANNED
+    started_at = None
+    completed_at = None
+
+    if day_offset < 0:
+        status = EVENT_OCCURRENCE_STATUS_COMPLETED
+        started_at = f"{occurrence_date}T06:00:00Z"
+        completed_at = f"{occurrence_date}T20:00:00Z"
+    elif day_offset == 0 and seed_in_progress and occurrence_cfg.get('in_progress'):
+        status = occurrence_cfg['in_progress'].get('status', EVENT_OCCURRENCE_STATUS_ACTIVE)
+        started_at = f"{occurrence_date}T06:00:00Z"
+
+    item = {
+        'eventId': event_id,
+        'dateSeq': date_seq,
+        'occurrenceId': occurrence_id,
+        'date': occurrence_date,
+        'seq': seq,
+        'status': status,
+        'activityOverrides': [],
+        'selfServiceEnabled': bool(occurrence_cfg.get('self_service_enabled', False)),
+        'restrictToAssignedUsers': bool(occurrence_cfg.get('restrict_to_assigned_users', True)),
+        'startedAt': started_at,
+        'completedAt': completed_at,
+        'createdAt': now,
+        'updatedAt': now,
+        'updatedBy': 'simulation-script',
+    }
+    item = {k: v for k, v in item.items() if v is not None}
+
+    meta = {
+        'day_offset': day_offset,
+        'seq': seq,
+        'linked_event_id': occurrence_cfg.get('linked_event_id'),
+    }
+    return item, meta
+
+
+def _sequenced_enabled_activities(event_item, up_to_activity_id=None):
+    """Return the event's activities in sequence order, optionally truncated."""
+    activities = sorted(
+        (a for a in event_item['activities'] if a.get('enabled', True)),
+        key=lambda a: a['sequenceNo'],
+    )
+    if up_to_activity_id is None:
+        return activities
+    activity_by_id = {a['activityId']: a for a in event_item['activities']}
+    limit_seq = activity_by_id[up_to_activity_id]['sequenceNo']
+    return [a for a in activities if a['sequenceNo'] <= limit_seq]
+
+
+def _pick_variant(variant_options, variant_split, rng):
+    """Pick a variant option, honouring an optional variant->ratio split."""
+    if not variant_options:
+        return None
+    if not variant_split:
+        return rng.choice(variant_options)
+    roll = rng.random()
+    cumulative = 0.0
+    for variant, ratio in variant_split.items():
+        cumulative += ratio
+        if roll <= cumulative:
+            return variant
+    return variant_options[-1]
+
+
+def _activity_scan_timestamp(occurrence_date, activity_seq, rng):
+    """Build a deterministic-ish scan timestamp spread across an event day."""
+    total_minutes = 360 + activity_seq * 15 + rng.randint(0, 10)
+    hour, minute = divmod(total_minutes % (24 * 60), 60)
+    second = rng.randint(0, 59)
+    return f"{occurrence_date}T{hour:02d}:{minute:02d}:{second:02d}Z"
+
+
+def build_activity_records_for_occurrence(
+    event_item, occurrence_item, day_offset, rider_ids, occurrence_cfg, seed_in_progress, rng,
+):
+    """
+    Generate EventActivityLogs items for one occurrence, entirely from its
+    scenario-config 'progress' (past/completed occurrences) or 'in_progress'
+    (today's occurrence, opt-in via --include-in-progress) block.
+
+    Future/untouched occurrences and today's occurrence without seeding
+    produce no records, leaving the occurrence available for manual
+    QR-scan testing from its current state.
+    """
+    if day_offset < 0:
+        return _build_full_progress_records(event_item, occurrence_item, rider_ids, occurrence_cfg, rng)
+
+    if day_offset == 0 and seed_in_progress:
+        in_progress_cfg = occurrence_cfg.get('in_progress')
+        if in_progress_cfg:
+            return _build_in_progress_records(
+                event_item, occurrence_item, rider_ids, in_progress_cfg, rng,
+            )
+
+    return []
+
+
+def _build_full_progress_records(event_item, occurrence_item, rider_ids, occurrence_cfg, rng):
+    """Every rider completes the full activity sequence (historical occurrence)."""
+    records = []
+    activity_outcomes_cfg = (occurrence_cfg.get('progress') or {}).get('activity_outcomes', {})
+
+    for activity in _sequenced_enabled_activities(event_item):
+        outcome_cfg = activity_outcomes_cfg.get(activity['activityId'], {})
+        opted_out_ratio = outcome_cfg.get('opted_out_ratio', 0) if activity.get('allowOptOut') else 0
+        opted_out_count = round(opted_out_ratio * len(rider_ids))
+        opted_out_riders = set(rng.sample(rider_ids, opted_out_count)) if opted_out_count else set()
+        variant_split = outcome_cfg.get('variant_split')
+
+        for rider_id in rider_ids:
+            outcome = (
+                EVENT_RECORD_OUTCOME_OPTED_OUT if rider_id in opted_out_riders
+                else EVENT_RECORD_OUTCOME_COMPLETED
+            )
+            variant_selected = None
+            if outcome == EVENT_RECORD_OUTCOME_COMPLETED and activity.get('variantOptions'):
+                variant_selected = _pick_variant(activity['variantOptions'], variant_split, rng)
+            timestamp = _activity_scan_timestamp(occurrence_item['date'], activity['sequenceNo'], rng)
+            records.append(_build_activity_record(
+                event_item, occurrence_item, activity, rider_id, timestamp, outcome, variant_selected,
+            ))
+
+    return records
+
+
+def _build_in_progress_records(event_item, occurrence_item, rider_ids, in_progress_cfg, rng):
+    """
+    Distribute riders across "furthest activity reached" buckets so a tester
+    can pick up manual scanning immediately for every rider not yet assigned
+    a bucket (mirrors the ride check-in scenario's 'in_progress' shape).
+    """
+    records = []
+    activity_distribution = in_progress_cfg.get('activity_distribution', {})
+    available = list(rider_ids)
+    rng.shuffle(available)
+
+    for activity_id, count in activity_distribution.items():
+        group_riders = available[:count]
+        available = available[count:]
+        activities_to_complete = _sequenced_enabled_activities(event_item, up_to_activity_id=activity_id)
+
+        for rider_id in group_riders:
+            for activity in activities_to_complete:
+                timestamp = _activity_scan_timestamp(occurrence_item['date'], activity['sequenceNo'], rng)
+                variant_selected = _pick_variant(activity.get('variantOptions'), None, rng)
+                records.append(_build_activity_record(
+                    event_item, occurrence_item, activity, rider_id, timestamp,
+                    EVENT_RECORD_OUTCOME_COMPLETED, variant_selected,
+                ))
+
+    if available:
+        print(
+            f"  Note: {len(available)} rider(s) left with no activity records for "
+            f"{occurrence_item['occurrenceId']} (available for manual scanning from the start)"
+        )
+
+    return records
+
+
+def _build_activity_record(event_item, occurrence_item, activity, rider_id, timestamp, outcome, variant_selected):
+    """Build a single EventActivityLogs item."""
+    record = {
+        'occurrenceId': occurrence_item['occurrenceId'],
+        'recordId': f"{rider_id}#{activity['activityId']}#{timestamp}",
+        'eventId': event_item['eventId'],
+        'activityId': activity['activityId'],
+        'activityName': activity['name'],
+        'riderId': rider_id,
+        'outcome': outcome,
+        'variantSelected': variant_selected,
+        'scannedBy': 'simulation-script',
+        'method': 'QR_SCAN',
+        'timestamp': timestamp,
+        'syncedAt': timestamp,
+        'isFlagged': False,
+        'createdAt': timestamp,
+    }
+    allowed_type_codes = activity.get('allowedTypeCodes') or event_item.get('defaultAllowedTypeCodes') or []
+    if allowed_type_codes:
+        record['typeCode'] = allowed_type_codes[0]
+    return {k: v for k, v in record.items() if v is not None}
+
+
+def clean_event_tables(dynamodb, stack_name, tour_id):
+    """Clean all data from the event-engine tour-specific tables."""
+    for table_type in EVENT_TABLE_TYPES:
+        table_name = build_table_name(stack_name, table_type, tour_id=tour_id)
+        try:
+            table = get_table(dynamodb, stack_name, table_type, tour_id=tour_id)
+            deleted = clean_table(table)
+            print(f"  Cleaned {table_name}: {deleted} items deleted")
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                print(f"  Skipped {table_name}: table not found")
+            else:
+                raise
+
+
+def run_event_data_scenario(args, config, stack_name, region, seed):
+    """Execute the generic event-engine simulation scenario."""
+    scenario = get_scenario_metadata(config)
+    validate_event_data_scenario(config)
+
+    tour_id = config['tour']['tour_id']
+    anchor_date = resolve_anchor_date(config)
+    seed_in_progress = args.include_in_progress or args.in_progress_only
+
+    print_run_header(
+        scenario.get('name', 'Unnamed'), stack_name, seed, args.dry_run,
+        extra_lines=[
+            f"Tour                   : {tour_id}",
+            f"Anchor date ('today')  : {anchor_date.isoformat()}",
+            f"Seed in-progress scans : {seed_in_progress}",
+            f"In-progress only       : {args.in_progress_only}",
+        ],
+    )
+
+    _, dynamodb = create_dynamodb_session(region)
+    rng = random.Random(seed)
+
+    print('Fetching tour from TourMaster...')
+    tour = fetch_tour(dynamodb, stack_name, tour_id)
+    if not tour:
+        print(f"  Error: Tour '{tour_id}' not found in {build_table_name(stack_name, 'TourMaster')}")
+        sys.exit(1)
+    print(f"  Found: {tour.get('name')} (status: {tour.get('status')})")
+
+    riders_cfg = config.get('riders', {})
+    print('Fetching existing tour riders from TourRider...')
+    rider_ids = fetch_tour_riders(
+        dynamodb, stack_name, tour_id,
+        status_in=riders_cfg.get('status_in', ['REGISTERED']),
+        limit=riders_cfg.get('limit'),
+    )
+    if not rider_ids:
+        print(
+            "  Error: no matching riders found in TourRider table for this tour. "
+            "Run a tour-data scenario (e.g. tot_2026.yaml) first."
+        )
+        sys.exit(1)
+    print(f"  Using {len(rider_ids)} rider(s): {rider_ids[0]}..{rider_ids[-1]}")
+
+    hotel_items = build_hotel_items(config)
+    room_allocation_items = build_room_allocation_items(config, anchor_date, rider_ids)
+
+    event_items = []
+    occurrence_meta = []  # list of (event_item, occurrence_item, meta, occurrence_cfg)
+    occurrences_by_key = {}
+
+    for event_index, event_cfg in enumerate(config['events'], 1):
+        event_item = build_event_definition_item(event_cfg, event_index)
+        event_items.append(event_item)
+
+        for occurrence_cfg in event_cfg['occurrences']:
+            occurrence_item, meta = build_occurrence_item(
+                event_item['eventId'], occurrence_cfg, anchor_date, seed_in_progress,
+            )
+            occurrences_by_key[(event_item['eventId'], meta['day_offset'], meta['seq'])] = occurrence_item
+            occurrence_meta.append((event_item, occurrence_item, meta, occurrence_cfg))
+
+    # Second pass: resolve linkedOccurrenceRef pairs (e.g. Baggage Loading <-> Unloading)
+    for _, occurrence_item, meta, _ in occurrence_meta:
+        linked_event_id = meta.get('linked_event_id')
+        if not linked_event_id:
+            continue
+        linked = occurrences_by_key.get((linked_event_id, meta['day_offset'], meta['seq']))
+        if linked:
+            occurrence_item['linkedOccurrenceRef'] = linked['occurrenceId']
+        else:
+            print(
+                f"  Warning: no matching occurrence in '{linked_event_id}' for "
+                f"day_offset={meta['day_offset']}, seq={meta['seq']} to link with "
+                f"{occurrence_item['occurrenceId']}"
+            )
+
+    activity_records = []
+    for event_item, occurrence_item, meta, occurrence_cfg in occurrence_meta:
+        if args.in_progress_only and meta['day_offset'] != 0:
+            continue
+        activity_records.extend(build_activity_records_for_occurrence(
+            event_item, occurrence_item, meta['day_offset'], rider_ids, occurrence_cfg,
+            seed_in_progress, rng,
+        ))
+
+    occurrences_to_write = [
+        occurrence_item for _, occurrence_item, meta, _ in occurrence_meta
+        if not args.in_progress_only or meta['day_offset'] == 0
+    ]
+
+    print(f"Built {len(event_items)} event definition(s), {len(occurrences_to_write)} occurrence(s), "
+          f"{len(activity_records)} activity record(s)")
+
+    if args.dry_run:
+        print(f"\nWriting JSON files to {args.output_dir}/")
+        if not args.in_progress_only:
+            write_json(event_items, os.path.join(args.output_dir, 'events.json'))
+            write_json(hotel_items, os.path.join(args.output_dir, 'hotels.json'))
+            write_json(room_allocation_items, os.path.join(args.output_dir, 'room_allocations.json'))
+        write_json(occurrences_to_write, os.path.join(args.output_dir, 'event_occurrences.json'))
+        write_json(activity_records, os.path.join(args.output_dir, 'event_activity_records.json'))
+        print('\nDry run complete. No data written to DynamoDB.')
+        return
+
+    options = config.get('options', {})
+    if options.get('clean_before_load') and not args.in_progress_only:
+        print('\nCleaning existing event-engine data...')
+        clean_event_tables(dynamodb, stack_name, tour_id)
+
+    print('\nLoading data to DynamoDB...')
+
+    if not args.in_progress_only:
+        table_name = build_table_name(stack_name, 'Hotel', tour_id=tour_id)
+        print(f"  Loading {len(hotel_items)} hotel(s) to {table_name}...")
+        loaded, failed = load_to_dynamodb(dynamodb, table_name, hotel_items)
+        print(f"    Loaded: {loaded}, Failed: {failed}")
+
+        table_name = build_table_name(stack_name, 'RoomAllocation', tour_id=tour_id)
+        print(f"  Loading {len(room_allocation_items)} room allocation(s) to {table_name}...")
+        loaded, failed = load_to_dynamodb(dynamodb, table_name, room_allocation_items)
+        print(f"    Loaded: {loaded}, Failed: {failed}")
+
+        table_name = build_table_name(stack_name, 'Event', tour_id=tour_id)
+        print(f"  Loading {len(event_items)} event definition(s) to {table_name}...")
+        loaded, failed = load_to_dynamodb(dynamodb, table_name, event_items)
+        print(f"    Loaded: {loaded}, Failed: {failed}")
+    else:
+        print('  Skipping Event/Hotel/RoomAllocation writes (--in-progress-only)')
+
+    table_name = build_table_name(stack_name, 'EventOccurrence', tour_id=tour_id)
+    print(f"  Loading {len(occurrences_to_write)} occurrence(s) to {table_name}...")
+    loaded, failed = load_to_dynamodb(dynamodb, table_name, occurrences_to_write)
+    print(f"    Loaded: {loaded}, Failed: {failed}")
+
+    table_name = build_table_name(stack_name, 'EventActivityLogs', tour_id=tour_id)
+    print(f"  Loading {len(activity_records)} activity record(s) to {table_name}...")
+    loaded, failed = load_to_dynamodb(dynamodb, table_name, activity_records)
+    print(f"    Loaded: {loaded}, Failed: {failed}")
+
+    print('\nEvent data generation complete!')
+
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
@@ -1915,6 +2508,23 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
             "(does not write TourRider or Ride data)."
         ),
     )
+    parser.add_argument(
+        '--include-in-progress', action='store_true',
+        help=(
+            "For event_data_generation scenarios: seed today's occurrence(s) "
+            "with the partial activity records from the scenario's 'in_progress' "
+            "config, instead of leaving them freshly PLANNED with no scans."
+        ),
+    )
+    parser.add_argument(
+        '--in-progress-only', action='store_true',
+        help=(
+            "For event_data_generation scenarios: only (re)populate today's "
+            "occurrence(s) and their in-progress activity records; skips "
+            "event/hotel/room-allocation and historical-occurrence writes. "
+            "Implies --include-in-progress."
+        ),
+    )
 
     parser.add_argument(
         '--debug-enabled', action='store_true',
@@ -1933,6 +2543,15 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
     if args.today_checkins_only:
         args.include_today_checkins = True
 
+    if args.in_progress_only and args.clean_only:
+        parser.error('--in-progress-only cannot be combined with --clean-only')
+
+    if args.in_progress_only and args.clean:
+        parser.error('--in-progress-only cannot be combined with --clean')
+
+    if args.in_progress_only:
+        args.include_in_progress = True
+
     # Load scenario
     with open(args.scenario) as f:
         config = yaml.safe_load(f)
@@ -1949,6 +2568,10 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
 
     if scenario_type == SCENARIO_TYPE_TOUR_DATA:
         run_tour_data_scenario(args, config, stack_name, region, seed)
+        return
+
+    if scenario_type == SCENARIO_TYPE_EVENT_DATA:
+        run_event_data_scenario(args, config, stack_name, region, seed)
         return
 
     raise ValueError(f"Unsupported scenario.type: {scenario_type}")
