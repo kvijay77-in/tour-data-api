@@ -134,6 +134,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Users | GET | `/v1/users/me` | Get current user claims | [Users](#users) | ✅ | ✅
 | Users | GET | `/v1/users/cognito` | List Cognito users with only `sub` and `name` | [Users](#users) | ✅ | ❌
 | Users | GET | `/v1/tours/{tourId}/users` | List tour users | [Users](#users) | ✅ | ❌
+| Users | GET | `/v1/tours/{tourId}/users/me` | Get current user's Tour specific details | [Users](#users) | ✅ | ❌
 | Users | POST | `/v1/tours/{tourId}/users` | Create a tour-scoped user assignment | [Users](#users) | ✅ | ❌ |
 | Users | PUT | `/v1/tours/{tourId}/users/{userId}` | Update a tour-scoped user assignment | [Users](#users) | ✅ | ❌ |
 | Admin UserMgmt | GET | `/v1/admin/usermgmt/roles` | List assignable Cognito groups | [Admin User Management](#admin-user-management) | ✅ | ❌
