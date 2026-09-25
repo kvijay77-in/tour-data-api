@@ -236,7 +236,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/users/me` | None | None | None | Returns current JWT claims as seen by the API |
 | `GET /v1/users/cognito` | None | None | None | Requires `READ`; returns Cognito users with minimal fields |
 | `GET /v1/tours/{tourId}/users` | `tourId` (required) | None | None | Requires `USER_LIST`; lists tour-scoped user assignments |
-| `POST /v1/tours/{tourId}/users` | `tourId` (required) | None | Required: `userId, username, email, name, role`; Optional: `status, assignedStage, hotelId, eventAssignments, assignedActivityIds` | Requires `USER_MANAGE`; validates referenced hotels/events and tour-scoped assignment fields |
+| `GET /v1/tours/{tourId}/users/me` | `tourId` (required) | None | None | Requires `READ`; returns the caller's own `User-{tourId}` record (keyed by JWT `sub`); `404 USER_NOT_FOUND` if the caller has no tour-scoped record |
+| `POST /v1/tours/{tourId}/users` | `tourId` (required) | None | Required: `userId, role`; Optional: `status, assignedStage, hotelId, eventAssignments, assignedActivityIds` | Requires `USER_MANAGE`; `userId` must be a valid Cognito sub and an existing managed user (`404 USER_NOT_FOUND` otherwise); `username`/`email`/`name` are snapshotted from the Cognito profile, not taken from the request body; validates referenced hotels/events |
 | `PUT /v1/tours/{tourId}/users/{userId}` | `tourId, userId` (required) | None | Optional: `username, email, name, role, status, assignedStage, hotelId, eventAssignments, assignedActivityIds` | Requires `USER_MANAGE`; validates supplied referenced hotels/events and updates only provided fields |
 
 #### Artifacts

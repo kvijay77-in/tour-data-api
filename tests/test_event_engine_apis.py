@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import sys
 
 import boto3
@@ -15,6 +16,32 @@ sys.path.insert(0, 'src/functions/users')
 
 
 MOCK_TOUR_ID = 'TestTour-2026'
+
+# create_tour_user derives username/email/name from the managed Cognito user,
+# so tests stub a client that synthesizes one for any valid sub-shaped filter.
+USER_1 = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+SCANNER_1 = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+SCANNER_2 = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+
+
+class _FakeManagedUserCognitoClient:
+    def list_users(self, UserPoolId, Filter=None, Limit=None):
+        match = re.match(r'^sub = "(.+)"$', Filter or '')
+        if not match:
+            return {'Users': []}
+        sub = match.group(1)
+        return {
+            'Users': [{
+                'Username': f'user-{sub[:8]}',
+                'Attributes': [
+                    {'Name': 'sub', 'Value': sub},
+                    {'Name': 'email', 'Value': f'{sub[:8]}@example.com'},
+                    {'Name': 'name', 'Value': f'Test User {sub[:8]}'},
+                ],
+                'Enabled': True,
+                'UserStatus': 'CONFIRMED',
+            }]
+        }
 
 
 @pytest.fixture
@@ -156,6 +183,11 @@ def event_engine_setup(event_engine_env):
             'status': 'ACTIVE',
             'baggageStatus': 'ACTIVE',
         })
+
+        os.environ['MGMT_USER_POOL_ID'] = 'test-mgmt-pool'
+        import event_engine
+        event_engine.cognito_client = _FakeManagedUserCognitoClient()
+
         yield dynamodb
 
 
@@ -263,10 +295,7 @@ def test_create_hotel_and_tour_user(event_engine_setup):
             {'tourId': MOCK_TOUR_ID},
             method='POST',
             body={
-                'userId': 'user-1',
-                'username': 'hotelstaff',
-                'email': 'hotel@example.com',
-                'name': 'Hotel Staff',
+                'userId': USER_1,
                 'role': 'HOTEL_STAFF',
                 'hotelId': 'HTL-MDU-01',
                 'eventAssignments': [{'eventId': 'EVT-BAGLOAD', 'dates': 'ALL'}],
@@ -387,10 +416,7 @@ def test_create_activity_record_allows_opt_out_without_type_code(event_engine_se
             {'tourId': MOCK_TOUR_ID},
             method='POST',
             body={
-                'userId': 'scanner-1',
-                'username': 'scanner',
-                'email': 'scanner@example.com',
-                'name': 'Scanner User',
+                'userId': SCANNER_1,
                 'role': 'SUPER_USER',
                 'status': 'ACTIVE',
             },
@@ -403,7 +429,7 @@ def test_create_activity_record_allows_opt_out_without_type_code(event_engine_se
             ['SUPER_USER'],
             {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-OPT', 'occurrenceId': 'EVT-OPT#2026-02-10#1'},
             method='POST',
-            sub='scanner-1',
+            sub=SCANNER_1,
             body={
                 'activityId': 'ACT-001',
                 'riderId': 'R1',
@@ -473,10 +499,7 @@ def test_create_activity_record_requires_type_code_for_non_opt_out(event_engine_
             {'tourId': MOCK_TOUR_ID},
             method='POST',
             body={
-                'userId': 'scanner-2',
-                'username': 'scanner2',
-                'email': 'scanner2@example.com',
-                'name': 'Scanner Two',
+                'userId': SCANNER_2,
                 'role': 'SUPER_USER',
                 'status': 'ACTIVE',
             },
@@ -489,7 +512,7 @@ def test_create_activity_record_requires_type_code_for_non_opt_out(event_engine_
             ['SUPER_USER'],
             {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-REQ', 'occurrenceId': 'EVT-REQ#2026-02-10#1'},
             method='POST',
-            sub='scanner-2',
+            sub=SCANNER_2,
             body={
                 'activityId': 'ACT-001',
                 'riderId': 'R1',

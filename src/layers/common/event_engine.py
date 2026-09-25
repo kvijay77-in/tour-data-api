@@ -56,6 +56,7 @@ from validation import (
     validate_activity_id,
     validate_allowed_type_codes,
     validate_baggage_status,
+    validate_cognito_user_id,
     validate_event_id,
     validate_event_occurrence_status,
     validate_event_type,
@@ -1368,19 +1369,19 @@ def _validate_user_role(role: str) -> None:
         )
 
 
-def _verify_managed_user_exists(user_id: str) -> bool:
+def _get_managed_cognito_user(user_id: str) -> Optional[Dict[str, Any]]:
+    """Look up a managed Cognito user by sub. Fails closed: raises if the pool
+    is not configured or the lookup itself fails, rather than assuming validity."""
     user_pool_id = os.environ.get("MGMT_USER_POOL_ID")
     if not user_pool_id:
-        return True
-    try:
-        response = cognito_client.list_users(
-            UserPoolId=user_pool_id,
-            Filter=f'sub = "{user_id}"',
-            Limit=1,
-        )
-        return bool(response.get("Users"))
-    except Exception:
-        return True
+        raise RuntimeError("MGMT_USER_POOL_ID is not configured")
+    response = cognito_client.list_users(
+        UserPoolId=user_pool_id,
+        Filter=f'sub = "{user_id}"',
+        Limit=1,
+    )
+    users = response.get("Users", [])
+    return users[0] if users else None
 
 
 def _validate_event_assignments(tour_id: str, event_assignments: Any) -> None:
@@ -1411,7 +1412,8 @@ def create_tour_user(event: Dict[str, Any]) -> Dict[str, Any]:
     if err:
         return err
     try:
-        validate_required_fields(body, ["userId", "username", "email", "name", "role"])
+        validate_required_fields(body, ["userId", "role"])
+        validate_cognito_user_id(body["userId"])
         _validate_user_role(body["role"])
         _validate_event_assignments(tour_id, body.get("eventAssignments"))
         if body.get("hotelId"):
@@ -1425,15 +1427,24 @@ def create_tour_user(event: Dict[str, Any]) -> Dict[str, Any]:
         code = "INVALID_EVENT_ASSIGNMENT" if exc.details.get("field") == "eventAssignments" else "VALIDATION_ERROR"
         return error_response(code, exc.message, status_code=400, details=exc.details)
 
-    if not _verify_managed_user_exists(body["userId"]):
+    try:
+        cognito_user = _get_managed_cognito_user(body["userId"])
+    except (RuntimeError, ClientError):
+        return internal_error_response("Unable to verify managed user")
+    if not cognito_user:
         return error_response("USER_NOT_FOUND", "Managed user not found.", status_code=404)
+
+    # username/email/name are snapshotted from Cognito at assignment time (not
+    # trusted from the request body), so the tour-scoped record stays accurate
+    # even if the Cognito user pool is later modified or deleted.
+    cognito_attrs = {attr.get("Name"): attr.get("Value") for attr in cognito_user.get("Attributes", [])}
 
     now = utc_now_iso()
     item = {
         "userId": body["userId"],
-        "username": body["username"],
-        "email": body["email"],
-        "name": body["name"],
+        "username": cognito_user.get("Username"),
+        "email": cognito_attrs.get("email"),
+        "name": cognito_attrs.get("name"),
         "role": body["role"],
         "status": body.get("status", "ACTIVE"),
         "assignedStage": body.get("assignedStage"),
@@ -1489,4 +1500,24 @@ def update_tour_user(event: Dict[str, Any]) -> Dict[str, Any]:
     item["updatedAt"] = utc_now_iso()
     item["updatedBy"] = get_claim(event, "sub")
     put_tour_item("User", tour_id, item, condition_expression="attribute_exists(userId)")
+    return success_response(item)
+
+
+def get_current_tour_user(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the caller's own tour-scoped User-{tourId} record, keyed by their Cognito sub."""
+    tour_id = (event.get("pathParameters") or {}).get("tourId")
+    if not tour_id:
+        return bad_request_response("tourId is required in path")
+    try:
+        validate_tour_id(tour_id)
+    except ValidationError as exc:
+        return bad_request_response(exc.message, exc.details)
+
+    user_id = get_claim(event, "sub")
+    if not user_id:
+        return error_response("FORBIDDEN", "User identity missing.", status_code=403)
+
+    item = get_tour_item("User", tour_id, {"userId": user_id})
+    if not item:
+        return error_response("USER_NOT_FOUND", "You are not assigned to this tour.", status_code=404)
     return success_response(item)

@@ -313,6 +313,21 @@ def validate_email(email: str) -> None:
         )
 
 
+COGNITO_SUB_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+def validate_cognito_user_id(cognito_user_id: str) -> None:
+    """Validate Cognito user id (sub) without enforcing RFC UUID version bits."""
+    if not cognito_user_id or not COGNITO_SUB_PATTERN.fullmatch(cognito_user_id):
+        raise ValidationError(
+            "cognitoUserId must be a valid Cognito sub",
+            {"field": "cognitoUserId", "value": cognito_user_id},
+        )
+
+
 def normalize_personal_code(personal_code: Any) -> Optional[str]:
     """Normalize rider personalCode to uppercase.
 

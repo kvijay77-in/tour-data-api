@@ -123,6 +123,7 @@ tour-data-api/
 │   │       ├── list_managed_users.py  # GET /v1/admin/usermgmt/users
 │   │       ├── list_role_groups.py    # GET /v1/admin/usermgmt/roles
 │   │       ├── list_tour_users.py     # GET /v1/tours/{tourId}/users
+│   │       ├── get_current_tour_user.py # GET /v1/tours/{tourId}/users/me
 │   │       ├── create_tour_user.py    # POST /v1/tours/{tourId}/users
 │   │       ├── update_managed_user.py # PUT /v1/admin/usermgmt/users/{cognitoUserId}
 │   │       ├── update_tour_user.py    # PUT /v1/tours/{tourId}/users/{userId}

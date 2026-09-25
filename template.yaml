@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: 2010-09-09
 Transform: AWS::Serverless-2016-10-31
 Description: >
   tour-data-api
@@ -2557,6 +2557,29 @@ Resources:
           Properties:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/users
+            Method: GET
+
+  GetCurrentTourUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/users/
+      Handler: get_current_tour_user.lambda_handler
+      Description: Get the caller's own tour-scoped user assignment record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-User-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/users/me
             Method: GET
 
   CreateTourUserFunction:

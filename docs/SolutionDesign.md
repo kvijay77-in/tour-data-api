@@ -478,6 +478,8 @@ Notes:
 - Small table (~15 users per tour)
 - Each tour has its own user assignments (team composition can change between tours)
 - The Cycling Tour Events engine adds optional `hotelId`, `eventAssignments`, and `assignedActivityIds` attributes to this table, and a dedicated `POST`/`PUT /v1/tours/{tourId}/users[/{userId}]` API (permission `USER_MANAGE`) to create/update them — see [cycling-tour-events-design.md](cycling-tour-events-design.md) §5.7/§8.23a. This is distinct from the pre-existing `/v1/admin/usermgmt/users` endpoints, which manage the underlying Cognito identity rather than this tour-scoped record.
+- `userId` is the linking attribute back to the Cognito identity (it *is* the Cognito `sub`, validated against the same format used by `/v1/admin/usermgmt/users`, and must already exist as a managed user before it can be assigned to a tour). `username`/`email`/`name` are a **point-in-time snapshot copied from the Cognito profile at assignment time** (`POST`), not a live mirror — this is intentional, so the tour record retains this information even if the Cognito user pool or user is later deleted. Because it's a snapshot, these fields do not auto-update if the Cognito profile changes later; `PUT /v1/tours/{tourId}/users/{userId}` accepts explicit `username`/`email`/`name` updates so a caller (e.g. the frontend, in response to a Cognito profile edit) can resync them on demand.
+- `GET /v1/tours/{tourId}/users/me` (permission `READ`, granted to every role) lets the authenticated caller read their own tour-scoped record without needing `USER_LIST` — closing the gap where `PS_<n>_USER`/`HOTEL_STAFF` users had no way to self-discover their own `hotelId`/`eventAssignments`/`assignedActivityIds`.
 
 ## Tour-Specific Table 5: Notification-{tourId}
 
