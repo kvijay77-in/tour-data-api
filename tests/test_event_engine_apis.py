@@ -623,3 +623,106 @@ def test_update_event_definition_rejects_invalid_activity_order(event_engine_set
     assert response['statusCode'] == 400
     body = json.loads(response['body'])
     assert body['error']['message'] == 'activities must be ordered by ascending sequenceNo'
+
+
+LOAD_OCCURRENCE_ID = 'EVT-BAGLOAD#2026-02-12#1'
+UNLOAD_OCCURRENCE_ID = 'EVT-BAGUNLOAD#2026-02-12#1'
+
+
+def _seed_reconciliation_data(dynamodb, load_overrides=None):
+    def activity(activity_id, sequence_no):
+        return {'activityId': activity_id, 'name': activity_id, 'sequenceNo': sequence_no, 'enabled': True}
+
+    events = dynamodb.Table(f'test-stack-Event-{MOCK_TOUR_ID}')
+    events.put_item(Item={
+        'eventId': 'EVT-BAGLOAD',
+        'activities': [activity('ACT-001', 1), activity('ACT-002', 2), activity('ACT-003', 3)],
+    })
+    events.put_item(Item={
+        'eventId': 'EVT-BAGUNLOAD',
+        'activities': [activity('ACT-001', 1), activity('ACT-002', 2)],
+    })
+
+    occurrences = dynamodb.Table(f'test-stack-EventOccurrence-{MOCK_TOUR_ID}')
+    occurrences.put_item(Item={
+        'eventId': 'EVT-BAGLOAD',
+        'dateSeq': '2026-02-12#1',
+        'occurrenceId': LOAD_OCCURRENCE_ID,
+        'date': '2026-02-12',
+        'status': 'ACTIVE',
+        'activityOverrides': load_overrides or [],
+        'linkedOccurrenceRef': UNLOAD_OCCURRENCE_ID,
+    })
+    occurrences.put_item(Item={
+        'eventId': 'EVT-BAGUNLOAD',
+        'dateSeq': '2026-02-12#1',
+        'occurrenceId': UNLOAD_OCCURRENCE_ID,
+        'date': '2026-02-12',
+        'status': 'ACTIVE',
+        'activityOverrides': [],
+    })
+
+    records = dynamodb.Table(f'test-stack-EventActivityLogs-{MOCK_TOUR_ID}')
+
+    def record(occurrence_id, rider_id, activity_id, type_code=None, outcome='COMPLETED', cancelled=False):
+        timestamp = '2026-02-12T05:40:00Z'
+        item = {
+            'occurrenceId': occurrence_id,
+            'recordId': f'{rider_id}#{activity_id}#{type_code}#{timestamp}',
+            'riderId': rider_id,
+            'activityId': activity_id,
+            'outcome': outcome,
+            'timestamp': timestamp,
+        }
+        if type_code:
+            item['typeCode'] = type_code
+        if cancelled:
+            item['cancelledAt'] = '2026-02-12T06:00:00Z'
+        records.put_item(Item=item)
+
+    # Loading: R1 loads two bags; R2 opts out; R3 only reaches the first step; R4's scan is cancelled; R5 at ACT-002
+    record(LOAD_OCCURRENCE_ID, 'R1', 'ACT-003', '3')
+    record(LOAD_OCCURRENCE_ID, 'R1', 'ACT-003', '4')
+    record(LOAD_OCCURRENCE_ID, 'R2', 'ACT-001', outcome='OPTED_OUT')
+    record(LOAD_OCCURRENCE_ID, 'R3', 'ACT-001', '3')
+    record(LOAD_OCCURRENCE_ID, 'R4', 'ACT-003', '3', cancelled=True)
+    record(LOAD_OCCURRENCE_ID, 'R5', 'ACT-002', '3')
+    # Unloading: only R1's bag 3 reaches the final step; bag 4 stops at the first step
+    record(UNLOAD_OCCURRENCE_ID, 'R1', 'ACT-002', '3')
+    record(UNLOAD_OCCURRENCE_ID, 'R1', 'ACT-001', '4')
+
+
+def _call_reconciliation():
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    from get_reconciliation import lambda_handler as get_reconciliation_handler
+
+    response = get_reconciliation_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-BAGLOAD', 'occurrenceId': LOAD_OCCURRENCE_ID},
+        ),
+        None,
+    )
+    assert response['statusCode'] == 200
+    return json.loads(response['body'])['data']
+
+
+def test_reconciliation_counts_only_final_activity_bags(event_engine_setup):
+    _seed_reconciliation_data(event_engine_setup)
+
+    data = _call_reconciliation()
+
+    assert data == {'loadedCount': 2, 'unloadedCount': 1, 'missingRiderIds': ['R1']}
+
+
+def test_reconciliation_uses_last_enabled_activity_after_override(event_engine_setup):
+    _seed_reconciliation_data(
+        event_engine_setup,
+        load_overrides=[{'activityId': 'ACT-003', 'enabled': False}],
+    )
+
+    data = _call_reconciliation()
+
+    assert data == {'loadedCount': 1, 'unloadedCount': 1, 'missingRiderIds': ['R5']}

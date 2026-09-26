@@ -967,6 +967,32 @@ def get_rider_progress(event: Dict[str, Any]) -> Dict[str, Any]:
     return success_response({"items": progress_items})
 
 
+def _final_activity_id(tour_id: str, event_id: str, occurrence: Dict[str, Any]) -> Optional[str]:
+    event_definition = _get_event_definition(tour_id, event_id) or {}
+    enabled_activities = [
+        activity for activity in event_definition.get("activities", [])
+        if _effective_activity_enabled(occurrence, activity)
+    ]
+    if not enabled_activities:
+        return None
+    return max(enabled_activities, key=lambda activity: activity.get("sequenceNo", 0)).get("activityId")
+
+
+def _reconciliation_bag_pairs(tour_id: str, event_id: str, occurrence: Dict[str, Any]) -> set:
+    """Distinct (riderId, typeCode) bags scanned at the occurrence's final enabled activity."""
+    final_activity_id = _final_activity_id(tour_id, event_id, occurrence)
+    if not final_activity_id:
+        return set()
+    records = _non_cancelled_records(_scan_records_for_occurrence(tour_id, occurrence["occurrenceId"]))
+    return {
+        (record.get("riderId"), record.get("typeCode"))
+        for record in records
+        if record.get("activityId") == final_activity_id
+        and record.get("typeCode")
+        and record.get("outcome") != EventRecordOutcome.OPTED_OUT.value
+    }
+
+
 def get_reconciliation(event: Dict[str, Any]) -> Dict[str, Any]:
     params = event.get("pathParameters") or {}
     tour_id = params.get("tourId")
@@ -984,10 +1010,8 @@ def get_reconciliation(event: Dict[str, Any]) -> Dict[str, Any]:
     if not linked_occurrence:
         return error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
 
-    loaded_records = _non_cancelled_records(_scan_records_for_occurrence(tour_id, occurrence_id))
-    unloaded_records = _non_cancelled_records(_scan_records_for_occurrence(tour_id, linked_occurrence_ref))
-    loaded_pairs = {(record.get("riderId"), record.get("typeCode")) for record in loaded_records}
-    unloaded_pairs = {(record.get("riderId"), record.get("typeCode")) for record in unloaded_records}
+    loaded_pairs = _reconciliation_bag_pairs(tour_id, event_id, occurrence)
+    unloaded_pairs = _reconciliation_bag_pairs(tour_id, linked_event_id, linked_occurrence)
     missing_rider_ids = sorted({rider_id for rider_id, _ in loaded_pairs - unloaded_pairs})
     return success_response(
         {

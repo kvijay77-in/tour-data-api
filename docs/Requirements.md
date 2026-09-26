@@ -75,7 +75,7 @@ Following data are required to begin with.
 - appliedOn
 - confirmedOn
 - tourFeePaidOn
-- registredOn
+- registeredOn
 - riderId
 - status
 - updatedAt

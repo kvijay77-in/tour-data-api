@@ -555,7 +555,7 @@ In the style of the existing "Access Patterns" section in `SolutionDesign.md`:
    - Get all records for a rider (rider progress stepper, rider-app self view)
    - Cancel an activity record
 4. **Reconciliation**
-   - Get the loading occurrence's records and the paired unloading occurrence's records (via `linkedOccurrenceRef`) and diff by `riderId` + `typeCode`
+   - Get the loading occurrence's records and the paired unloading occurrence's records (via `linkedOccurrenceRef`) and diff by `riderId` + `typeCode`, counting only scans at each occurrence's last enabled activity (§8.17)
 5. **Hotel management**
    - Get/list hotels for a tour
    - Create/update a hotel
@@ -761,6 +761,7 @@ Per-rider progress across all events (used by the rider progress stepper and `to
 
 Only valid for an occurrence whose own `linkedOccurrenceRef` (§5.2) is set.
 
+- Counting rule: a bag is a distinct `(riderId, typeCode)` pair from a non-cancelled record at the occurrence's **last enabled activity** (highest `sequenceNo` after `activityOverrides`); `OPTED_OUT` records and records without a `typeCode` are excluded. The same rule is applied to the linked occurrence, and `missingRiderIds` lists riders with a loaded bag that has no matching unloaded bag.
 - Required permission: `DASHBOARD`
 - Success (200): `{ "success": true, "data": { "loadedCount", "unloadedCount", "missingRiderIds": [ "R12", "R57" ] } }`
 - Errors: `401`, `403`, `404 OCCURRENCE_NOT_FOUND`, `400 NO_LINKED_OCCURRENCE`

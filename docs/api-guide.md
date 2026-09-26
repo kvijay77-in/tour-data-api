@@ -49,104 +49,104 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 ### Endpoint Catalog
 
-| Domain | Method | Path | Purpose | Contract | Mgmt App | Rider App
-|---|---|---|---|---|---|---|
-| Config | GET | `/v1/config` | Get enabled app configuration items | [Config](#config) |  ✅ | ✅
-| Tours | GET | `/v1/tours/active` | Get currently active tour | [Tours](#tours) | ✅ | ✅
-| Tours | GET | `/v1/tours/{tourId}` | Get tour details | [Tours](#tours) | ✅ | ✅
-| Tours | GET | `/v1/tours` | List tours | [Tours](#tours) | ✅ | ✅
-| Tours | POST | `/v1/tours` | Create tour, optionally provision tables | [Tours](#tours) | ✅ | ❌
-| Tours | PUT | `/v1/tours` | Update tour and optionally provision it for the first time | [Tours](#tours) | ✅ | ❌
-| Tours | PUT | `/v1/tours/{tourId}/provision` | Re-provision missing tour tables | [Tours](#tours) | ✅ | ❌
-| Tours | POST | `/v1/tours/{tourId}/archive` | Archive tour | [Tours](#tours) | ✅ | ❌
-| Riders | POST | `/v1/riders/profile` | Create rider profile | [Riders](#riders) | ❌ | ✅
-| Riders | POST | `/v1/riders/profile/{profileId}` | Create rider profile | [Riders](#riders) | ❌ | ✅
-| Riders | GET | `/v1/riders/link/{cognitoUserName}` | Get linked profile ID for a Cognito username | [Riders](#riders) | ❌ | ✅
-| Riders | POST | `/v1/riders/link/{cognitoUserName}` | Create Cognito username to profile mapping | [Riders](#riders) | ❌ | ✅
-| Riders | DELETE | `/v1/riders/link/{cognitoUserName}` | Delete Cognito username to profile mapping | [Riders](#riders) | ❌ | ✅
-| Riders | GET | `/v1/riders/profile/{profileId}` | Get rider profile | [Riders](#riders) | ✅ | ✅
-| Riders | GET | `/v1/profile/{profileId}/tours` | List rider tour participation info across all tours for a profile | [Riders](#riders) | ✅ | ✅
-| Riders | GET | `/v1/profile/{profileId}/tours/{tourId}` | Get rider tour participation info | [Riders](#riders) | ✅ | ✅
-| Riders | PUT | `/v1/riders/profile/{profileId}` | Update rider profile | [Riders](#riders) | ❌ | ✅
-| Riders | POST | `/v1/riders/profile/{profileId}/picture` | Get profile picture upload URL | [Riders](#riders) | ❌ | ✅
-| Riders | GET | `/v1/riders/profile/{profileId}/picture` | Get profile picture download URL | [Riders](#riders) | ❌ | ✅
-| Riders | GET | `/v1/tours/{tourId}/riders` | List tour riders | [Riders](#riders) | ✅ | ❌
-| Riders | GET | `/v1/tours/{tourId}/riders/names` | List tour riders with riderId, name, and personalCode | [Riders](#riders) | ✅ | ❌
-| Riders | POST | `/v1/tours/{tourId}/riders` | Register rider for tour | [Riders](#riders) | ✅ | ❌
-| Riders | GET | `/v1/tours/{tourId}/riders/{riderId}` | Get tour rider | [Riders](#riders) | ✅ | ❌
-| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit` | Mark rider as exited from tour | [Riders](#riders) | ✅ | ❌
-| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit/cancel` | Cancel rider exit and restore previous status | [Riders](#riders) | ✅ | ❌
-| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/baggage/release` | Mark retained baggage as released back to the rider | [Riders](#riders) | ✅ | ❌
-| Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) | ✅ | ❌
-| Artifacts | POST | `/v1/artifacts/tour/presign-upload` | Generate presigned upload URL for a tour artifact | [Artifacts](#artifacts) | ✅ | ❌
-| Artifacts | POST | `/v1/artifacts/ride/presign-upload` | Generate presigned upload URL for a ride artifact | [Artifacts](#artifacts) | ✅ | ❌
-| Artifacts | DELETE | `/v1/artifacts/tour/{tourId}/{artifactId}` | Delete a tour artifact | [Artifacts](#artifacts) | ✅ | ❌
-| Artifacts | DELETE | `/v1/artifacts/ride/{tourId}/{rideId}/{artifactId}` | Delete a ride artifact | [Artifacts](#artifacts) | ✅ | ❌
-| Artifacts | GET | `/v1/tours/{tourId}/artifacts` | Get tour artifacts manifest | [Artifacts](#artifacts) | ✅ | ✅
-| Artifacts | GET | `/v1/tours/{tourId}/rides/{rideId}/artifacts` | Get ride artifacts manifest | [Artifacts](#artifacts) | ✅ | ✅
-| Rides | GET | `/v1/tours/{tourId}/rides/today` | Get today's ride | [Rides](#rides) | ✅ | ✅
-| Rides | GET | `/v1/tours/{tourId}/rides` | List rides | [Rides](#rides) | ✅ | ✅
-| Rides | GET | `/v1/tours/{tourId}/rides/{rideId}` | Get ride | [Rides](#rides) | ✅ | ✅
-| Rides | POST | `/v1/tours/{tourId}/rides` | Create ride | [Rides](#rides) | ✅ | ❌
-| Rides | PUT | `/v1/tours/{tourId}/rides/{rideId}` | Update ride | [Rides](#rides) | ✅ | ❌
-| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/open` | Open pit stop stage | [Rides](#rides) | ✅ | ❌
-| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/close` | Close pit stop stage | [Rides](#rides) | ✅ | ❌
-| Rides | POST | `/v1/tours/{tourId}/rides/open` | Open today's ride | [Rides](#rides) | ✅ | ❌
-| Rides | POST | `/v1/tours/{tourId}/rides/start` | Start today's ride | [Rides](#rides) | ✅ | ❌
-| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/close` | Close ride | [Rides](#rides) | ✅ | ❌
-| Check-Ins | POST | `/v1/tours/{tourId}/checkins` | Create check-in | [Check-Ins](#check-ins) | ✅ | ❌
-| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/checkins` | List ride check-ins | [Check-Ins](#check-ins) | ✅ | ❌
-| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/checkins` | List all check-ins for a rider | [Check-Ins](#check-ins) | ✅ | ✅
-| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | List rider check-ins for a ride number | [Check-Ins](#check-ins) | ✅ | ✅
-| Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | Cancel check-in (special update) | [Check-Ins](#check-ins) | ✅ | ❌
-| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard` | Get dashboard payload | [Check-Ins](#check-ins) | ✅ | ❌
-| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | Get lightweight dashboard progress payload | [Check-Ins](#check-ins) | ✅ | ❌
-| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | Get rider popup details for selected ride | [Check-Ins](#check-ins) |✅ | ❌
-| Events | GET | `/v1/tours/{tourId}/events` | List event definitions | [Events](#events) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}` | Get event definition | [Events](#events) | ✅ | ❌ |
-| Events | POST | `/v1/tours/{tourId}/events` | Create event definition | [Events](#events) | ✅ | ❌ |
-| Events | PUT | `/v1/tours/{tourId}/events/{eventId}` | Update event definition | [Events](#events) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences` | List occurrences | [Events](#events) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | Get occurrence | [Events](#events) | ✅ | ❌ |
-| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences` | Create occurrence | [Events](#events) | ✅ | ❌ |
-| Events | PUT | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | Update occurrence | [Events](#events) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | Get activity overrides | [Events](#events) | ✅ | ❌ |
-| Events | PUT | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | Update activity overrides | [Events](#events) | ✅ | ❌ |
-| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start` | Start occurrence | [Events](#events) | ✅ | ❌ |
-| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete` | Complete occurrence | [Events](#events) | ✅ | ❌ |
-| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` | Cancel occurrence | [Events](#events) | ✅ | ❌ |
-| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records` | Create activity record | [Events](#events) | ✅ | ❌ |
-| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel` | Cancel activity record | [Events](#events) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | Get event dashboard | [Events](#events) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | Get event dashboard progress | [Events](#events) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | Get event reconciliation payload | [Events](#events) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/bootstrap` | Get event bootstrap payload | [Events](#events) | ✅ | ✅ |
-| Events | GET | `/v1/tours/{tourId}/riders/{riderId}/events/progress` | Get rider event progress | [Events](#events) | ✅ | ✅ |
-| Hotels | GET | `/v1/tours/{tourId}/hotels` | List hotels | [Hotels](#hotels) | ✅ | ❌ |
-| Hotels | POST | `/v1/tours/{tourId}/hotels` | Create hotel | [Hotels](#hotels) | ✅ | ❌ |
-| Hotels | PUT | `/v1/tours/{tourId}/hotels/{hotelId}` | Update hotel | [Hotels](#hotels) | ✅ | ❌ |
-| Hotels | GET | `/v1/tours/{tourId}/hotelstays` | List hotel stays by date | [Hotels](#hotels) | ✅ | ❌ |
-| Hotels | GET | `/v1/tours/{tourId}/riders/{riderId}/hotelstays` | List hotel stays for a rider | [Hotels](#hotels) | ✅ | ✅ |
-| Hotels | GET | `/v1/tours/{tourId}/hotels/{hotelId}/hotelstays` | List hotel stays for a hotel/date | [Hotels](#hotels) | ✅ | ❌ |
-| Hotels | PUT | `/v1/tours/{tourId}/hotelstays/{stayDate}/{riderId}` | Upsert a single-night room allocation | [Hotels](#hotels) | ✅ | ❌ |
-| Hotels | POST | `/v1/tours/{tourId}/hotelstays/uploads/presign` | Generate upload URL for hotel allocations CSV | [Hotels](#hotels) | ✅ | ❌ |
-| Hotels | GET | `/v1/tours/{tourId}/hotelstays/uploads/{uploadId}` | Get hotel allocation upload status | [Hotels](#hotels) | ✅ | ❌ |
-| Users | GET | `/v1/users/me` | Get current user claims | [Users](#users) | ✅ | ✅
-| Users | GET | `/v1/users/cognito` | List Cognito users with only `sub` and `name` | [Users](#users) | ✅ | ❌
-| Users | GET | `/v1/tours/{tourId}/users` | List tour users | [Users](#users) | ✅ | ❌
-| Users | GET | `/v1/tours/{tourId}/users/me` | Get current user's Tour specific details | [Users](#users) | ✅ | ❌
-| Users | POST | `/v1/tours/{tourId}/users` | Create a tour-scoped user assignment | [Users](#users) | ✅ | ❌ |
-| Users | PUT | `/v1/tours/{tourId}/users/{userId}` | Update a tour-scoped user assignment | [Users](#users) | ✅ | ❌ |
-| Admin UserMgmt | GET | `/v1/admin/usermgmt/roles` | List assignable Cognito groups | [Admin User Management](#admin-user-management) | ✅ | ❌
-| Admin UserMgmt | GET | `/v1/admin/usermgmt/users` | List Cognito users with roles | [Admin User Management](#admin-user-management) | ✅ | ❌
-| Admin UserMgmt | POST | `/v1/admin/usermgmt/users` | Create Cognito user and assign roles | [Admin User Management](#admin-user-management) | ✅ | ❌
-| Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/enable` | Enable Cognito user | [Admin User Management](#admin-user-management) | ✅ | ❌
-| Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/disable` | Disable Cognito user | [Admin User Management](#admin-user-management) | ✅ | ❌
-| Admin UserMgmt | DELETE | `/v1/admin/usermgmt/users/{cognitoUserId}` | Delete Cognito user | [Admin User Management](#admin-user-management) | ✅ | ❌
-| Admin UserMgmt | PUT | `/v1/admin/usermgmt/users/{cognitoUserId}` | Update Cognito profile and roles | [Admin User Management](#admin-user-management)| ✅ | ❌ |
-| Notifications | GET | `/v1/tours/{tourId}/notifications` | List notifications | [Notifications](#notifications) | ✅ | ✅
-| Notifications | POST | `/v1/tours/{tourId}/notifications` | Create notification | [Notifications](#notifications) | ✅ | ✅
-| Notifications | PUT | `/v1/tours/{tourId}/notifications/{notificationId}` | Mark notification as read | [Notifications](#notifications) | ✅ | ✅
+| Domain | Method | Path | Purpose | Contract | Example | Mgmt App | Rider App |
+|---|---|---|---|---|---|---|---|
+| Config | GET | `/v1/config` | Get enabled app configuration items | [Config](#config) | [Example](#get-config) | ✅ | ✅ |
+| Tours | GET | `/v1/tours/active` | Get currently active tour | [Tours](#tours) | [Example](#get-active-tour) | ✅ | ✅ |
+| Tours | GET | `/v1/tours/{tourId}` | Get tour details | [Tours](#tours) | [Example](#get-tour) | ✅ | ✅ |
+| Tours | GET | `/v1/tours` | List tours | [Tours](#tours) | [Example](#list-tours) | ✅ | ✅ |
+| Tours | POST | `/v1/tours` | Create tour, optionally provision tables | [Tours](#tours) | [Example](#create-tour) | ✅ | ❌ |
+| Tours | PUT | `/v1/tours` | Update tour and optionally provision it for the first time | [Tours](#tours) | [Example](#update-tour) | ✅ | ❌ |
+| Tours | PUT | `/v1/tours/{tourId}/provision` | Re-provision missing tour tables | [Tours](#tours) | [Example](#re-provision-tour-tables) | ✅ | ❌ |
+| Tours | POST | `/v1/tours/{tourId}/archive` | Archive tour | [Tours](#tours) | [Example](#archive-tour) | ✅ | ❌ |
+| Riders | POST | `/v1/riders/profile` | Create rider profile | [Riders](#riders) | [Example](#create-rider-profile) | ❌ | ✅ |
+| Riders | POST | `/v1/riders/profile/{profileId}` | Create rider profile | [Riders](#riders) | [Example](#create-rider-profile-with-path-profileid) | ❌ | ✅ |
+| Riders | GET | `/v1/riders/link/{cognitoUserName}` | Get linked profile ID for a Cognito username | [Riders](#riders) | [Example](#get-cognito-link) | ❌ | ✅ |
+| Riders | POST | `/v1/riders/link/{cognitoUserName}` | Create Cognito username to profile mapping | [Riders](#riders) | [Example](#create-cognito-link) | ❌ | ✅ |
+| Riders | DELETE | `/v1/riders/link/{cognitoUserName}` | Delete Cognito username to profile mapping | [Riders](#riders) | [Example](#delete-cognito-link) | ❌ | ✅ |
+| Riders | GET | `/v1/riders/profile/{profileId}` | Get rider profile | [Riders](#riders) | [Example](#get-rider-profile) | ✅ | ✅ |
+| Riders | GET | `/v1/profile/{profileId}/tours` | List rider tour participation info across all tours for a profile | [Riders](#riders) | [Example](#list-rider-tour-participations) | ✅ | ✅ |
+| Riders | GET | `/v1/profile/{profileId}/tours/{tourId}` | Get rider tour participation info | [Riders](#riders) | [Example](#get-rider-tour-participation) | ✅ | ✅ |
+| Riders | PUT | `/v1/riders/profile/{profileId}` | Update rider profile | [Riders](#riders) | [Example](#update-rider-profile) | ❌ | ✅ |
+| Riders | POST | `/v1/riders/profile/{profileId}/picture` | Get profile picture upload URL | [Riders](#riders) | [Example](#get-profile-picture-upload-url) | ❌ | ✅ |
+| Riders | GET | `/v1/riders/profile/{profileId}/picture` | Get profile picture download URL | [Riders](#riders) | [Example](#get-profile-picture-download-url) | ❌ | ✅ |
+| Riders | GET | `/v1/tours/{tourId}/riders` | List tour riders | [Riders](#riders) | [Example](#list-tour-riders) | ✅ | ❌ |
+| Riders | GET | `/v1/tours/{tourId}/riders/names` | List tour riders with riderId, name, and personalCode | [Riders](#riders) | [Example](#list-tour-rider-names) | ✅ | ❌ |
+| Riders | POST | `/v1/tours/{tourId}/riders` | Register rider for tour | [Riders](#riders) | [Example](#register-tour-rider) | ✅ | ❌ |
+| Riders | GET | `/v1/tours/{tourId}/riders/{riderId}` | Get tour rider | [Riders](#riders) | [Example](#get-tour-rider) | ✅ | ❌ |
+| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit` | Mark rider as exited from tour | [Riders](#riders) | [Example](#exit-rider) | ✅ | ❌ |
+| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit/cancel` | Cancel rider exit and restore previous status | [Riders](#riders) | [Example](#cancel-rider-exit) | ✅ | ❌ |
+| Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/baggage/release` | Mark retained baggage as released back to the rider | [Riders](#riders) | [Example](#release-rider-baggage) | ✅ | ❌ |
+| Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) | [Example](#get-rider-statistics) | ✅ | ❌ |
+| Artifacts | POST | `/v1/artifacts/tour/presign-upload` | Generate presigned upload URL for a tour artifact | [Artifacts](#artifacts) | [Example](#presign-tour-artifact-upload) | ✅ | ❌ |
+| Artifacts | POST | `/v1/artifacts/ride/presign-upload` | Generate presigned upload URL for a ride artifact | [Artifacts](#artifacts) | [Example](#presign-ride-artifact-upload) | ✅ | ❌ |
+| Artifacts | DELETE | `/v1/artifacts/tour/{tourId}/{artifactId}` | Delete a tour artifact | [Artifacts](#artifacts) | [Example](#delete-tour-artifact) | ✅ | ❌ |
+| Artifacts | DELETE | `/v1/artifacts/ride/{tourId}/{rideId}/{artifactId}` | Delete a ride artifact | [Artifacts](#artifacts) | [Example](#delete-ride-artifact) | ✅ | ❌ |
+| Artifacts | GET | `/v1/tours/{tourId}/artifacts` | Get tour artifacts manifest | [Artifacts](#artifacts) | [Example](#get-tour-artifacts) | ✅ | ✅ |
+| Artifacts | GET | `/v1/tours/{tourId}/rides/{rideId}/artifacts` | Get ride artifacts manifest | [Artifacts](#artifacts) | [Example](#get-ride-artifacts) | ✅ | ✅ |
+| Rides | GET | `/v1/tours/{tourId}/rides/today` | Get today's ride | [Rides](#rides) | [Example](#get-todays-ride) | ✅ | ✅ |
+| Rides | GET | `/v1/tours/{tourId}/rides` | List rides | [Rides](#rides) | [Example](#list-rides) | ✅ | ✅ |
+| Rides | GET | `/v1/tours/{tourId}/rides/{rideId}` | Get ride | [Rides](#rides) | [Example](#get-ride) | ✅ | ✅ |
+| Rides | POST | `/v1/tours/{tourId}/rides` | Create ride | [Rides](#rides) | [Example](#create-ride) | ✅ | ❌ |
+| Rides | PUT | `/v1/tours/{tourId}/rides/{rideId}` | Update ride | [Rides](#rides) | [Example](#update-ride) | ✅ | ❌ |
+| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/open` | Open pit stop stage | [Rides](#rides) | [Example](#open-pit-stop) | ✅ | ❌ |
+| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/close` | Close pit stop stage | [Rides](#rides) | [Example](#close-pit-stop) | ✅ | ❌ |
+| Rides | POST | `/v1/tours/{tourId}/rides/open` | Open today's ride | [Rides](#rides) | [Example](#open-todays-ride) | ✅ | ❌ |
+| Rides | POST | `/v1/tours/{tourId}/rides/start` | Start today's ride | [Rides](#rides) | [Example](#start-todays-ride) | ✅ | ❌ |
+| Rides | POST | `/v1/tours/{tourId}/rides/{rideId}/close` | Close ride | [Rides](#rides) | [Example](#close-ride) | ✅ | ❌ |
+| Check-Ins | POST | `/v1/tours/{tourId}/checkins` | Create check-in | [Check-Ins](#check-ins) | [Example](#create-check-in) | ✅ | ❌ |
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/checkins` | List ride check-ins | [Check-Ins](#check-ins) | [Example](#list-ride-check-ins) | ✅ | ❌ |
+| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/checkins` | List all check-ins for a rider | [Check-Ins](#check-ins) | [Example](#list-rider-check-ins) | ✅ | ✅ |
+| Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | List rider check-ins for a ride number | [Check-Ins](#check-ins) | [Example](#list-rider-check-ins-for-ride-number) | ✅ | ✅ |
+| Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | Cancel check-in (special update) | [Check-Ins](#check-ins) | [Example](#cancel-check-in) | ✅ | ❌ |
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard` | Get dashboard payload | [Check-Ins](#check-ins) | [Example](#get-ride-dashboard) | ✅ | ❌ |
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | Get lightweight dashboard progress payload | [Check-Ins](#check-ins) | [Example](#get-ride-dashboard-progress) | ✅ | ❌ |
+| Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | Get rider popup details for selected ride | [Check-Ins](#check-ins) | [Example](#get-rider-ride-details) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events` | List event definitions | [Events](#events) | [Example](#list-events) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}` | Get event definition | [Events](#events) | [Example](#get-event) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events` | Create event definition | [Events](#events) | [Example](#create-event) | ✅ | ❌ |
+| Events | PUT | `/v1/tours/{tourId}/events/{eventId}` | Update event definition | [Events](#events) | [Example](#update-event) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences` | List occurrences | [Events](#events) | [Example](#list-occurrences) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | Get occurrence | [Events](#events) | [Example](#get-occurrence) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences` | Create occurrence | [Events](#events) | [Example](#create-occurrence) | ✅ | ❌ |
+| Events | PUT | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | Update occurrence | [Events](#events) | [Example](#update-occurrence) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | Get activity overrides | [Events](#events) | [Example](#get-activity-overrides) | ✅ | ❌ |
+| Events | PUT | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | Update activity overrides | [Events](#events) | [Example](#update-activity-override) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start` | Start occurrence | [Events](#events) | [Example](#start-occurrence) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete` | Complete occurrence | [Events](#events) | [Example](#complete-occurrence) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` | Cancel occurrence | [Events](#events) | [Example](#cancel-occurrence) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records` | Create activity record | [Events](#events) | [Example](#create-activity-record) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel` | Cancel activity record | [Events](#events) | [Example](#cancel-activity-record) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | Get event dashboard | [Events](#events) | [Example](#get-event-dashboard) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | Get event dashboard progress | [Events](#events) | [Example](#get-event-dashboard-progress) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | Get event reconciliation payload | [Events](#events) | [Example](#get-event-reconciliation) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/bootstrap` | Get event bootstrap payload | [Events](#events) | [Example](#get-event-bootstrap) | ✅ | ✅ |
+| Events | GET | `/v1/tours/{tourId}/riders/{riderId}/events/progress` | Get rider event progress | [Events](#events) | [Example](#get-rider-event-progress) | ✅ | ✅ |
+| Hotels | GET | `/v1/tours/{tourId}/hotels` | List hotels | [Hotels](#hotels) | [Example](#list-hotels) | ✅ | ❌ |
+| Hotels | POST | `/v1/tours/{tourId}/hotels` | Create hotel | [Hotels](#hotels) | [Example](#create-hotel) | ✅ | ❌ |
+| Hotels | PUT | `/v1/tours/{tourId}/hotels/{hotelId}` | Update hotel | [Hotels](#hotels) | [Example](#update-hotel) | ✅ | ❌ |
+| Hotels | GET | `/v1/tours/{tourId}/hotelstays` | List hotel stays by date | [Hotels](#hotels) | [Example](#list-hotel-stays-by-date) | ✅ | ❌ |
+| Hotels | GET | `/v1/tours/{tourId}/riders/{riderId}/hotelstays` | List hotel stays for a rider | [Hotels](#hotels) | [Example](#list-hotel-stays-for-rider) | ✅ | ✅ |
+| Hotels | GET | `/v1/tours/{tourId}/hotels/{hotelId}/hotelstays` | List hotel stays for a hotel (optionally by date) | [Hotels](#hotels) | [Example](#list-hotel-stays-for-hotel) | ✅ | ❌ |
+| Hotels | PUT | `/v1/tours/{tourId}/hotelstays/{stayDate}/{riderId}` | Upsert a single-night room allocation | [Hotels](#hotels) | [Example](#upsert-hotel-stay) | ✅ | ❌ |
+| Hotels | POST | `/v1/tours/{tourId}/hotelstays/uploads/presign` | Generate upload URL for hotel allocations CSV | [Hotels](#hotels) | [Example](#presign-hotel-allocation-upload) | ✅ | ❌ |
+| Hotels | GET | `/v1/tours/{tourId}/hotelstays/uploads/{uploadId}` | Get hotel allocation upload status | [Hotels](#hotels) | [Example](#get-hotel-allocation-upload-status) | ✅ | ❌ |
+| Users | GET | `/v1/users/me` | Get current user claims | [Users](#users) | [Example](#get-current-user) | ✅ | ✅ |
+| Users | GET | `/v1/users/cognito` | List Cognito users with only `sub` and `name` | [Users](#users) | [Example](#list-cognito-users) | ✅ | ❌ |
+| Users | GET | `/v1/tours/{tourId}/users` | List tour users | [Users](#users) | [Example](#list-tour-users) | ✅ | ❌ |
+| Users | GET | `/v1/tours/{tourId}/users/me` | Get current user's Tour specific details | [Users](#users) | [Example](#get-current-tour-user) | ✅ | ❌ |
+| Users | POST | `/v1/tours/{tourId}/users` | Create a tour-scoped user assignment | [Users](#users) | [Example](#create-tour-user) | ✅ | ❌ |
+| Users | PUT | `/v1/tours/{tourId}/users/{userId}` | Update a tour-scoped user assignment | [Users](#users) | [Example](#update-tour-user) | ✅ | ❌ |
+| Admin UserMgmt | GET | `/v1/admin/usermgmt/roles` | List assignable Cognito groups | [Admin User Management](#admin-user-management) | [Example](#list-role-groups) | ✅ | ❌ |
+| Admin UserMgmt | GET | `/v1/admin/usermgmt/users` | List Cognito users with roles | [Admin User Management](#admin-user-management) | [Example](#list-managed-users) | ✅ | ❌ |
+| Admin UserMgmt | POST | `/v1/admin/usermgmt/users` | Create Cognito user and assign roles | [Admin User Management](#admin-user-management) | [Example](#create-managed-user) | ✅ | ❌ |
+| Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/enable` | Enable Cognito user | [Admin User Management](#admin-user-management) | [Example](#enable-managed-user) | ✅ | ❌ |
+| Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/disable` | Disable Cognito user | [Admin User Management](#admin-user-management) | [Example](#disable-managed-user) | ✅ | ❌ |
+| Admin UserMgmt | DELETE | `/v1/admin/usermgmt/users/{cognitoUserId}` | Delete Cognito user | [Admin User Management](#admin-user-management) | [Example](#delete-managed-user) | ✅ | ❌ |
+| Admin UserMgmt | PUT | `/v1/admin/usermgmt/users/{cognitoUserId}` | Update Cognito profile and roles | [Admin User Management](#admin-user-management) | [Example](#update-managed-user) | ✅ | ❌ |
+| Notifications | GET | `/v1/tours/{tourId}/notifications` | List notifications | [Notifications](#notifications) | [Example](#list-notifications) | ✅ | ✅ |
+| Notifications | POST | `/v1/tours/{tourId}/notifications` | Create notification | [Notifications](#notifications) | [Example](#create-notification) | ✅ | ✅ |
+| Notifications | PUT | `/v1/tours/{tourId}/notifications/{notificationId}` | Mark notification as read | [Notifications](#notifications) | [Example](#mark-notification-read) | ✅ | ✅ |
 
 ### Request Contract Tables
 
@@ -154,7 +154,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `GET /v1/config` | None | `configType` (optional) | None | `configType` supports `ALL`, `ID_CODE_FORMAT`, `ID_CODE_TYPE`, or comma-separated combination of supported values; returns enabled items only; supports `If-None-Match` and `304 Not Modified`; invalid values return `400 INVALID_CONFIG_TYPE` |
+| `GET /v1/config` | None | `configType` (optional) | None | `configType` supports `ALL`, `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`, or comma-separated combination of supported values (`ALL` cannot be combined); returns enabled items only; supports `If-None-Match` and `304 Not Modified`; invalid values return `400 INVALID_CONFIG_TYPE` |
 
 #### Tours
 
@@ -172,22 +172,22 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `POST /v1/riders/profile` | None | None | Required: `name, email, phone, emergencyContact`; Optional: `personalCode, dateOfBirth, gender, address` | Creates profile with auto-generated `profileId`; Email format; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD`; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with string fields `line1, line2, city, state, country, postalCode`; `personalCode` is normalized to uppercase when provided; duplicate email rejected (`EMAIL_ALREADY_EXISTS`); duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
-| `POST /v1/riders/profile/{profileId}` | `profileId` (optional override route) | None | Required: `name, email, phone, emergencyContact`; Optional: `personalCode, dateOfBirth, gender, address` | Same validation as profile create; uses provided path `profileId` instead of auto-generating one; conflict on existing `profileId` returns `PROFILE_ALREADY_EXISTS` |
+| `POST /v1/riders/profile` | None | None | Required: `name, email, phone, emergencyContact, dateOfBirth, gender, address`; Optional: `personalCode, dietaryPreference` | Creates profile with auto-generated `profileId`; missing/invalid fields return `422`; Email format; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD`; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with required string fields `line1, city, country, postalCode` and optional `line2, state`; `dietaryPreference` in `VEG, NON_VEG`; `personalCode` is normalized to uppercase when provided; duplicate email rejected (`EMAIL_ALREADY_EXISTS`); duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
+| `POST /v1/riders/profile/{profileId}` | `profileId` (optional override route) | None | Required: `name, email, phone, emergencyContact, dateOfBirth, gender, address`; Optional: `personalCode, dietaryPreference` | Same validation as profile create; uses provided path `profileId` instead of auto-generating one; conflict on existing `profileId` returns `PROFILE_ALREADY_EXISTS` |
 | `GET /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Returns linked `profileId`; `404` if mapping does not exist |
 | `POST /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Creates mapping row with generated `profileId` UUID; duplicate `cognitoUserName` rejected (`COGNITO_USER_ALREADY_LINKED`) |
 | `DELETE /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Deletes mapping row; returns `404` if mapping does not exist |
 | `GET /v1/riders/profile/{profileId}` | `profileId` (required) | None | None | `profileId` must exist |
 | `GET /v1/profile/{profileId}/tours` | `profileId` (required) | None | None | Returns all RiderTours records for the profileId using partition key query (no `tourId` filter) |
 | `GET /v1/profile/{profileId}/tours/{tourId}` | `profileId, tourId` (required) | None | None | `tourId` format: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]`; returns one RiderTours record for the key pair |
-| `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | At least one of: `name, email, phone, emergencyContact, photoS3Key, personalCode, dateOfBirth, gender, address` | Email validated when provided; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD` when provided; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with string fields `line1, line2, city, state, country, postalCode`; `personalCode` normalized to uppercase; duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
+| `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | Required on every request: `name, email, phone, emergencyContact, dateOfBirth, gender, address`; Optional: `photoS3Key, personalCode, dietaryPreference` | Missing mandatory fields return `400`; Email validated; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD`; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with required string fields `line1, city, country, postalCode` and optional `line2, state`; `dietaryPreference` in `VEG, NON_VEG`; `personalCode` normalized to uppercase; duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
 | `POST /v1/riders/profile/{profileId}/picture` | `profileId` (required) | None | Optional: `contentType` | `profileId` must exist; `contentType` in `image/jpeg, image/png`; default `image/jpeg` |
 | `GET /v1/riders/profile/{profileId}/picture` | `profileId` (required) | `expiresIn` (optional) | None | `profileId` must exist and have `photoS3Key` set, else `404`; `expiresIn` is an integer between 60 and 3600 seconds, default 300; returns presigned `downloadUrl` |
 | `GET /v1/tours/{tourId}/riders` | `tourId` (required) | None | None | `tourId` format rule |
 | `GET /v1/tours/{tourId}/riders/names` | `tourId` (required) | None | None | Returns lightweight list with `riderId`, `name`, and `personalCode`; requires authenticated user with `READ` permission |
-| `POST /v1/tours/{tourId}/riders` | `tourId` (required) | None | Required: `profileId`; Optional: `riderId, experienceLevel, medicalConditions, specialRequirements` | Tour exists with status `PLANNING/ACTIVE`; profile exists; duplicate profile registration rejected (`ALREADY_REGISTERED`); generates temp riderId if omitted |
+| `POST /v1/tours/{tourId}/riders` | `tourId` (required) | None | Required: `profileId`; Optional: `riderId, experienceLevel, medicalConditions, specialRequirements` | Tour exists with status `PLANNING/ACTIVE`; profile exists; duplicate profile registration rejected (`ALREADY_REGISTERED`); new registrations get `status=PENDING`; generates temporary riderId `PENDING-<first 8 chars of profileId>` if omitted |
 | `GET /v1/tours/{tourId}/riders/{riderId}` | `tourId, riderId` (required) | None | None | `tourId` format; `riderId` format `R1..R999` |
-| `POST /v1/tours/{tourId}/riders/{riderId}/exit` | `tourId, riderId` (required) | None | Required: `baggageDisposition` | Updates existing row only; sets `status=EXITED`, `prevStatus=<previous status>`, `exitedAt`, `exitedBy`, and `updatedAt`; `baggageDisposition` must be `RETAINED` or `WITH_RIDER`; returns `409 RIDER_ALREADY_EXITED` when already exited; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
+| `POST /v1/tours/{tourId}/riders/{riderId}/exit` | `tourId, riderId` (required) | None | Required: `baggageDisposition`; Optional: `note` | Updates existing row only; sets `status=EXITED`, `prevStatus=<previous status>`, `exitedAt`, `exitedBy`, and `updatedAt`; `baggageDisposition` must be `RETAINED` or `WITH_RIDER` (else `400 BAGGAGE_DISPOSITION_REQUIRED`); `note` is stored as `baggageExitNote`; returns `409 RIDER_ALREADY_EXITED` when already exited; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
 | `POST /v1/tours/{tourId}/riders/{riderId}/exit/cancel` | `tourId, riderId` (required) | None | None | Valid only when current status is `EXITED`; restores `status` from `prevStatus`; removes `prevStatus`, `exitedAt`, `exitedBy`, and associated baggage-exit metadata; returns `400 INVALID_EXIT_CANCEL_INVOCATION` for non-EXITED status; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
 | `POST /v1/tours/{tourId}/riders/{riderId}/baggage/release` | `tourId, riderId` (required) | None | Optional: `note` | Valid only when the rider's baggage status is `RETAINED`; transitions baggage state to `WITH_RIDER`, stores `note` as `baggageExitNote`, and records release audit metadata; requires `RIDER_EXIT` permission (`ADMINISTRATOR` and `SUPER_USER` only) |
 | `GET /v1/tours/{tourId}/riders/{riderId}/statistics` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must exist in tour |
@@ -198,7 +198,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 |---|---|---|---|---|
 | `GET /v1/tours/{tourId}/events` | `tourId` (required) | None | None | Requires `READ`; returns all event definitions for the tour |
 | `GET /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | None | Requires `READ`; `eventId` format `EVT-...`; returns `404 EVENT_NOT_FOUND` when absent |
-| `POST /v1/tours/{tourId}/events` | `tourId` (required) | None | Required: `eventId, eventName, eventType, location, activities`; Optional: `sequenceEnforced, defaultAllowedTypeCodes, allowSelfService` | Requires `EVENT_MANAGE`; validates event/activity IDs, allowed type codes, and ascending `sequenceNo`; duplicate event IDs rejected |
+| `POST /v1/tours/{tourId}/events` | `tourId` (required) | None | Required: `eventId, eventName, eventType, location, sequenceEnforced, defaultAllowedTypeCodes, activities`; Optional: `allowSelfService` (default `false`) | Requires `EVENT_MANAGE`; `eventType` in `SINGLE, REPEATING`; each activity requires `activityId, name, sequenceNo` (optional `enabled, mandatory, allowedTypeCodes, allowOptOut, prerequisiteActivityIds, restrictToAssignedUsers, variantOptions, notes`); validates event/activity IDs, allowed type codes (must be enabled `ID_CODE_TYPE` config), and ascending `sequenceNo`; duplicate event IDs rejected |
 | `PUT /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | Optional: `eventName, eventType, location, sequenceEnforced, allowSelfService, defaultAllowedTypeCodes, activities` | Requires `EVENT_MANAGE`; same event/activity validations as create for supplied fields |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | `date` (optional), `status` (optional) | None | Requires `READ`; lists occurrences for the event, filterable by date and status |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; `occurrenceId` format `EVT-...#YYYY-MM-DD#seq` |
@@ -210,11 +210,11 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` | `tourId, eventId, occurrenceId` (required) | None | Optional: `cancelReason` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `CANCELLED`; `cancelledAt` is always server-set, no client override |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records` | `tourId, eventId, occurrenceId` (required) | None | Required: `activityId, riderId, method, timestamp`; Optional: `typeCode, outcome, variantSelected` | Requires `EVENT_SCAN`; occurrence must be `ACTIVE`; `typeCode` is required unless `outcome=OPTED_OUT`; sequence and activity restrictions enforced |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel` | `tourId, eventId, occurrenceId, recordId` (required) | None | Optional: `cancelReason` | Requires `EVENT_SCAN`; retains the record and marks it cancelled with audit fields |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; aggregated occurrence dashboard payload (response shape: §Event Engine & Hotel Response Shapes) |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; aggregated occurrence dashboard payload (see [Get Event Dashboard](#get-event-dashboard)) |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; lightweight progress refresh payload |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; returns `loadedCount`, `unloadedCount`, and `missingRiderIds` (riders present in the loading occurrence but absent from the linked unloading occurrence); `400 NO_LINKED_OCCURRENCE` when the occurrence has no `linkedOccurrenceRef` |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; returns `loadedCount`, `unloadedCount`, and `missingRiderIds` (riders with a bag loaded but not unloaded); only non-cancelled, non-`OPTED_OUT` records with a `typeCode` at each occurrence's last enabled activity are counted; `400 NO_LINKED_OCCURRENCE` when the occurrence has no `linkedOccurrenceRef` |
 | `GET /v1/tours/{tourId}/events/bootstrap` | `tourId` (required) | None | None | Requires `READ`; bootstrap payload for event definitions, upcoming occurrences, and supporting lookup data |
-| `GET /v1/tours/{tourId}/riders/{riderId}/events/progress` | `tourId, riderId` (required) | None | None | Requires `READ`; rider-centric event progress summary |
+| `GET /v1/tours/{tourId}/riders/{riderId}/events/progress` | `tourId, riderId` (required) | `eventId` (optional) | None | Requires `READ`; rider-centric event progress summary; cancelled records excluded |
 
 #### Hotels
 
@@ -225,7 +225,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `PUT /v1/tours/{tourId}/hotels/{hotelId}` | `tourId, hotelId` (required) | None | Optional: `name, city, address, contact, notes` | Requires `HOTEL_ALLOC_MANAGE`; updates supplied fields only |
 | `GET /v1/tours/{tourId}/hotelstays` | `tourId` (required) | `date` (required) | None | Requires `READ`; returns `RoomAllocation` rows for one stay date |
 | `GET /v1/tours/{tourId}/riders/{riderId}/hotelstays` | `tourId, riderId` (required) | None | None | Requires `READ`; returns hotel stays for a rider |
-| `GET /v1/tours/{tourId}/hotels/{hotelId}/hotelstays` | `tourId, hotelId` (required) | `date` (required) | None | Requires `READ`; returns hotel stays for one hotel/date |
+| `GET /v1/tours/{tourId}/hotels/{hotelId}/hotelstays` | `tourId, hotelId` (required) | `date` (optional) | None | Requires `READ`; returns hotel stays for one hotel, filtered to `date` when supplied; sorted by `roomNo`, `riderId` |
 | `PUT /v1/tours/{tourId}/hotelstays/{stayDate}/{riderId}` | `tourId, stayDate, riderId` (required) | None | Required: `hotelId, roomNo`; Optional: `roomCapacity, sharingWith, checkInDate, checkOutDate` | Requires `HOTEL_ALLOC_MANAGE`; validates reciprocal sharing and room-capacity constraints |
 | `POST /v1/tours/{tourId}/hotelstays/uploads/presign` | `tourId` (required) | None | None | Requires `HOTEL_ALLOC_MANAGE`; returns `uploadId`, presigned CSV upload URL, and S3 key |
 | `GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}` | `tourId, uploadId` (required) | None | None | Requires `HOTEL_ALLOC_MANAGE`; returns upload processing status |
@@ -234,9 +234,9 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `GET /v1/users/me` | None | None | None | Returns current JWT claims as seen by the API |
-| `GET /v1/users/cognito` | None | None | None | Requires `READ`; returns Cognito users with minimal fields |
-| `GET /v1/tours/{tourId}/users` | `tourId` (required) | None | None | Requires `USER_LIST`; lists tour-scoped user assignments |
+| `GET /v1/users/me` | None | None | None | Returns current JWT claims as seen by the API (`emailVerified` as boolean); returns `401` for missing/invalid claims |
+| `GET /v1/users/cognito` | None | None | None | Requires `READ` (any authenticated user group); returns only `sub` and `name` per Cognito user from the management user pool |
+| `GET /v1/tours/{tourId}/users` | `tourId` (required) | `role` (optional) | None | Requires `USER_LIST`; `tourId` format; `role` in `ADMINISTRATOR, SUPER_USER, HOTEL_STAFF, GUEST, RIDER`, or `PS_<n>_USER`; lists tour-scoped user assignments |
 | `GET /v1/tours/{tourId}/users/me` | `tourId` (required) | None | None | Requires `READ`; returns the caller's own `User-{tourId}` record (keyed by JWT `sub`); `404 USER_NOT_FOUND` if the caller has no tour-scoped record |
 | `POST /v1/tours/{tourId}/users` | `tourId` (required) | None | Required: `userId, role`; Optional: `status, assignedStage, hotelId, eventAssignments, assignedActivityIds` | Requires `USER_MANAGE`; `userId` must be a valid Cognito sub and an existing managed user (`404 USER_NOT_FOUND` otherwise); `username`/`email`/`name` are snapshotted from the Cognito profile, not taken from the request body; validates referenced hotels/events |
 | `PUT /v1/tours/{tourId}/users/{userId}` | `tourId, userId` (required) | None | Optional: `username, email, name, role, status, assignedStage, hotelId, eventAssignments, assignedActivityIds` | Requires `USER_MANAGE`; validates supplied referenced hotels/events and updates only provided fields |
@@ -245,8 +245,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `POST /v1/artifacts/tour/presign-upload` | None | None | Required: `tourId, artifactId, contentType`; optional `fileName` | Requires `ARTIFACT_MANAGE`; `tourId` must exist; artifact type must be configured under `ARTIFACTS` with `category=tour`; `contentType` must be in the allow-list; returns presigned S3 `put_object` URL and persisted metadata item |
-| `POST /v1/artifacts/ride/presign-upload` | None | None | Required: `tourId, rideId, artifactId, contentType`; optional `fileName` | Requires `ARTIFACT_MANAGE`; `tourId` and `rideId` must exist; artifact type must be configured with `category=ride`; `contentType` must be in the allow-list; returns presigned `put_object` URL and metadata item |
+| `POST /v1/artifacts/tour/presign-upload` | None | None | Required: `tourId, artifactId`; Optional: `contentType` (default `application/pdf`) | Requires `ARTIFACT_MANAGE`; `tourId` must exist; artifact type must be configured under `ARTIFACTS` with `category=tour`; `contentType` must be in the allow-list; upserts metadata (increments `version` on re-upload) and returns `200` with a presigned S3 `put_object` URL valid for 300 seconds |
+| `POST /v1/artifacts/ride/presign-upload` | None | None | Required: `tourId, rideId, artifactId`; Optional: `contentType` (default `application/pdf`) | Requires `ARTIFACT_MANAGE`; `tourId` and `rideId` must exist; artifact type must be configured with `category=ride`; `contentType` must be in the allow-list; upserts metadata (increments `version` on re-upload) and returns `200` with a presigned `put_object` URL valid for 300 seconds |
 | `DELETE /v1/artifacts/tour/{tourId}/{artifactId}` | `tourId, artifactId` (required) | None | None | Requires `ARTIFACT_MANAGE`; deletes the S3 object and corresponding `Artifacts-{tourId}` table record; returns `404` when not found |
 | `DELETE /v1/artifacts/ride/{tourId}/{rideId}/{artifactId}` | `tourId, rideId, artifactId` (required) | None | None | Requires `ARTIFACT_MANAGE`; deletes the ride-scoped S3 object and metadata; returns `404` when not found |
 | `GET /v1/tours/{tourId}/artifacts` | `tourId` (required) | `artifactId` (optional), `expiresIn` (optional) | None | Requires `READ`; `tourId` must exist; returns list of artifacts with presigned download URLs; `artifactId` filters to single artifact; `expiresIn` is integer between 60 and 3600 seconds (default 900); empty list if no artifacts found |
@@ -280,14 +280,6 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | `tourId, rideId` (required) | None | None | Lightweight refresh contract with `rideId`, `checkIns`, `cancelled`, `summary`, `dataVersion`; `checkIns` retains active (non-cancelled) entries, `cancelled` contains cancelled check-in entries, and both lists keep core attribute `checkedInBy`; excludes `ride` and `riders`; supports `If-None-Match` and `304 Not Modified` |
 | `GET /v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | `tourId, rideId, riderId` (required) | None | None | Returns popup-focused rider fields plus selected-ride `checkInTimeline`; cancelled entries excluded; returns `404` when ride or rider does not exist; supports `If-None-Match` and `304 Not Modified` |
 
-#### Users
-
-| Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
-|---|---|---|---|---|
-| `GET /v1/users/me` | None | None | None | Requires valid JWT claims; returns 401 for missing/invalid claims |
-| `GET /v1/users/cognito` | None | None | None | Requires a valid authenticated user group; returns only `sub` and `name` per Cognito user from the management user pool |
-| `GET /v1/tours/{tourId}/users` | `tourId` (required) | `role` (optional) | None | `tourId` format; `role` in `ADMINISTRATOR, SUPER_USER, HOTEL_STAFF, GUEST, RIDER`, or `PS_<n>_USER` |
-
 #### Admin User Management
 
 All endpoints below require caller role `ADMINISTRATOR` and are backed by the management Cognito User Pool.
@@ -310,38 +302,282 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 | `POST /v1/tours/{tourId}/notifications` | `tourId` (required) | None | Required: `type, title, message`; Optional: `targetRiderId, expiresAt` | `type` enum validation; requires `NOTIFICATION_MANAGE` |
 | `PUT /v1/tours/{tourId}/notifications/{notificationId}` | `tourId, notificationId` (required) | None | Required: `profileId` | `notificationId` must exist in tour notification table; idempotent read-marking |
 
-### Sample JSON Payloads
+### API Examples
 
-#### Create Tour
+#### Example Conventions
+
+- **Headers:** every request needs `Authorization: Bearer <Cognito JWT>`. Requests with a body also need `Content-Type: application/json`.
+- **Responses:** examples show only the `data` value of the success envelope (`{"success": true, "data": ..., "timestamp": ...}`) along with the HTTP status. Fields that hold `null` in DynamoDB come back as `null`. Optional fields that were never set are left out.
+- **IDs containing `#`:** `checkInId`, `occurrenceId`, and `recordId` must be URL-encoded (`#` → `%23`) when used as path parameters. For example, `EVT-BAGLOAD#2026-02-12#1` becomes `EVT-BAGLOAD%232026-02-12%231`.
+- **Conditional GETs:** endpoints that return an `ETag` header (config, ride dashboard, dashboard progress, rider ride details, event bootstrap) accept `If-None-Match: <ETag>`. If the ETag matches, they return `304 Not Modified` with an empty body.
+- **Presigned URLs** are shortened with `...`. When uploading, send the same `Content-Type` that was used to sign the URL.
+- **`{ ... }` placeholders** stand for an object shown in full in another example. The linked example is noted next to it.
+
+Shared sample data used across the examples:
+
+| Entity | Sample values |
+|---|---|
+| Tour | `TOT-2026` "Tour of Tamilnadu 2026", `2026-02-10` → `2026-02-17`, 8 rides |
+| Riders | `R57` John Doe (`profileId` `3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f`, personalCode `D157`); `R12` Priya Raman (`profileId` `8a1d4f2b-6c3e-4f5a-9b7c-0d1e2f3a4b5c`, personalCode `P012`) |
+| Ride | `RIDE001` "Geneva to Lausanne" on `2026-02-11`, stages `S000` Start / `S001` PS1 / `S002` Finish, float `1` → stage `1` |
+| Event | `EVT-BAGLOAD` "Baggage Loading", occurrence `EVT-BAGLOAD#2026-02-12#1`, linked to `EVT-BAGUNLOAD#2026-02-12#1` |
+| Hotel | `HTL-MDU-01` Madurai Residency, room `204` shared by `R57` and `R12` |
+| Mgmt users | Asha Kumar, `ADMINISTRATOR`, sub `7c9e6679-7425-40de-944b-e07fc1f90ae7`; Ravi Shankar, `HOTEL_STAFF`, sub `5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f`; Meena Iyer, `PS_1_USER`, sub `9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d` |
+
+#### Config Examples
+
+##### Get Config
+
+```http
+GET /v1/config?configType=ID_CODE_FORMAT
+If-None-Match: "5f2b3c8d9e0a1b2c3d4e5f6a7b8c9d0e"
+```
+
+Response `200 OK` (header `ETag: "0a6d1e7c4b3f2a19e8d7c6b5a4f3e2d1"`):
+```json
+{
+  "items": [
+    {
+      "configType": "ID_CODE_FORMAT",
+      "configId": "SUBSTRING",
+      "enabled": true,
+      "description": "Substring based extraction for production QR payloads",
+      "version": 1,
+      "updatedAt": "2026-01-02T00:00:00Z",
+      "updatedBy": "seed-script",
+      "config": {
+        "method": "SUBSTRING",
+        "idCode": { "startPosition": 12, "length": 5 },
+        "idCodeType": { "startPosition": 1, "length": 1 },
+        "personalCode": { "startPosition": 2, "length": 4 }
+      }
+    }
+  ]
+}
+```
+
+Items returned for `configType=ID_CODE_TYPE,ARTIFACTS` have the same envelope. For example:
+```json
+{
+  "items": [
+    {
+      "configType": "ARTIFACTS",
+      "configId": "ride-plan",
+      "enabled": true,
+      "description": "Tour of Tamil Nadu - Ride Plan",
+      "version": 1,
+      "updatedAt": "2026-01-02T00:00:00Z",
+      "updatedBy": "seed-script",
+      "config": { "category": "tour" }
+    },
+    {
+      "configType": "ID_CODE_TYPE",
+      "configId": "3",
+      "enabled": true,
+      "description": "ID code type mapping for code 3",
+      "version": 1,
+      "updatedAt": "2026-01-02T00:00:00Z",
+      "updatedBy": "seed-script",
+      "config": { "code": "3", "type": "BAGGAGE", "name": "Baggage 1", "description": "Baggage type 1" }
+    }
+  ]
+}
+```
+
+#### Tours Examples
+
+##### Get Active Tour
+
+```http
+GET /v1/tours/active
+```
+
+Response `200 OK`:
 ```json
 {
   "tourId": "TOT-2026",
   "name": "Tour of Tamilnadu 2026",
   "startDate": "2026-02-10",
   "endDate": "2026-02-17",
+  "status": "ACTIVE",
+  "rideCount": 8,
+  "description": "Annual coastal cycling tour",
+  "provisionedAt": "2026-01-05T09:01:30Z",
+  "createdAt": "2026-01-05T09:00:00Z",
+  "updatedAt": "2026-02-09T18:00:00Z"
+}
+```
+
+##### Get Tour
+
+```http
+GET /v1/tours/TOT-2026
+```
+
+Response `200 OK`: same object as [Get Active Tour](#get-active-tour).
+
+##### List Tours
+
+```http
+GET /v1/tours?status=ACTIVE
+```
+
+Response `200 OK`:
+```json
+{
+  "tours": [
+    {
+      "tourId": "TOT-2026",
+      "name": "Tour of Tamilnadu 2026",
+      "startDate": "2026-02-10",
+      "endDate": "2026-02-17",
+      "status": "ACTIVE",
+      "rideCount": 8,
+      "description": "Annual coastal cycling tour",
+      "provisionedAt": "2026-01-05T09:01:30Z",
+      "createdAt": "2026-01-05T09:00:00Z",
+      "updatedAt": "2026-02-09T18:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+##### Create Tour
+
+```http
+POST /v1/tours
+```
+```json
+{
+  "tourId": "TOT-2026",
+  "name": "Tour of Tamilnadu 2026",
+  "startDate": "2026-02-10",
+  "endDate": "2026-02-17",
+  "rideCount": 8,
   "description": "Annual coastal cycling tour",
   "provisioning": true
 }
 ```
 
-#### Update Tour
+Response `201 Created`. `provisioning` is not stored. `provisionedAt` is only present when `provisioning=true`:
 ```json
 {
   "tourId": "TOT-2026",
-  "name": "Tour of Tamilnadu 2026 - Updated",
+  "name": "Tour of Tamilnadu 2026",
   "startDate": "2026-02-10",
-  "endDate": "2026-02-18",
+  "endDate": "2026-02-17",
   "status": "PLANNING",
-  "provisioning": true
+  "rideCount": 8,
+  "createdAt": "2026-01-05T09:00:00Z",
+  "updatedAt": "2026-01-05T09:01:30Z",
+  "description": "Annual coastal cycling tour",
+  "provisionedAt": "2026-01-05T09:01:30Z"
 }
 ```
 
-#### Re-provision Tour Tables
+##### Update Tour
+
+`TOT-2026` is already provisioned, so `provisioning` must be `false` or left out. Use [Re-provision Tour Tables](#re-provision-tour-tables) to add missing tables.
+
+```http
+PUT /v1/tours
+```
 ```json
+{
+  "tourId": "TOT-2026",
+  "status": "ACTIVE",
+  "provisioning": false
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "tour": {
+    "tourId": "TOT-2026",
+    "name": "Tour of Tamilnadu 2026",
+    "startDate": "2026-02-10",
+    "endDate": "2026-02-17",
+    "status": "ACTIVE",
+    "rideCount": 8,
+    "description": "Annual coastal cycling tour",
+    "provisionedAt": "2026-01-05T09:01:30Z",
+    "createdAt": "2026-01-05T09:00:00Z",
+    "updatedAt": "2026-02-09T18:00:00Z"
+  },
+  "provisioning": false,
+  "provisionedTables": []
+}
+```
+
+##### Re-provision Tour Tables
+
+```http
 PUT /v1/tours/TOT-2026/provision
 ```
 
-#### Create Rider Profile
+Response `200 OK`. `provisionedTables` lists only the tables created by this call (`<stack>-<TableType>-<tourId>`):
+```json
+{
+  "tour": {
+    "tourId": "TOT-2026",
+    "name": "Tour of Tamilnadu 2026",
+    "startDate": "2026-02-10",
+    "endDate": "2026-02-17",
+    "status": "ACTIVE",
+    "rideCount": 8,
+    "description": "Annual coastal cycling tour",
+    "provisionedAt": "2026-01-05T09:01:30Z",
+    "createdAt": "2026-01-05T09:00:00Z",
+    "updatedAt": "2026-02-09T18:00:00Z"
+  },
+  "provisionedTables": [
+    "dev-Hotel-TOT-2026",
+    "dev-RoomAllocation-TOT-2026"
+  ]
+}
+```
+
+##### Archive Tour
+
+```http
+POST /v1/tours/TOT-2026/archive?exportToS3=true&deleteTables=true
+```
+
+Response `200 OK`. Only non-empty tables are exported. `deletedTables` is a count:
+```json
+{
+  "tour": {
+    "tourId": "TOT-2026",
+    "name": "Tour of Tamilnadu 2026",
+    "startDate": "2026-02-10",
+    "endDate": "2026-02-17",
+    "status": "ARCHIVED",
+    "rideCount": 8,
+    "description": "Annual coastal cycling tour",
+    "provisionedAt": "2026-01-05T09:01:30Z",
+    "createdAt": "2026-01-05T09:00:00Z",
+    "updatedAt": "2026-03-01T10:00:00Z",
+    "archivedAt": "2026-03-01T10:00:00Z",
+    "archiveExportKeys": {
+      "TourRider": "archives/TOT-2026/TourRider.json",
+      "Ride": "archives/TOT-2026/Ride.json",
+      "CheckIn": "archives/TOT-2026/CheckIn.json"
+    }
+  },
+  "exportedTables": ["TourRider", "Ride", "CheckIn"],
+  "deletedTables": 11
+}
+```
+
+#### Riders Examples
+
+##### Create Rider Profile
+
+```http
+POST /v1/riders/profile
+```
 ```json
 {
   "name": "John Doe",
@@ -361,15 +597,48 @@ PUT /v1/tours/TOT-2026/provision
     "state": "Tamil Nadu",
     "country": "India",
     "postalCode": "600001"
-  }
+  },
+  "dietaryPreference": "VEG",
+  "personalCode": "d157"
 }
 ```
 
-#### Create Rider Profile With Path profileId
+Response `201 Created` (`profileId` auto-generated, `personalCode` uppercased):
+```json
+{
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+1234567890",
+  "emergencyContact": {
+    "name": "Jane Doe",
+    "phone": "+0987654321",
+    "relation": "Spouse"
+  },
+  "dateOfBirth": "1990-01-15",
+  "gender": "Male",
+  "dietaryPreference": "VEG",
+  "address": {
+    "line1": "123 Main St",
+    "line2": "Apartment 4B",
+    "city": "Chennai",
+    "state": "Tamil Nadu",
+    "country": "India",
+    "postalCode": "600001"
+  },
+  "createdAt": "2026-01-10T08:15:00Z",
+  "updatedAt": "2026-01-10T08:15:00Z",
+  "personalCode": "D157"
+}
+```
 
-Endpoint: `POST /v1/riders/profile/{profileId}`
+##### Create Rider Profile With Path profileId
 
-Example request (path `profileId = CUSTOM-PROFILE-001`):
+Uses the path `profileId` instead of generating one, for example the ID returned by [Create Cognito Link](#create-cognito-link).
+
+```http
+POST /v1/riders/profile/CUSTOM-PROFILE-001
+```
 ```json
 {
   "name": "John Doe",
@@ -380,33 +649,46 @@ Example request (path `profileId = CUSTOM-PROFILE-001`):
     "phone": "+0987654321",
     "relation": "Spouse"
   },
+  "dateOfBirth": "1990-01-15",
+  "gender": "Male",
+  "address": {
+    "line1": "123 Main St",
+    "city": "Chennai",
+    "country": "India",
+    "postalCode": "600001"
+  },
   "personalCode": "d220"
 }
 ```
 
-Example success response (`201 Created`):
+Response `201 Created`. `dietaryPreference` is returned as `null` when it isn't supplied:
 ```json
 {
-  "success": true,
-  "data": {
-    "profileId": "CUSTOM-PROFILE-001",
-    "name": "John Doe",
-    "email": "john.custom@example.com",
-    "phone": "+1234567890",
-    "emergencyContact": {
-      "name": "Jane Doe",
-      "phone": "+0987654321",
-      "relation": "Spouse"
-    },
-    "personalCode": "D220",
-    "createdAt": "2026-02-10T10:30:00Z",
-    "updatedAt": "2026-02-10T10:30:00Z"
+  "profileId": "CUSTOM-PROFILE-001",
+  "name": "John Doe",
+  "email": "john.custom@example.com",
+  "phone": "+1234567890",
+  "emergencyContact": {
+    "name": "Jane Doe",
+    "phone": "+0987654321",
+    "relation": "Spouse"
   },
-  "timestamp": "2026-02-10T10:30:00Z"
+  "dateOfBirth": "1990-01-15",
+  "gender": "Male",
+  "dietaryPreference": null,
+  "address": {
+    "line1": "123 Main St",
+    "city": "Chennai",
+    "country": "India",
+    "postalCode": "600001"
+  },
+  "createdAt": "2026-02-10T10:30:00Z",
+  "updatedAt": "2026-02-10T10:30:00Z",
+  "personalCode": "D220"
 }
 ```
 
-Example conflict response when `profileId` already exists (`409`):
+Conflict response when `profileId` already exists (`409`, full envelope):
 ```json
 {
   "success": false,
@@ -418,11 +700,624 @@ Example conflict response when `profileId` already exists (`409`):
 }
 ```
 
-#### Create Ride
+##### Get Cognito Link
+
+```http
+GET /v1/riders/link/c1536d0a-e071-707f-571e-9526433c84ac
+```
+
+Response `200 OK`:
+```json
+{
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f"
+}
+```
+
+##### Create Cognito Link
+
+```http
+POST /v1/riders/link/c1536d0a-e071-707f-571e-9526433c84ac
+```
+
+Response `201 Created` (new `profileId` generated for the rider-app user):
+```json
+{
+  "cognitoUserName": "c1536d0a-e071-707f-571e-9526433c84ac",
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f"
+}
+```
+
+##### Delete Cognito Link
+
+```http
+DELETE /v1/riders/link/c1536d0a-e071-707f-571e-9526433c84ac
+```
+
+Response `200 OK`:
+```json
+{
+  "cognitoUserName": "c1536d0a-e071-707f-571e-9526433c84ac",
+  "deleted": true
+}
+```
+
+##### Get Rider Profile
+
+```http
+GET /v1/riders/profile/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f
+```
+
+Response `200 OK`:
+```json
+{
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+1234567890",
+  "emergencyContact": {
+    "name": "Jane Doe",
+    "phone": "+0987654321",
+    "relation": "Spouse"
+  },
+  "dateOfBirth": "1990-01-15",
+  "gender": "Male",
+  "dietaryPreference": "VEG",
+  "address": {
+    "line1": "123 Main St",
+    "line2": "Apartment 4B",
+    "city": "Chennai",
+    "state": "Tamil Nadu",
+    "country": "India",
+    "postalCode": "600001"
+  },
+  "personalCode": "D157",
+  "photoS3Key": "profiles/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/0b7d4e2a-9c1f-4a8e-b6d3-5f2e1a7c9d40.jpg",
+  "createdAt": "2026-01-10T08:15:00Z",
+  "updatedAt": "2026-01-12T19:05:00Z"
+}
+```
+
+##### List Rider Tour Participations
+
+```http
+GET /v1/profile/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/tours
+```
+
+Response `200 OK` (items are `RiderTours` records as stored; see [SolutionDesign.md](SolutionDesign.md)):
+```json
+{
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
+  "count": 1,
+  "tours": [
+    {
+      "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
+      "tourId": "TOT-2026",
+      "appliedOn": "2025-12-01T10:00:00Z",
+      "confirmedOn": "2025-12-20T10:00:00Z",
+      "tourFeePaidOn": "2026-01-05T12:00:00Z",
+      "registeredOn": "2026-01-15T10:00:00Z",
+      "riderId": "R57",
+      "status": "REGISTERED",
+      "updatedAt": "2026-01-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+##### Get Rider Tour Participation
+
+```http
+GET /v1/profile/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/tours/TOT-2026
+```
+
+Response `200 OK`: a single `RiderTours` record, the same object as the `tours[0]` item in [List Rider Tour Participations](#list-rider-tour-participations).
+
+##### Update Rider Profile
+
+Every request must include all mandatory profile fields. This example also saves the `photoS3Key` returned by [Get Profile Picture Upload URL](#get-profile-picture-upload-url).
+
+```http
+PUT /v1/riders/profile/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f
+```
+```json
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+1234567890",
+  "emergencyContact": {
+    "name": "Jane Doe",
+    "phone": "+0987654321",
+    "relation": "Spouse"
+  },
+  "dateOfBirth": "1990-01-15",
+  "gender": "Male",
+  "address": {
+    "line1": "123 Main St",
+    "line2": "Apartment 4B",
+    "city": "Chennai",
+    "state": "Tamil Nadu",
+    "country": "India",
+    "postalCode": "600001"
+  },
+  "photoS3Key": "profiles/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/0b7d4e2a-9c1f-4a8e-b6d3-5f2e1a7c9d40.jpg"
+}
+```
+
+Response `200 OK`: the full updated profile, the same object as [Get Rider Profile](#get-rider-profile).
+
+##### Get Profile Picture Upload URL
+
+```http
+POST /v1/riders/profile/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/picture
+```
+```json
+{
+  "contentType": "image/jpeg"
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "uploadUrl": "https://<photos-bucket>.s3.amazonaws.com/profiles/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/0b7d4e2a-9c1f-4a8e-b6d3-5f2e1a7c9d40.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
+  "photoS3Key": "profiles/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/0b7d4e2a-9c1f-4a8e-b6d3-5f2e1a7c9d40.jpg",
+  "contentType": "image/jpeg",
+  "expiresIn": 300,
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f"
+}
+```
+
+##### Get Profile Picture Download URL
+
+```http
+GET /v1/riders/profile/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/picture?expiresIn=600
+```
+
+Response `200 OK`:
+```json
+{
+  "downloadUrl": "https://<photos-bucket>.s3.amazonaws.com/profiles/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/0b7d4e2a-9c1f-4a8e-b6d3-5f2e1a7c9d40.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
+  "photoS3Key": "profiles/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/0b7d4e2a-9c1f-4a8e-b6d3-5f2e1a7c9d40.jpg",
+  "expiresIn": 600,
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f"
+}
+```
+
+##### List Tour Riders
+
+```http
+GET /v1/tours/TOT-2026/riders
+```
+
+Response `200 OK`. Each rider includes its full `profile` and a copy of `personalCode`:
+```json
+{
+  "riders": [
+    {
+      "riderId": "R57",
+      "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
+      "status": "ACTIVE",
+      "registeredAt": "2026-01-15T10:00:00Z",
+      "createdAt": "2026-01-15T10:00:00Z",
+      "updatedAt": "2026-01-20T09:00:00Z",
+      "experienceLevel": "Intermediate",
+      "specialRequirements": "Vegetarian meals",
+      "profile": { ... },
+      "personalCode": "D157"
+    },
+    {
+      "riderId": "R12",
+      "profileId": "8a1d4f2b-6c3e-4f5a-9b7c-0d1e2f3a4b5c",
+      "status": "ACTIVE",
+      "registeredAt": "2026-01-16T11:30:00Z",
+      "createdAt": "2026-01-16T11:30:00Z",
+      "updatedAt": "2026-01-20T09:00:00Z",
+      "profile": {
+        "profileId": "8a1d4f2b-6c3e-4f5a-9b7c-0d1e2f3a4b5c",
+        "name": "Priya Raman",
+        "email": "priya.raman@example.com",
+        "phone": "+919840012345",
+        "emergencyContact": {
+          "name": "Karthik Raman",
+          "phone": "+919840054321",
+          "relation": "Brother"
+        },
+        "dateOfBirth": "1992-07-04",
+        "gender": "Female",
+        "dietaryPreference": "NON_VEG",
+        "address": {
+          "line1": "45 Race Course Road",
+          "city": "Coimbatore",
+          "country": "India",
+          "postalCode": "641018"
+        },
+        "personalCode": "P012",
+        "createdAt": "2026-01-11T09:00:00Z",
+        "updatedAt": "2026-01-11T09:00:00Z"
+      },
+      "personalCode": "P012"
+    }
+  ],
+  "count": 2,
+  "tourId": "TOT-2026"
+}
+```
+`R57.profile` is the object shown in [Get Rider Profile](#get-rider-profile).
+
+##### List Tour Rider Names
+
+```http
+GET /v1/tours/TOT-2026/riders/names
+```
+
+Response `200 OK` (sorted by numeric rider ID):
+```json
+{
+  "riders": [
+    { "riderId": "R12", "name": "Priya Raman", "personalCode": "P012" },
+    { "riderId": "R57", "name": "John Doe", "personalCode": "D157" }
+  ],
+  "count": 2,
+  "tourId": "TOT-2026"
+}
+```
+
+##### Register Tour Rider
+
+```http
+POST /v1/tours/TOT-2026/riders
+```
+```json
+{
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
+  "riderId": "R57",
+  "experienceLevel": "Intermediate",
+  "specialRequirements": "Vegetarian meals"
+}
+```
+
+Response `201 Created`. If `riderId` is left out, a temporary ID `PENDING-3f6c2a8e` (the first 8 characters of `profileId`) is assigned:
+```json
+{
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
+  "status": "PENDING",
+  "registeredAt": "2026-01-15T10:00:00Z",
+  "createdAt": "2026-01-15T10:00:00Z",
+  "updatedAt": "2026-01-15T10:00:00Z",
+  "riderId": "R57",
+  "experienceLevel": "Intermediate",
+  "specialRequirements": "Vegetarian meals"
+}
+```
+
+##### Get Tour Rider
+
+```http
+GET /v1/tours/TOT-2026/riders/R57
+```
+
+Response `200 OK`: the `R57` item from [List Tour Riders](#list-tour-riders), including `profile` and `personalCode`.
+
+##### Exit Rider
+
+```http
+POST /v1/tours/TOT-2026/riders/R12/exit
+```
+```json
+{
+  "baggageDisposition": "RETAINED",
+  "note": "Bag kept in support vehicle"
+}
+```
+
+Response `200 OK`. With `WITH_RIDER`, the response has `baggageReleasedAt`/`baggageReleasedBy` instead of `baggageExitedAt`/`baggageExitedBy`:
+```json
+{
+  "riderId": "R12",
+  "profileId": "8a1d4f2b-6c3e-4f5a-9b7c-0d1e2f3a4b5c",
+  "status": "EXITED",
+  "registeredAt": "2026-01-16T11:30:00Z",
+  "createdAt": "2026-01-16T11:30:00Z",
+  "updatedAt": "2026-02-13T15:00:00Z",
+  "prevStatus": "ACTIVE",
+  "exitedAt": "2026-02-13T15:00:00Z",
+  "exitedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "baggageStatus": "RETAINED",
+  "baggageExitNote": "Bag kept in support vehicle",
+  "baggageExitedAt": "2026-02-13T15:00:00Z",
+  "baggageExitedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
+
+##### Cancel Rider Exit
+
+```http
+POST /v1/tours/TOT-2026/riders/R12/exit/cancel
+```
+
+Response `200 OK`. `status` is restored from `prevStatus`, `baggageStatus` is reset to `ACTIVE`, and the exit and baggage audit fields are removed:
+```json
+{
+  "riderId": "R12",
+  "profileId": "8a1d4f2b-6c3e-4f5a-9b7c-0d1e2f3a4b5c",
+  "status": "ACTIVE",
+  "registeredAt": "2026-01-16T11:30:00Z",
+  "createdAt": "2026-01-16T11:30:00Z",
+  "updatedAt": "2026-02-14T09:00:00Z",
+  "baggageStatus": "ACTIVE"
+}
+```
+
+##### Release Rider Baggage
+
+Valid only while `baggageStatus` is `RETAINED`, i.e. after [Exit Rider](#exit-rider) and before the exit is cancelled.
+
+```http
+POST /v1/tours/TOT-2026/riders/R12/baggage/release
+```
+```json
+{
+  "note": "Handed over at Madurai hotel"
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "riderId": "R12",
+  "profileId": "8a1d4f2b-6c3e-4f5a-9b7c-0d1e2f3a4b5c",
+  "status": "EXITED",
+  "registeredAt": "2026-01-16T11:30:00Z",
+  "createdAt": "2026-01-16T11:30:00Z",
+  "updatedAt": "2026-02-14T08:00:00Z",
+  "prevStatus": "ACTIVE",
+  "exitedAt": "2026-02-13T15:00:00Z",
+  "exitedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "baggageStatus": "WITH_RIDER",
+  "baggageExitNote": "Handed over at Madurai hotel",
+  "baggageExitedAt": "2026-02-13T15:00:00Z",
+  "baggageExitedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "baggageReleasedAt": "2026-02-14T08:00:00Z",
+  "baggageReleasedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
+
+##### Get Rider Statistics
+
+```http
+GET /v1/tours/TOT-2026/riders/R57/statistics
+```
+
+Response `200 OK`:
+```json
+{
+  "riderId": "R57",
+  "tourId": "TOT-2026",
+  "totalRides": 8,
+  "ridesCompleted": 1,
+  "ridesNotCompleted": 0,
+  "currentStreak": 1,
+  "totalDistance": 65.5,
+  "totalCheckins": 1,
+  "quitRiding": false
+}
+```
+
+#### Artifacts Examples
+
+##### Presign Tour Artifact Upload
+
+```http
+POST /v1/artifacts/tour/presign-upload
+```
+```json
+{
+  "tourId": "TOT-2026",
+  "artifactId": "ride-plan",
+  "contentType": "application/pdf"
+}
+```
+
+Response `200 OK`. `title` comes from the `ARTIFACTS` config `description`, and `version` increases on every re-upload:
+```json
+{
+  "artifactFor": "TOT-2026",
+  "artifactId": "ride-plan",
+  "s3Key": "tours/TOT-2026/ride-plan.pdf",
+  "contentType": "application/pdf",
+  "uploadUrl": "https://<artifacts-bucket>.s3.amazonaws.com/tours/TOT-2026/ride-plan.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
+  "expiresIn": 300,
+  "version": 1,
+  "title": "Tour of Tamil Nadu - Ride Plan"
+}
+```
+
+##### Presign Ride Artifact Upload
+
+```http
+POST /v1/artifacts/ride/presign-upload
+```
+```json
+{
+  "tourId": "TOT-2026",
+  "rideId": "RIDE001",
+  "artifactId": "gpx-file",
+  "contentType": "application/gpx+xml"
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "artifactFor": "TOT-2026#RIDE001",
+  "artifactId": "gpx-file",
+  "s3Key": "tours/TOT-2026/rides/RIDE001/gpx-file.gpx",
+  "contentType": "application/gpx+xml",
+  "uploadUrl": "https://<artifacts-bucket>.s3.amazonaws.com/tours/TOT-2026/rides/RIDE001/gpx-file.gpx?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
+  "expiresIn": 300,
+  "version": 1,
+  "title": "Ride route GPX File"
+}
+```
+
+##### Delete Tour Artifact
+
+```http
+DELETE /v1/artifacts/tour/TOT-2026/ride-plan
+```
+
+Response `200 OK`:
+```json
+{
+  "artifactFor": "TOT-2026",
+  "artifactId": "ride-plan",
+  "deleted": true,
+  "s3Key": "tours/TOT-2026/ride-plan.pdf"
+}
+```
+
+##### Delete Ride Artifact
+
+```http
+DELETE /v1/artifacts/ride/TOT-2026/RIDE001/gpx-file
+```
+
+Response `200 OK`:
+```json
+{
+  "artifactFor": "TOT-2026#RIDE001",
+  "artifactId": "gpx-file",
+  "deleted": true,
+  "s3Key": "tours/TOT-2026/rides/RIDE001/gpx-file.gpx"
+}
+```
+
+##### Get Tour Artifacts
+
+```http
+GET /v1/tours/TOT-2026/artifacts?expiresIn=900
+```
+
+Response `200 OK`. `data` is an array, or `[]` when there are no artifacts:
+```json
+[
+  {
+    "artifactId": "ride-plan",
+    "s3Key": "tours/TOT-2026/ride-plan.pdf",
+    "contentType": "application/pdf",
+    "version": 1,
+    "title": "Tour of Tamil Nadu - Ride Plan",
+    "downloadUrl": "https://<artifacts-bucket>.s3.amazonaws.com/tours/TOT-2026/ride-plan.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
+    "expiresIn": 900,
+    "createdAt": "2026-01-25T10:00:00Z",
+    "updatedAt": "2026-01-25T10:00:00Z"
+  }
+]
+```
+
+##### Get Ride Artifacts
+
+```http
+GET /v1/tours/TOT-2026/rides/RIDE001/artifacts?artifactId=gpx-file
+```
+
+Response `200 OK`:
+```json
+[
+  {
+    "artifactId": "gpx-file",
+    "s3Key": "tours/TOT-2026/rides/RIDE001/gpx-file.gpx",
+    "contentType": "application/gpx+xml",
+    "version": 1,
+    "title": "Ride route GPX File",
+    "downloadUrl": "https://<artifacts-bucket>.s3.amazonaws.com/tours/TOT-2026/rides/RIDE001/gpx-file.gpx?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
+    "expiresIn": 900,
+    "createdAt": "2026-01-26T10:00:00Z",
+    "updatedAt": "2026-01-26T10:00:00Z"
+  }
+]
+```
+
+#### Rides Examples
+
+##### Get Today's Ride
+
+```http
+GET /v1/tours/TOT-2026/rides/today
+```
+
+Response `200 OK`: the ride scheduled for the current UTC date, in the same shape as [Get Ride](#get-ride). Returns `404 NO_ACTIVE_RIDE` when no ride is scheduled today.
+
+##### List Rides
+
+```http
+GET /v1/tours/TOT-2026/rides?status=STARTED
+```
+
+Response `200 OK`:
+```json
+{
+  "rides": [ { ... } ],
+  "count": 1,
+  "tourId": "TOT-2026"
+}
+```
+Each item in `rides` is a ride object as shown in [Get Ride](#get-ride).
+
+##### Get Ride
+
+```http
+GET /v1/tours/TOT-2026/rides/RIDE001
+```
+
+Response `200 OK` (ride in progress with PS1 open):
 ```json
 {
   "rideId": "RIDE001",
-  "date": "2026-06-15",
+  "date": "2026-02-11",
+  "rideNo": 1,
+  "name": "Geneva to Lausanne",
+  "startLocation": "Geneva Central",
+  "finishLocation": "Lausanne",
+  "totalDistance": 65.5,
+  "flagOffTime": "08:00",
+  "stages": [
+    { "stageId": "S000", "stageNumber": 0, "type": "START", "name": "Start" },
+    {
+      "stageId": "S001",
+      "stageNumber": 1,
+      "type": "PIT_STOP",
+      "name": "PS1",
+      "estimatedOpenTime": 90,
+      "pitStopDuration": 45,
+      "pitStopStatus": "OPEN",
+      "openedAt": "2026-02-11T09:25:00Z"
+    },
+    { "stageId": "S002", "stageNumber": 2, "type": "FINISH", "name": "Finish" }
+  ],
+  "floats": [
+    { "floatNo": 1, "floatToStage": 1 }
+  ],
+  "status": "STARTED",
+  "openTime": "07:30",
+  "closeTime": "13:30",
+  "description": "Coastal stage with one pit stop",
+  "createdAt": "2026-01-20T12:00:00Z",
+  "updatedAt": "2026-02-11T09:25:00Z",
+  "openedAt": "2026-02-11T07:30:05Z",
+  "startedAt": "2026-02-11T08:00:10Z"
+}
+```
+
+##### Create Ride
+
+```http
+POST /v1/tours/TOT-2026/rides
+```
+```json
+{
+  "rideId": "RIDE001",
+  "date": "2026-02-11",
   "rideNo": 1,
   "name": "Geneva to Lausanne",
   "startLocation": "Geneva Central",
@@ -462,7 +1357,138 @@ Example conflict response when `profileId` already exists (`409`):
 }
 ```
 
-#### Create Check-In
+Response `201 Created` (new rides start as `PLANNED`):
+```json
+{
+  "rideId": "RIDE001",
+  "date": "2026-02-11",
+  "rideNo": 1,
+  "name": "Geneva to Lausanne",
+  "startLocation": "Geneva Central",
+  "finishLocation": "Lausanne",
+  "totalDistance": 65.5,
+  "flagOffTime": "08:00",
+  "stages": [
+    { "stageId": "S000", "stageNumber": 0, "type": "START", "name": "Start" },
+    { "stageId": "S001", "stageNumber": 1, "type": "PIT_STOP", "name": "PS1", "estimatedOpenTime": 90, "pitStopDuration": 45 },
+    { "stageId": "S002", "stageNumber": 2, "type": "FINISH", "name": "Finish" }
+  ],
+  "floats": [
+    { "floatNo": 1, "floatToStage": 1 }
+  ],
+  "status": "PLANNED",
+  "openTime": "07:30",
+  "closeTime": "13:30",
+  "createdAt": "2026-01-20T12:00:00Z",
+  "updatedAt": "2026-01-20T12:00:00Z"
+}
+```
+
+##### Update Ride
+
+```http
+PUT /v1/tours/TOT-2026/rides/RIDE001
+```
+```json
+{
+  "description": "Coastal stage with one pit stop"
+}
+```
+
+Response `200 OK`: the full updated ride. This is the [Create Ride](#create-ride) response plus `"description": "Coastal stage with one pit stop"` and a new `updatedAt`. When `stages` are sent, live pit-stop fields (`pitStopStatus`, `openedAt`, `closedAt`) are kept.
+
+##### Open Pit Stop
+
+Called by a `PS_1_USER` (or `SUPER_USER`/`ADMINISTRATOR`) while the ride is `STARTED`.
+
+```http
+POST /v1/tours/TOT-2026/rides/RIDE001/stages/1/pitstop/open
+```
+
+Response `200 OK`: the full ride object ([Get Ride](#get-ride)). This call changes:
+```json
+{
+  "stages": [
+    { "stageId": "S000", "stageNumber": 0, "type": "START", "name": "Start" },
+    { "stageId": "S001", "stageNumber": 1, "type": "PIT_STOP", "name": "PS1", "estimatedOpenTime": 90, "pitStopDuration": 45, "pitStopStatus": "OPEN", "openedAt": "2026-02-11T09:25:00Z" },
+    { "stageId": "S002", "stageNumber": 2, "type": "FINISH", "name": "Finish" }
+  ],
+  "updatedAt": "2026-02-11T09:25:00Z"
+}
+```
+
+##### Close Pit Stop
+
+```http
+POST /v1/tours/TOT-2026/rides/RIDE001/stages/1/pitstop/close
+```
+
+Response `200 OK`: the full ride object. This call changes:
+```json
+{
+  "stages": [
+    { "stageId": "S000", "stageNumber": 0, "type": "START", "name": "Start" },
+    { "stageId": "S001", "stageNumber": 1, "type": "PIT_STOP", "name": "PS1", "estimatedOpenTime": 90, "pitStopDuration": 45, "pitStopStatus": "CLOSED", "openedAt": "2026-02-11T09:25:00Z", "closedAt": "2026-02-11T11:40:00Z" },
+    { "stageId": "S002", "stageNumber": 2, "type": "FINISH", "name": "Finish" }
+  ],
+  "updatedAt": "2026-02-11T11:40:00Z"
+}
+```
+
+##### Open Today's Ride
+
+```http
+POST /v1/tours/TOT-2026/rides/open
+```
+
+Response `200 OK`: the full ride object for the current UTC date. This call changes:
+```json
+{
+  "status": "OPEN",
+  "openedAt": "2026-02-11T07:30:05Z",
+  "updatedAt": "2026-02-11T07:30:05Z"
+}
+```
+
+##### Start Today's Ride
+
+```http
+POST /v1/tours/TOT-2026/rides/start
+```
+
+Response `200 OK`: the full ride object for the current UTC date. This call changes:
+```json
+{
+  "status": "STARTED",
+  "startedAt": "2026-02-11T08:00:10Z",
+  "updatedAt": "2026-02-11T08:00:10Z"
+}
+```
+
+##### Close Ride
+
+```http
+POST /v1/tours/TOT-2026/rides/RIDE001/close
+```
+
+Response `200 OK`: the full ride object. This call changes:
+```json
+{
+  "status": "CLOSED",
+  "closedAt": "2026-02-11T14:05:00Z",
+  "updatedAt": "2026-02-11T14:05:00Z"
+}
+```
+
+#### Check-Ins Examples
+
+##### Create Check-In
+
+Float check-in for `R57`. Other check-in types use the same request: a normal check-in sets `isFloat=false` and drops `floatNo`; Not Riding and Quit Riding set their flag and may leave out `stageNumber`.
+
+```http
+POST /v1/tours/TOT-2026/checkins
+```
 ```json
 {
   "riderId": "R57",
@@ -474,11 +1500,1258 @@ Example conflict response when `profileId` already exists (`409`):
   "floatNo": 1,
   "isQuitRiding": false,
   "timestamp": "2026-02-11T10:30:00Z",
-  "notes": ""
+  "notes": "Boarded float 1"
 }
 ```
 
-#### Create Notification
+Response `201 Created`. `checkInId` is `<riderId>#<stageNumber:3 digits>#<timestamp>`, and `status` is derived from the flags (`CHECKED_IN`, `FLOAT`, `NOT_RIDING`, `QUIT_RIDING`):
+```json
+{
+  "checkInId": "R57#000#2026-02-11T10:30:00Z",
+  "riderId": "R57",
+  "rideId": "RIDE001",
+  "timestamp": "2026-02-11T10:30:00Z",
+  "checkedInBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "method": "QR_SCAN",
+  "isNotRiding": false,
+  "isFloat": true,
+  "floatNo": 1,
+  "isQuitRiding": false,
+  "isManualEntry": false,
+  "createdAt": "2026-02-11T10:30:02Z",
+  "status": "FLOAT",
+  "stageNumber": 0,
+  "stageId": "S000",
+  "notes": "Boarded float 1"
+}
+```
+
+##### List Ride Check-Ins
+
+```http
+GET /v1/tours/TOT-2026/rides/RIDE001/checkins
+```
+
+Response `200 OK` (cancelled check-ins excluded):
+```json
+{
+  "checkIns": [
+    {
+      "checkInId": "R12#000#2026-02-11T07:52:00Z",
+      "riderId": "R12",
+      "rideId": "RIDE001",
+      "timestamp": "2026-02-11T07:52:00Z",
+      "checkedInBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "method": "QR_SCAN",
+      "isNotRiding": false,
+      "isFloat": false,
+      "isQuitRiding": false,
+      "isManualEntry": false,
+      "createdAt": "2026-02-11T07:52:01Z",
+      "status": "CHECKED_IN",
+      "stageNumber": 0,
+      "stageId": "S000"
+    },
+    {
+      "checkInId": "R57#000#2026-02-11T10:30:00Z",
+      "riderId": "R57",
+      "rideId": "RIDE001",
+      "timestamp": "2026-02-11T10:30:00Z",
+      "checkedInBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "method": "QR_SCAN",
+      "isNotRiding": false,
+      "isFloat": true,
+      "floatNo": 1,
+      "isQuitRiding": false,
+      "isManualEntry": false,
+      "createdAt": "2026-02-11T10:30:02Z",
+      "status": "FLOAT",
+      "stageNumber": 0,
+      "stageId": "S000",
+      "notes": "Boarded float 1"
+    }
+  ],
+  "count": 2,
+  "rideId": "RIDE001",
+  "tourId": "TOT-2026"
+}
+```
+
+##### List Rider Check-Ins
+
+```http
+GET /v1/tours/TOT-2026/riders/R57/checkins
+```
+
+Response `200 OK` (all rides, cancelled excluded):
+```json
+{
+  "tourId": "TOT-2026",
+  "riderId": "R57",
+  "checkIns": [
+    {
+      "checkInId": "R57#000#2026-02-11T10:30:00Z",
+      "riderId": "R57",
+      "rideId": "RIDE001",
+      "timestamp": "2026-02-11T10:30:00Z",
+      "checkedInBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "method": "QR_SCAN",
+      "isNotRiding": false,
+      "isFloat": true,
+      "floatNo": 1,
+      "isQuitRiding": false,
+      "isManualEntry": false,
+      "createdAt": "2026-02-11T10:30:02Z",
+      "status": "FLOAT",
+      "stageNumber": 0,
+      "stageId": "S000",
+      "notes": "Boarded float 1"
+    }
+  ],
+  "count": 1
+}
+```
+
+##### List Rider Check-Ins for Ride Number
+
+```http
+GET /v1/tours/TOT-2026/riders/R57/rides/1/checkins
+```
+
+Response `200 OK`: same as [List Rider Check-Ins](#list-rider-check-ins), limited to ride number `1`, with an extra `"rideNo": 1` field next to `riderId`.
+
+##### Cancel Check-In
+
+Cancels `R12`'s stage 1 check-in `R12#001#2026-02-11T09:48:00Z` (`#` URL-encoded in the path).
+
+```http
+POST /v1/tours/TOT-2026/rides/RIDE001/checkins/R12%23001%232026-02-11T09:48:00Z/cancel
+```
+```json
+{
+  "status": "CANCELLED",
+  "prevStatus": "CHECKED_IN"
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "rideId": "RIDE001",
+  "checkInId": "R12#001#2026-02-11T09:48:00Z",
+  "riderId": "R12",
+  "timestamp": "2026-02-11T09:48:00Z",
+  "checkedInBy": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "method": "QR_SCAN",
+  "isNotRiding": false,
+  "isFloat": false,
+  "isQuitRiding": false,
+  "isManualEntry": false,
+  "createdAt": "2026-02-11T09:48:01Z",
+  "status": "CANCELLED",
+  "stageNumber": 1,
+  "stageId": "S001",
+  "prevStatus": "CHECKED_IN",
+  "cancelledBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "cancelledAt": "2026-02-11T09:55:00Z"
+}
+```
+
+##### Get Ride Dashboard
+
+```http
+GET /v1/tours/TOT-2026/rides/RIDE001/dashboard
+If-None-Match: "c0ffee0000000000000000000000beef"
+```
+
+Response `200 OK` (with `ETag` header). `ride` is the object from [Get Ride](#get-ride), and `checkIns` are the active check-ins from [List Ride Check-Ins](#list-ride-check-ins):
+```json
+{
+  "ride": { ... },
+  "riders": [
+    {
+      "riderId": "R12",
+      "profileId": "8a1d4f2b-6c3e-4f5a-9b7c-0d1e2f3a4b5c",
+      "status": "ACTIVE",
+      "name": "Priya Raman",
+      "email": "priya.raman@example.com",
+      "phone": "+919840012345",
+      "emergencyContact": { "name": "Karthik Raman", "phone": "+919840054321", "relation": "Brother" },
+      "photoS3Key": null
+    },
+    {
+      "riderId": "R57",
+      "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
+      "status": "ACTIVE",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "phone": "+1234567890",
+      "emergencyContact": { "name": "Jane Doe", "phone": "+0987654321", "relation": "Spouse" },
+      "photoS3Key": "profiles/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/0b7d4e2a-9c1f-4a8e-b6d3-5f2e1a7c9d40.jpg"
+    }
+  ],
+  "checkIns": [ { ... }, { ... } ],
+  "summary": {
+    "totalRiders": 2,
+    "checkedIn": 2,
+    "notRiding": 0,
+    "quitRiding": 0,
+    "notCheckedIn": 0
+  }
+}
+```
+
+##### Get Ride Dashboard Progress
+
+```http
+GET /v1/tours/TOT-2026/rides/RIDE001/dashboard/progress
+```
+
+Response `200 OK` (with `ETag` header). `checkIns` has the same items as [List Ride Check-Ins](#list-ride-check-ins). `cancelled` holds cancelled check-ins as in [Cancel Check-In](#cancel-check-in). `dataVersion` is the latest timestamp across the ride, riders, and check-ins:
+```json
+{
+  "rideId": "RIDE001",
+  "checkIns": [ { ... }, { ... } ],
+  "cancelled": [ { ... } ],
+  "summary": {
+    "totalRiders": 2,
+    "checkedIn": 2,
+    "notRiding": 0,
+    "quitRiding": 0,
+    "notCheckedIn": 0
+  },
+  "dataVersion": "2026-02-11T10:30:02Z"
+}
+```
+
+##### Get Rider Ride Details
+
+```http
+GET /v1/tours/TOT-2026/rides/RIDE001/riders/R57/details
+```
+
+Response `200 OK` (with `ETag` header). `latestStatus` is one of `NOT_CHECKED_IN`, `CHECKED_IN`, `FLOAT`, `NOT_RIDING`, `QUIT_RIDING`:
+```json
+{
+  "rider": {
+    "riderId": "R57",
+    "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
+    "name": "John Doe",
+    "phone": "+1234567890",
+    "personalCode": "D157",
+    "photoS3Key": "profiles/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/0b7d4e2a-9c1f-4a8e-b6d3-5f2e1a7c9d40.jpg"
+  },
+  "checkInTimeline": [
+    {
+      "checkInId": "R57#000#2026-02-11T10:30:00Z",
+      "stageNumber": 0,
+      "stageId": "S000",
+      "isNotRiding": false,
+      "isFloat": true,
+      "floatNo": 1,
+      "isQuitRiding": false,
+      "timestamp": "2026-02-11T10:30:00Z"
+    }
+  ],
+  "latestStatus": "FLOAT"
+}
+```
+
+#### Events Examples
+
+##### List Events
+
+```http
+GET /v1/tours/TOT-2026/events
+```
+
+Response `200 OK` (sorted by `eventId`):
+```json
+{
+  "items": [ { ... } ]
+}
+```
+Each item is an event definition as shown in [Get Event](#get-event).
+
+##### Get Event
+
+```http
+GET /v1/tours/TOT-2026/events/EVT-BAGLOAD
+```
+
+Response `200 OK`:
+```json
+{
+  "eventId": "EVT-BAGLOAD",
+  "eventName": "Baggage Loading",
+  "eventType": "REPEATING",
+  "location": "Hotel lobby",
+  "sequenceEnforced": true,
+  "defaultAllowedTypeCodes": ["3", "4", "5"],
+  "allowSelfService": false,
+  "activities": [
+    {
+      "activityId": "ACT-001",
+      "name": "Collected from room",
+      "sequenceNo": 1,
+      "enabled": true,
+      "mandatory": false,
+      "allowedTypeCodes": [],
+      "allowOptOut": true,
+      "prerequisiteActivityIds": [],
+      "restrictToAssignedUsers": true,
+      "variantOptions": [],
+      "notes": "Riders may bring bags to the lobby"
+    },
+    {
+      "activityId": "ACT-002",
+      "name": "Tagged at lobby",
+      "sequenceNo": 2,
+      "enabled": true,
+      "mandatory": false,
+      "allowedTypeCodes": [],
+      "allowOptOut": false,
+      "prerequisiteActivityIds": [],
+      "restrictToAssignedUsers": true,
+      "variantOptions": [],
+      "notes": ""
+    },
+    {
+      "activityId": "ACT-003",
+      "name": "Loaded to truck",
+      "sequenceNo": 3,
+      "enabled": true,
+      "mandatory": true,
+      "allowedTypeCodes": [],
+      "allowOptOut": false,
+      "prerequisiteActivityIds": [],
+      "restrictToAssignedUsers": true,
+      "variantOptions": [],
+      "notes": ""
+    }
+  ],
+  "createdAt": "2026-01-25T09:00:00Z",
+  "updatedAt": "2026-01-28T11:00:00Z",
+  "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
+
+##### Create Event
+
+Omitted activity fields get defaults (`enabled=true`, `mandatory=false`, `allowOptOut=false`, `restrictToAssignedUsers=true`, empty lists, `notes=""`). An empty `allowedTypeCodes` means the activity uses `defaultAllowedTypeCodes`.
+
+```http
+POST /v1/tours/TOT-2026/events
+```
+```json
+{
+  "eventId": "EVT-BAGLOAD",
+  "eventName": "Baggage Loading",
+  "eventType": "REPEATING",
+  "location": "Origin hotel",
+  "sequenceEnforced": true,
+  "defaultAllowedTypeCodes": ["3", "4", "5"],
+  "activities": [
+    { "activityId": "ACT-001", "name": "Collected from room", "sequenceNo": 1, "allowOptOut": true, "notes": "Riders may bring bags to the lobby" },
+    { "activityId": "ACT-002", "name": "Tagged at lobby", "sequenceNo": 2 },
+    { "activityId": "ACT-003", "name": "Loaded to truck", "sequenceNo": 3, "mandatory": true }
+  ]
+}
+```
+
+Response `201 Created`: the stored event definition. It has the same shape as [Get Event](#get-event), with `"location": "Origin hotel"` and `createdAt` = `updatedAt` = `2026-01-25T09:00:00Z`.
+
+##### Update Event
+
+```http
+PUT /v1/tours/TOT-2026/events/EVT-BAGLOAD
+```
+```json
+{
+  "location": "Hotel lobby"
+}
+```
+
+Response `200 OK`: the full updated event, as shown in [Get Event](#get-event). Sending `activities` replaces the whole activity list and goes through the same validation as create.
+
+##### List Occurrences
+
+```http
+GET /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences?date=2026-02-12&status=ACTIVE
+```
+
+Response `200 OK` (sorted by `dateSeq`):
+```json
+{
+  "items": [ { ... } ]
+}
+```
+Each item is an occurrence as shown in [Get Occurrence](#get-occurrence).
+
+##### Get Occurrence
+
+```http
+GET /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231
+```
+
+Response `200 OK`:
+```json
+{
+  "eventId": "EVT-BAGLOAD",
+  "dateSeq": "2026-02-12#1",
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "date": "2026-02-12",
+  "seq": 1,
+  "status": "ACTIVE",
+  "activityOverrides": [
+    {
+      "activityId": "ACT-002",
+      "allowedTypeCodes": ["3", "4", "5", "6"],
+      "note": "Heavy bags allowed today",
+      "updatedAt": "2026-02-12T05:20:00Z",
+      "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+    }
+  ],
+  "selfServiceEnabled": false,
+  "linkedOccurrenceRef": "EVT-BAGUNLOAD#2026-02-12#1",
+  "restrictToAssignedUsers": true,
+  "startedAt": "2026-02-12T05:30:00Z",
+  "createdAt": "2026-02-11T18:00:00Z",
+  "updatedAt": "2026-02-12T05:30:00Z",
+  "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
+
+##### Create Occurrence
+
+```http
+POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences
+```
+```json
+{
+  "date": "2026-02-12",
+  "seq": 1
+}
+```
+
+Response `201 Created`. `selfServiceEnabled` defaults to the event's `allowSelfService`:
+```json
+{
+  "eventId": "EVT-BAGLOAD",
+  "dateSeq": "2026-02-12#1",
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "date": "2026-02-12",
+  "seq": 1,
+  "status": "PLANNED",
+  "activityOverrides": [],
+  "selfServiceEnabled": false,
+  "restrictToAssignedUsers": true,
+  "createdAt": "2026-02-11T18:00:00Z",
+  "updatedAt": "2026-02-11T18:00:00Z",
+  "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
+
+##### Update Occurrence
+
+```http
+PUT /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231
+```
+```json
+{
+  "linkedOccurrenceRef": "EVT-BAGUNLOAD#2026-02-12#1"
+}
+```
+
+Response `200 OK`: the [Create Occurrence](#create-occurrence) response plus `"linkedOccurrenceRef": "EVT-BAGUNLOAD#2026-02-12#1"`, with `updatedAt` set to `2026-02-11T18:05:00Z`.
+
+##### Get Activity Overrides
+
+```http
+GET /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/activity-overrides
+```
+
+Response `200 OK`:
+```json
+{
+  "items": [
+    {
+      "activityId": "ACT-002",
+      "allowedTypeCodes": ["3", "4", "5", "6"],
+      "note": "Heavy bags allowed today",
+      "updatedAt": "2026-02-12T05:20:00Z",
+      "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+    }
+  ]
+}
+```
+
+##### Update Activity Override
+
+Upserts the override for one activity. If `enabled`, `selfServiceEnabled`, and `allowedTypeCodes` all end up `null`, the override is removed.
+
+```http
+PUT /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/activity-overrides
+```
+```json
+{
+  "activityId": "ACT-002",
+  "allowedTypeCodes": ["3", "4", "5", "6"],
+  "note": "Heavy bags allowed today"
+}
+```
+
+Response `200 OK`: the full override list for the occurrence, the same as [Get Activity Overrides](#get-activity-overrides).
+
+##### Start Occurrence
+
+```http
+POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/start
+```
+
+Response `200 OK`: the full occurrence, as shown in [Get Occurrence](#get-occurrence), with `"status": "ACTIVE"` and `startedAt` = `updatedAt` = `2026-02-12T05:30:00Z`.
+
+##### Complete Occurrence
+
+```http
+POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/complete
+```
+
+Response `200 OK`: the full occurrence plus `outstandingMandatoryCount`. Outstanding items don't block completion:
+```json
+{
+  "eventId": "EVT-BAGLOAD",
+  "dateSeq": "2026-02-12#1",
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "date": "2026-02-12",
+  "seq": 1,
+  "status": "COMPLETED",
+  "activityOverrides": [
+    {
+      "activityId": "ACT-002",
+      "allowedTypeCodes": ["3", "4", "5", "6"],
+      "note": "Heavy bags allowed today",
+      "updatedAt": "2026-02-12T05:20:00Z",
+      "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+    }
+  ],
+  "selfServiceEnabled": false,
+  "linkedOccurrenceRef": "EVT-BAGUNLOAD#2026-02-12#1",
+  "restrictToAssignedUsers": true,
+  "startedAt": "2026-02-12T05:30:00Z",
+  "completedAt": "2026-02-12T09:45:00Z",
+  "createdAt": "2026-02-11T18:00:00Z",
+  "updatedAt": "2026-02-12T09:45:00Z",
+  "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "outstandingMandatoryCount": 1
+}
+```
+
+##### Cancel Occurrence
+
+```http
+POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-13%231/cancel
+```
+```json
+{
+  "cancelReason": "Rest day, no baggage move"
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "eventId": "EVT-BAGLOAD",
+  "dateSeq": "2026-02-13#1",
+  "occurrenceId": "EVT-BAGLOAD#2026-02-13#1",
+  "date": "2026-02-13",
+  "seq": 1,
+  "status": "CANCELLED",
+  "activityOverrides": [],
+  "selfServiceEnabled": false,
+  "restrictToAssignedUsers": true,
+  "cancelledAt": "2026-02-12T20:00:00Z",
+  "cancelledBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "cancelReason": "Rest day, no baggage move",
+  "createdAt": "2026-02-11T18:10:00Z",
+  "updatedAt": "2026-02-12T20:00:00Z",
+  "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
+
+##### Create Activity Record
+
+Scanned by hotel staff Ravi Shankar, who is assigned to `EVT-BAGLOAD` and `ACT-003` at `HTL-MDU-01`.
+
+```http
+POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/records
+```
+```json
+{
+  "activityId": "ACT-003",
+  "riderId": "R57",
+  "typeCode": "3",
+  "method": "QR_SCAN",
+  "timestamp": "2026-02-12T05:42:10Z"
+}
+```
+
+Response `201 Created`. `outcome` defaults to `COMPLETED`. `bagLabel` is resolved from the `ID_CODE_TYPE` config, and `hotelId` comes from the scanner's tour-user record:
+```json
+{
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "recordId": "R57#ACT-003#2026-02-12T05:42:10Z",
+  "eventId": "EVT-BAGLOAD",
+  "activityId": "ACT-003",
+  "activityName": "Loaded to truck",
+  "riderId": "R57",
+  "scannedBy": "5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f",
+  "timestamp": "2026-02-12T05:42:10Z",
+  "method": "QR_SCAN",
+  "outcome": "COMPLETED",
+  "typeCode": "3",
+  "bagLabel": "Baggage 1",
+  "hotelId": "HTL-MDU-01",
+  "syncedAt": "2026-02-12T05:42:15Z",
+  "isFlagged": false,
+  "createdAt": "2026-02-12T05:42:15Z"
+}
+```
+
+An opt-out (only on activities with `allowOptOut=true`) sends `"outcome": "OPTED_OUT"` and can leave out `typeCode`, e.g. `R12` on `ACT-001`.
+
+##### Cancel Activity Record
+
+```http
+POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/records/R12%23ACT-002%232026-02-12T05:50:30Z/cancel
+```
+```json
+{
+  "cancelReason": "Scanned wrong rider"
+}
+```
+
+Response `200 OK`. The record is kept and marked cancelled:
+```json
+{
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "recordId": "R12#ACT-002#2026-02-12T05:50:30Z",
+  "eventId": "EVT-BAGLOAD",
+  "activityId": "ACT-002",
+  "activityName": "Tagged at lobby",
+  "riderId": "R12",
+  "scannedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "timestamp": "2026-02-12T05:50:30Z",
+  "method": "QR_SCAN",
+  "outcome": "COMPLETED",
+  "typeCode": "4",
+  "bagLabel": "Baggage 2",
+  "syncedAt": "2026-02-12T05:50:31Z",
+  "isFlagged": false,
+  "createdAt": "2026-02-12T05:50:31Z",
+  "cancelledAt": "2026-02-12T05:52:00Z",
+  "cancelledBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "cancelReason": "Scanned wrong rider"
+}
+```
+
+##### Get Event Dashboard
+
+```http
+GET /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/dashboard
+```
+
+Response `200 OK`. `occurrence` is the object from [Get Occurrence](#get-occurrence). Activity `status` is `PENDING` (no active record) or the record `outcome` (`COMPLETED`, `OPTED_OUT`, `FLAGGED`). `cancelled` holds the full cancelled records, as in [Cancel Activity Record](#cancel-activity-record):
+```json
+{
+  "occurrence": { ... },
+  "riders": [
+    {
+      "riderId": "R12",
+      "activities": [
+        { "activityId": "ACT-001", "status": "OPTED_OUT" },
+        { "activityId": "ACT-002", "status": "PENDING" },
+        { "activityId": "ACT-003", "status": "PENDING" }
+      ]
+    },
+    {
+      "riderId": "R57",
+      "activities": [
+        { "activityId": "ACT-001", "status": "COMPLETED" },
+        { "activityId": "ACT-002", "status": "COMPLETED" },
+        { "activityId": "ACT-003", "status": "COMPLETED" }
+      ]
+    }
+  ],
+  "cancelled": [ { ... } ]
+}
+```
+
+##### Get Event Dashboard Progress
+
+```http
+GET /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/dashboard/progress
+```
+
+Response `200 OK`. `outstandingMandatoryCount` counts rider × mandatory-activity pairs that have no active record:
+```json
+{
+  "totalRiders": 2,
+  "completedCount": 3,
+  "outstandingMandatoryCount": 1,
+  "optedOutCount": 1,
+  "flaggedCount": 0
+}
+```
+
+##### Get Event Reconciliation
+
+```http
+GET /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/reconciliation
+```
+
+Response `200 OK`. Counts are distinct `(riderId, typeCode)` bags scanned at the **last enabled activity** (highest `sequenceNo`, after occurrence overrides) of this occurrence and of its `linkedOccurrenceRef`. Cancelled records, `OPTED_OUT` records, and records without a `typeCode` are ignored. Here only `R57`'s bag reached "Loaded to truck" (`ACT-003`) and it was unloaded, so nothing is missing (`R12` opted out of `ACT-001` and never reached `ACT-003`). Returns `400 NO_LINKED_OCCURRENCE` when there is no link:
+```json
+{
+  "loadedCount": 1,
+  "unloadedCount": 1,
+  "missingRiderIds": []
+}
+```
+
+##### Get Event Bootstrap
+
+```http
+GET /v1/tours/TOT-2026/events/bootstrap
+```
+
+Response `200 OK` (with `ETag` header), fetched on `2026-02-12`. `events` holds definitions as in [Get Event](#get-event). `activeOccurrences` holds `PLANNED`/`ACTIVE` occurrences dated today or later, as in [Get Occurrence](#get-occurrence). `hotelStaysToday` holds today's allocations, as in [List Hotel Stays by Date](#list-hotel-stays-by-date):
+```json
+{
+  "events": [ { ... } ],
+  "activeOccurrences": [ { ... } ],
+  "riderBaggageStatus": [
+    { "riderId": "R12", "baggageStatus": "ACTIVE", "baggageReleasedAt": null },
+    { "riderId": "R57", "baggageStatus": "ACTIVE", "baggageReleasedAt": null }
+  ],
+  "hotelStaysToday": [ { ... }, { ... } ]
+}
+```
+
+##### Get Rider Event Progress
+
+```http
+GET /v1/tours/TOT-2026/riders/R57/events/progress?eventId=EVT-BAGLOAD
+```
+
+Response `200 OK` (cancelled records excluded; `status` is the record `outcome`):
+```json
+{
+  "items": [
+    { "eventId": "EVT-BAGLOAD", "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "activityId": "ACT-001", "status": "COMPLETED" },
+    { "eventId": "EVT-BAGLOAD", "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "activityId": "ACT-002", "status": "COMPLETED" },
+    { "eventId": "EVT-BAGLOAD", "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "activityId": "ACT-003", "status": "COMPLETED" }
+  ]
+}
+```
+
+#### Hotels Examples
+
+##### List Hotels
+
+```http
+GET /v1/tours/TOT-2026/hotels
+```
+
+Response `200 OK`:
+```json
+{
+  "items": [
+    {
+      "hotelId": "HTL-MDU-01",
+      "name": "Madurai Residency",
+      "city": "Madurai",
+      "address": "15 West Marret Street, Madurai 625001",
+      "contact": "+91 452 234 5678",
+      "notes": "Baggage room near service entrance",
+      "createdAt": "2026-01-28T10:00:00Z",
+      "updatedAt": "2026-02-05T09:00:00Z"
+    }
+  ]
+}
+```
+
+##### Create Hotel
+
+```http
+POST /v1/tours/TOT-2026/hotels
+```
+```json
+{
+  "hotelId": "HTL-MDU-01",
+  "name": "Madurai Residency",
+  "city": "Madurai",
+  "address": "15 West Marret Street, Madurai 625001",
+  "contact": "+91 452 234 5678",
+  "notes": "Baggage room on ground floor"
+}
+```
+
+Response `201 Created`:
+```json
+{
+  "hotelId": "HTL-MDU-01",
+  "name": "Madurai Residency",
+  "city": "Madurai",
+  "address": "15 West Marret Street, Madurai 625001",
+  "contact": "+91 452 234 5678",
+  "notes": "Baggage room on ground floor",
+  "createdAt": "2026-01-28T10:00:00Z",
+  "updatedAt": "2026-01-28T10:00:00Z"
+}
+```
+
+##### Update Hotel
+
+```http
+PUT /v1/tours/TOT-2026/hotels/HTL-MDU-01
+```
+```json
+{
+  "notes": "Baggage room near service entrance"
+}
+```
+
+Response `200 OK`: the full updated hotel, the same as the item in [List Hotels](#list-hotels).
+
+##### List Hotel Stays by Date
+
+```http
+GET /v1/tours/TOT-2026/hotelstays?date=2026-02-12
+```
+
+Response `200 OK`:
+```json
+{
+  "items": [
+    {
+      "stayDate": "2026-02-12",
+      "riderId": "R12",
+      "hotelId": "HTL-MDU-01",
+      "roomNo": "204",
+      "roomCapacity": 2,
+      "sharingWith": ["R57"],
+      "source": "MANUAL",
+      "checkInDate": "2026-02-11",
+      "checkOutDate": "2026-02-13",
+      "createdAt": "2026-02-01T10:05:00Z",
+      "updatedAt": "2026-02-01T10:05:00Z",
+      "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+    },
+    {
+      "stayDate": "2026-02-12",
+      "riderId": "R57",
+      "hotelId": "HTL-MDU-01",
+      "roomNo": "204",
+      "roomCapacity": 2,
+      "sharingWith": ["R12"],
+      "source": "MANUAL",
+      "checkInDate": "2026-02-11",
+      "checkOutDate": "2026-02-13",
+      "createdAt": "2026-02-01T10:00:00Z",
+      "updatedAt": "2026-02-01T10:00:00Z",
+      "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+    }
+  ]
+}
+```
+
+##### List Hotel Stays for Rider
+
+```http
+GET /v1/tours/TOT-2026/riders/R57/hotelstays
+```
+
+Response `200 OK`: `{"items": [...]}` with every night allocated to `R57`. Items have the same shape as in [List Hotel Stays by Date](#list-hotel-stays-by-date).
+
+##### List Hotel Stays for Hotel
+
+```http
+GET /v1/tours/TOT-2026/hotels/HTL-MDU-01/hotelstays?date=2026-02-12
+```
+
+Response `200 OK`: `{"items": [...]}` for the hotel, sorted by `roomNo` then `riderId` (here, the same two items as [List Hotel Stays by Date](#list-hotel-stays-by-date)). Leave out `date` to get every night.
+
+##### Upsert Hotel Stay
+
+The paired rider's record must reciprocate `sharingWith` (same hotel, room, and capacity). Otherwise the call fails with `409 NON_RECIPROCAL_SHARING`.
+
+```http
+PUT /v1/tours/TOT-2026/hotelstays/2026-02-12/R57
+```
+```json
+{
+  "hotelId": "HTL-MDU-01",
+  "roomNo": "204",
+  "roomCapacity": 2,
+  "sharingWith": ["R12"],
+  "checkInDate": "2026-02-11",
+  "checkOutDate": "2026-02-13"
+}
+```
+
+Response `200 OK`: the stored allocation, the same as the `R57` item in [List Hotel Stays by Date](#list-hotel-stays-by-date). `source` is always `MANUAL`, and `createdAt` is kept on re-upsert.
+
+##### Presign Hotel Allocation Upload
+
+```http
+POST /v1/tours/TOT-2026/hotelstays/uploads/presign
+```
+
+Response `200 OK`. Upload the CSV with `PUT` and `Content-Type: text/csv`:
+```json
+{
+  "uploadId": "UPL-418273645501",
+  "uploadUrl": "https://<artifacts-bucket>.s3.amazonaws.com/tours/TOT-2026/uploads/hotel-allocation/UPL-418273645501.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256&...",
+  "s3Key": "tours/TOT-2026/uploads/hotel-allocation/UPL-418273645501.csv",
+  "expiresIn": 900
+}
+```
+
+##### Get Hotel Allocation Upload Status
+
+```http
+GET /v1/tours/TOT-2026/hotelstays/uploads/UPL-418273645501
+```
+
+Response `200 OK`. The API currently sets only `PENDING`. `VALIDATING`, `REJECTED`, and `APPLIED` are reserved for the CSV processor, which is not implemented yet. Per D21, `APPLIED` will only occur when `errorCount=0` for the whole file (no partial apply):
+```json
+{
+  "uploadId": "UPL-418273645501",
+  "status": "PENDING",
+  "rowCount": 0,
+  "errorCount": 0,
+  "errors": [],
+  "appliedCount": 0,
+  "processedAt": null
+}
+```
+
+#### Users Examples
+
+##### Get Current User
+
+```http
+GET /v1/users/me
+```
+
+Response `200 OK`. Values are taken from the JWT claims, and `emailVerified` is normalized to a boolean:
+```json
+{
+  "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "email": "admin@example.com",
+  "username": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "emailVerified": true,
+  "groups": ["ADMINISTRATOR"]
+}
+```
+
+##### List Cognito Users
+
+```http
+GET /v1/users/cognito
+```
+
+Response `200 OK`:
+```json
+{
+  "users": [
+    { "sub": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "Asha Kumar" },
+    { "sub": "5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f", "name": "Ravi Shankar" },
+    { "sub": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d", "name": "Meena Iyer" }
+  ],
+  "count": 3
+}
+```
+
+##### List Tour Users
+
+```http
+GET /v1/tours/TOT-2026/users?role=HOTEL_STAFF
+```
+
+Response `200 OK`:
+```json
+{
+  "users": [
+    {
+      "userId": "5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f",
+      "username": "5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f",
+      "email": "ravi.hotel@example.com",
+      "name": "Ravi Shankar",
+      "role": "HOTEL_STAFF",
+      "status": "ACTIVE",
+      "hotelId": "HTL-MDU-01",
+      "eventAssignments": [
+        { "eventId": "EVT-BAGLOAD", "dates": "ALL" }
+      ],
+      "assignedActivityIds": ["ACT-003"],
+      "createdAt": "2026-02-01T09:00:00Z",
+      "createdBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "updatedAt": "2026-02-02T09:00:00Z",
+      "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+    }
+  ],
+  "count": 1,
+  "tourId": "TOT-2026"
+}
+```
+
+##### Get Current Tour User
+
+Called by Ravi Shankar:
+
+```http
+GET /v1/tours/TOT-2026/users/me
+```
+
+Response `200 OK`: the caller's `User-TOT-2026` record, the same as the item in [List Tour Users](#list-tour-users). Returns `404 USER_NOT_FOUND` when the caller has no record in the tour.
+
+##### Create Tour User
+
+```http
+POST /v1/tours/TOT-2026/users
+```
+```json
+{
+  "userId": "5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f",
+  "role": "HOTEL_STAFF",
+  "hotelId": "HTL-MDU-01",
+  "eventAssignments": [
+    { "eventId": "EVT-BAGLOAD", "dates": ["2026-02-12", "2026-02-13"] }
+  ],
+  "assignedActivityIds": ["ACT-003"]
+}
+```
+
+Response `201 Created`. `username`, `email`, and `name` are copied from Cognito. Optional fields that weren't supplied are stored as `null`:
+```json
+{
+  "userId": "5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f",
+  "username": "5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f",
+  "email": "ravi.hotel@example.com",
+  "name": "Ravi Shankar",
+  "role": "HOTEL_STAFF",
+  "status": "ACTIVE",
+  "assignedStage": null,
+  "hotelId": "HTL-MDU-01",
+  "eventAssignments": [
+    { "eventId": "EVT-BAGLOAD", "dates": ["2026-02-12", "2026-02-13"] }
+  ],
+  "assignedActivityIds": ["ACT-003"],
+  "createdAt": "2026-02-01T09:00:00Z",
+  "createdBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "updatedAt": "2026-02-01T09:00:00Z",
+  "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
+
+##### Update Tour User
+
+Only the supplied fields change. Sending a field as `null` removes it.
+
+```http
+PUT /v1/tours/TOT-2026/users/5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f
+```
+```json
+{
+  "assignedStage": null,
+  "eventAssignments": [
+    { "eventId": "EVT-BAGLOAD", "dates": "ALL" }
+  ]
+}
+```
+
+Response `200 OK`: the full updated record, the same as the item in [List Tour Users](#list-tour-users).
+
+#### Admin User Management Examples
+
+##### List Role Groups
+
+```http
+GET /v1/admin/usermgmt/roles
+```
+
+Response `200 OK`:
+```json
+{
+  "groups": ["ADMINISTRATOR", "GUEST", "HOTEL_STAFF", "PS_1_USER", "PS_2_USER", "SUPER_USER"]
+}
+```
+
+##### List Managed Users
+
+```http
+GET /v1/admin/usermgmt/users?enabled=true&limit=2
+```
+
+Response `200 OK`. Pass `nextToken` back to get the next page (`null` on the last page):
+```json
+{
+  "users": [
+    {
+      "cognitoUserId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "username": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "email": "admin@example.com",
+      "phoneNumber": "+919800000001",
+      "name": "Asha Kumar",
+      "enabled": true,
+      "status": "CONFIRMED",
+      "roles": ["ADMINISTRATOR"]
+    },
+    {
+      "cognitoUserId": "5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f",
+      "username": "5d2f8b3e-1c4a-4e6b-9f7d-2a3b4c5d6e7f",
+      "email": "ravi.hotel@example.com",
+      "phoneNumber": null,
+      "name": "Ravi Shankar",
+      "enabled": true,
+      "status": "CONFIRMED",
+      "roles": ["HOTEL_STAFF"]
+    }
+  ],
+  "nextToken": "CAISqAIIARKBAggDEvwB..."
+}
+```
+
+##### Create Managed User
+
+```http
+POST /v1/admin/usermgmt/users
+```
+```json
+{
+  "email": "meena.ps1@example.com",
+  "phoneNumber": "+919876543210",
+  "name": "Meena Iyer",
+  "roles": ["PS_1_USER"]
+}
+```
+
+Response `201 Created`:
+```json
+{
+  "cognitoUserId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "username": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+}
+```
+
+##### Enable Managed User
+
+```http
+POST /v1/admin/usermgmt/users/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d/enable
+```
+
+Response `200 OK`:
+```json
+{
+  "cognitoUserId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "enabled": true
+}
+```
+
+##### Disable Managed User
+
+```http
+POST /v1/admin/usermgmt/users/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d/disable
+```
+
+Response `200 OK`:
+```json
+{
+  "cognitoUserId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "enabled": false
+}
+```
+
+##### Delete Managed User
+
+```http
+DELETE /v1/admin/usermgmt/users/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+```
+
+Response `200 OK`:
+```json
+{
+  "cognitoUserId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "deleted": true
+}
+```
+
+##### Update Managed User
+
+`roles` replaces the full role set. An empty `phoneNumber` or `name` clears that attribute.
+
+```http
+PUT /v1/admin/usermgmt/users/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+```
+```json
+{
+  "name": "Meena Iyer",
+  "roles": ["PS_1_USER", "PS_2_USER"]
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "cognitoUserId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+}
+```
+
+#### Notifications Examples
+
+##### List Notifications
+
+```http
+GET /v1/tours/TOT-2026/notifications?riderId=R57
+```
+
+Response `200 OK` (newest first). With `riderId`, the list has broadcasts plus that rider's personal notifications; without it, only broadcasts:
+```json
+{
+  "notifications": [
+    {
+      "notificationId": "b3e1c2d4-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+      "type": "TOUR_ANNOUNCEMENT",
+      "title": "Route Change",
+      "message": "Tomorrow's ride route has been updated due to road construction.",
+      "createdBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "readBy": ["3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f"],
+      "createdAt": "2026-02-10T16:00:00Z",
+      "targetRiderId": "R57",
+      "expiresAt": "2026-02-20T00:00:00Z"
+    },
+    {
+      "notificationId": "e7a9c1b3-2d4f-4e6a-8b0c-1d2e3f4a5b6c",
+      "type": "TOUR_ANNOUNCEMENT",
+      "title": "Welcome to Tour of Tamilnadu 2026",
+      "message": "Rider briefing at 18:00 in the hotel lobby.",
+      "createdBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "readBy": [],
+      "createdAt": "2026-02-09T18:30:00Z"
+    }
+  ],
+  "count": 2,
+  "tourId": "TOT-2026"
+}
+```
+
+##### Create Notification
+
+```http
+POST /v1/tours/TOT-2026/notifications
+```
 ```json
 {
   "type": "TOUR_ANNOUNCEMENT",
@@ -489,100 +2762,37 @@ Example conflict response when `profileId` already exists (`409`):
 }
 ```
 
-## Event Engine & Hotel Response Shapes
-
-Response shapes for the event engine and hotel endpoints introduced alongside `docs/cycling-tour-events-design.md`, verified against the implementation.
-
-#### GET .../occurrences/{occurrenceId}/dashboard
+Response `201 Created`:
 ```json
 {
-  "success": true,
-  "data": {
-    "occurrence": { "eventId": "EVT-BAGLOAD", "dateSeq": "2026-02-12#1", "status": "ACTIVE" },
-    "riders": [
-      { "riderId": "R57", "activities": [ { "activityId": "ACT-001", "status": "PENDING" } ] }
-    ],
-    "cancelled": [ ]
-  },
-  "timestamp": "2026-02-12T05:42:15Z"
+  "notificationId": "b3e1c2d4-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+  "type": "TOUR_ANNOUNCEMENT",
+  "title": "Route Change",
+  "message": "Tomorrow's ride route has been updated due to road construction.",
+  "createdBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "readBy": [],
+  "createdAt": "2026-02-10T16:00:00Z",
+  "targetRiderId": "R57",
+  "expiresAt": "2026-02-20T00:00:00Z"
 }
 ```
 
-#### GET .../occurrences/{occurrenceId}/dashboard/progress
+##### Mark Notification Read
+
+```http
+PUT /v1/tours/TOT-2026/notifications/b3e1c2d4-5f6a-4b7c-8d9e-0f1a2b3c4d5e
+```
 ```json
 {
-  "success": true,
-  "data": {
-    "totalRiders": 100,
-    "completedCount": 42,
-    "outstandingMandatoryCount": 3,
-    "optedOutCount": 5,
-    "flaggedCount": 0
-  },
-  "timestamp": "2026-02-12T05:42:15Z"
+  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f"
 }
 ```
 
-#### GET /v1/tours/{tourId}/riders/{riderId}/events/progress
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      { "eventId": "EVT-BAGLOAD", "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "activityId": "ACT-003", "status": "COMPLETED" }
-    ]
-  },
-  "timestamp": "2026-02-12T05:42:15Z"
-}
-```
-Cancelled records are excluded. Optional `eventId` query param filters the list.
+Response `200 OK`: the notification with `profileId` added to `readBy` (idempotent), the same as the first item in [List Notifications](#list-notifications).
 
-#### GET .../occurrences/{occurrenceId}/reconciliation
-```json
-{
-  "success": true,
-  "data": {
-    "loadedCount": 98,
-    "unloadedCount": 96,
-    "missingRiderIds": ["R12", "R57"]
-  },
-  "timestamp": "2026-02-12T05:42:15Z"
-}
-```
-`400 NO_LINKED_OCCURRENCE` when the occurrence has no `linkedOccurrenceRef`.
+## Event Engine & Hotel Error Codes
 
-#### GET /v1/tours/{tourId}/events/bootstrap
-```json
-{
-  "success": true,
-  "data": {
-    "events": [ { "eventId": "EVT-REG", "activities": [ ] } ],
-    "activeOccurrences": [ { "eventId": "EVT-BAGLOAD", "dateSeq": "2026-02-12#1", "status": "ACTIVE" } ],
-    "riderBaggageStatus": [ { "riderId": "R57", "baggageStatus": "ACTIVE", "baggageReleasedAt": null } ],
-    "hotelStaysToday": [ { "stayDate": "2026-02-12", "riderId": "R57", "hotelId": "HTL-MDU-01", "roomNo": "204" } ]
-  },
-  "timestamp": "2026-02-12T05:42:15Z"
-}
-```
-Supports `If-None-Match` / `304 Not Modified`.
-
-#### GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}
-```json
-{
-  "success": true,
-  "data": {
-    "uploadId": "UPL-000042",
-    "status": "APPLIED",
-    "rowCount": 200,
-    "errorCount": 0,
-    "errors": [],
-    "appliedCount": 200,
-    "processedAt": "2026-02-01T10:05:00Z"
-  },
-  "timestamp": "2026-02-01T10:05:00Z"
-}
-```
-`status` is one of `PENDING`, `VALIDATING`, `REJECTED`, `APPLIED`; per D21, `APPLIED` only occurs when `errorCount=0` for the whole file (no partial apply).
+Request and response examples for the event engine and hotel endpoints (introduced alongside `docs/cycling-tour-events-design.md`) are in [Events Examples](#events-examples) and [Hotels Examples](#hotels-examples).
 
 #### New error codes
 
@@ -598,7 +2808,7 @@ In addition to the standard `400`/`401`/`403`/`404`/`409`/`500` statuses above, 
 | `SCAN_TYPE_NOT_ALLOWED` | 400 | Scanned `typeCode` not in the activity's effective `allowedTypeCodes` |
 | `DUPLICATE_ACTIVITY_RECORD` | 409 | Rider already has a non-cancelled record for this activity+occurrence |
 | `PREREQUISITE_NOT_MET` | 409 | Sequence/prerequisite activity not yet completed |
-| `OCCURRENCE_NOT_ACTIVE` | 409 | Scan against a non-`ACTIVE` occurrence outside the late-sync grace window |
+| `OCCURRENCE_NOT_ACTIVE` | 409 | Scan against an occurrence whose status is not `ACTIVE` |
 | `BAGGAGE_NOT_IN_TOUR` | 409 | Rider's `baggageStatus=WITH_RIDER`, scan rejected |
 | `RIDER_NOT_ASSIGNED` / `HOTEL_MISMATCH` | 403 / 403 | Second-layer authorisation failures (`eventAssignments`, hotel match) |
 | `HOTEL_NOT_FOUND` / `HOTEL_ALREADY_EXISTS` | 404 / 409 | Hotel lookup/create conflict |

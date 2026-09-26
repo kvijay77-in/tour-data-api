@@ -307,7 +307,7 @@ Both endpoints support optional query parameters:
 | appliedOn | String | ISO 8601 timestamp when rider applied |
 | confirmedOn | String | ISO 8601 timestamp when rider was confirmed |
 | tourFeePaidOn | String | ISO 8601 timestamp when tour fee payment was confirmed |
-| registredOn | String | Registration completion timestamp (current field spelling retained for compatibility) |
+| registeredOn | String | Registration completion timestamp |
 | riderId | String | Tour rider ID when allocated |
 | status | String | Participation status (for example `APPLIED`, `CONFIRMED`, `REGISTERED`) |
 | updatedAt | String | ISO 8601 timestamp |

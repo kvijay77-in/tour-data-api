@@ -12,7 +12,7 @@ This page provides a guide to all project documentation.
 | [Development Guide](development-guide.md) | Environment setup, deploy to dev, local testing, unit tests, code quality, troubleshooting |
 | [Deployment Guide](deployment-guide.md) | CI/CD via GitHub Actions, multi-environment deployment (dev/test/prod), AWS resources reference |
 | [Infrastructure Guide](infrastructure-guide.md) | Resource tagging strategy, CloudWatch monitoring, cost estimation, project statistics |
-| [API Guide](api-guide.md) | API endpoints, mandatory attributes, validation rules, status codes, and authorization matrix |
+| [API Guide](api-guide.md) | API endpoints, mandatory attributes, validation rules, request/response examples for every endpoint, status codes, and authorization matrix |
 | [Requirements](Requirements.md) | Detailed functional and non-functional requirements, use cases, and business rules |
 | [Solution Design](SolutionDesign.md) | Architecture documentation, data model specifications, and technical design |
 | [Tour Artifacts Design](tour-artifacts-handling-design.md) | Tour and ride artifact management design — S3 storage, metadata model, read/write APIs |
