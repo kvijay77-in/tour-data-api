@@ -169,6 +169,14 @@ class EventRecordOutcome(str, Enum):
     FLAGGED = "FLAGGED"
 
 
+class HotelUploadStatus(str, Enum):
+    """Hotel allocation CSV upload lifecycle states."""
+    PENDING = "PENDING"
+    VALIDATING = "VALIDATING"
+    REJECTED = "REJECTED"
+    APPLIED = "APPLIED"
+
+
 # ============================================================================
 # TOUR-SPECIFIC TABLE TYPES (for dynamic table name resolution)
 # ============================================================================

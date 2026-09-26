@@ -2482,6 +2482,103 @@ Resources:
             Path: /v1/tours/{tourId}/hotelstays/uploads/{uploadId}
             Method: GET
 
+  ProcessHotelUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: process_upload.lambda_handler
+      Description: Validate and apply an uploaded hotel allocation CSV (all-or-nothing)
+      Timeout: 120
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:ConditionCheckItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*/uploads/hotel-allocation/*'
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*/uploads/hotel-allocation/*.snapshot.json'
+      Events:
+        HotelCsvUploaded:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - aws.s3
+              detail-type:
+                - Object Created
+              detail:
+                bucket:
+                  name:
+                    - !Ref ArtifactsBucket
+                object:
+                  key:
+                    - wildcard: 'tours/*/uploads/hotel-allocation/*.csv'
+      # Failures are recorded on the upload status by the processor or its OnFailure handler.
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
+        DestinationConfig:
+          OnFailure:
+            Type: Lambda
+            Destination: !GetAtt ProcessHotelUploadFailureFunction.Arn
+
+  ProcessHotelUploadFailureFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: process_upload_failure.lambda_handler
+      Description: Record hotel upload processor timeouts/crashes and roll back a started apply
+      Timeout: 120
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*/uploads/hotel-allocation/*.snapshot.json'
+
   # ============================================================================
   # LAMBDA FUNCTIONS - USERS
   # ============================================================================
@@ -3164,6 +3261,9 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: !If [IsProd, Enabled, Suspended]
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
       LifecycleConfiguration:
         Rules:
           - Id: DeleteOldVersions

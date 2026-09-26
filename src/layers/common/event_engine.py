@@ -8,8 +8,11 @@ import json
 import os
 import re
 import uuid
+from datetime import date as calendar_date, timedelta
+from decimal import Decimal
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import unquote_plus
 
 import boto3
 from botocore.exceptions import ClientError
@@ -17,6 +20,7 @@ from botocore.exceptions import ClientError
 from dynamodb_utils import (
     get_item,
     get_tour_item,
+    get_tour_table,
     put_tour_item,
     query_items,
     query_tour_items,
@@ -36,6 +40,7 @@ from models import (
     EventRecordOutcome,
     EventType,
     Hotel,
+    HotelUploadStatus,
     RoomAllocation,
     TourRiderStatus,
     UserRole,
@@ -71,8 +76,10 @@ from validation import (
     validate_upload_id,
     validate_variant_options,
 )
+from logger import get_logger
 
 
+logger = get_logger(__name__)
 s3_client = boto3.client("s3")
 cognito_client = boto3.client("cognito-idp")
 
@@ -1320,13 +1327,14 @@ def presign_hotel_upload(event: Dict[str, Any]) -> Dict[str, Any]:
             "hotelId": f"UPLOAD#{upload_id}",
             "entityType": "UPLOAD_STATUS",
             "uploadId": upload_id,
-            "status": "PENDING",
+            "status": HotelUploadStatus.PENDING.value,
             "rowCount": 0,
             "errorCount": 0,
             "errors": [],
             "appliedCount": 0,
             "processedAt": None,
             "s3Key": s3_key,
+            "createdBy": get_claim(event, "sub") or None,
             "createdAt": now,
             "updatedAt": now,
         }
@@ -1382,6 +1390,727 @@ def get_hotel_upload_status(event: Dict[str, Any]) -> Dict[str, Any]:
             "processedAt": item.get("processedAt"),
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# Hotel allocation CSV processor (S3 -> EventBridge -> Lambda), §8.22a/§8.22b
+# ---------------------------------------------------------------------------
+
+HOTEL_UPLOAD_KEY_PATTERN = re.compile(
+    r"^tours/(?P<tourId>[a-zA-Z0-9][a-zA-Z0-9_.\-]{2,49})/uploads/hotel-allocation/(?P<uploadId>UPL-\d{6,12})\.csv$"
+)
+HOTEL_UPLOAD_CONFIG_DEFAULTS: Dict[str, int] = {
+    "maxFileSizeBytes": 1048576,
+    "maxDataRows": 500,
+    "maxStayDates": 31,
+    "maxStoredErrors": 200,
+    "timeReserveSeconds": 20,
+}
+HOTEL_UPLOAD_COLUMNS = {
+    "riderid": "riderId",
+    "hotelid": "hotelId",
+    "roomno": "roomNo",
+    "roomcapacity": "roomCapacity",
+    "sharingwith": "sharingWith",
+}
+HOTEL_UPLOAD_DIRECTIVES = {
+    "staydates": "stayDates",
+    "startdate": "startDate",
+    "nights": "nights",
+    "hotelid": "hotelId",
+}
+HOTEL_UPLOAD_DIRECTIVE_PATTERN = re.compile(r"^#\s*([A-Za-z]+)\s*=\s*(.*)$")
+ROOM_NO_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/\-]{0,9}$")
+TRANSACT_MAX_ITEMS = 100
+INELIGIBLE_RIDER_STATUSES = {TourRiderStatus.WITHDRAWN.value, TourRiderStatus.EXITED.value}
+FILE_LEVEL_ROW = 0
+NOTHING_CHANGED = "No allocations were changed"
+
+
+class HotelUploadDeadline(Exception):
+    """Remaining Lambda time dropped below the configured reserve."""
+
+
+class HotelUploadRejected(Exception):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def _upload_error(row: int, code: str, message: str) -> Dict[str, Any]:
+    return {"row": row, "code": code, "message": message}
+
+
+def _clip(value: Any, limit: int = 40) -> str:
+    text = str(value)
+    return text if len(text) <= limit else f"{text[:limit]}..."
+
+
+def _passes(validator, value: Any) -> bool:
+    try:
+        validator(value)
+    except (ValidationError, TypeError):
+        return False
+    return True
+
+
+def _get_hotel_upload_config() -> Dict[str, int]:
+    config = dict(HOTEL_UPLOAD_CONFIG_DEFAULTS)
+    try:
+        item = get_item("APP_CONFIG_TABLE", {"configType": "HOTEL_UPLOAD", "configId": "PROCESSING"})
+    except (ClientError, ValueError):
+        logger.warning("HOTEL_UPLOAD/PROCESSING config unreadable; using defaults", exc_info=True)
+        return config
+    if not item or item.get("enabled") is not True:
+        logger.warning("HOTEL_UPLOAD/PROCESSING config missing or disabled; using defaults")
+        return config
+    overrides = item.get("config") or {}
+    for name in HOTEL_UPLOAD_CONFIG_DEFAULTS:
+        if name not in overrides:
+            continue
+        try:
+            value = int(overrides[name])
+        except (TypeError, ValueError):
+            value = 0
+        if value > 0:
+            config[name] = value
+        else:
+            logger.warning("Invalid HOTEL_UPLOAD config %s=%r; using default", name, overrides[name])
+    return config
+
+
+def _ensure_time_remaining(context: Any, reserve_seconds: int) -> None:
+    if context is not None and context.get_remaining_time_in_millis() < reserve_seconds * 1000:
+        raise HotelUploadDeadline()
+
+
+def _parse_hotel_upload_key(bucket: Optional[str], key: Optional[str]) -> Optional[Tuple[str, str, str]]:
+    if not bucket or not key or bucket != os.environ.get("ARTIFACTS_BUCKET"):
+        return None
+    object_key = unquote_plus(key)
+    match = HOTEL_UPLOAD_KEY_PATTERN.fullmatch(object_key)
+    if not match:
+        return None
+    return match.group("tourId"), match.group("uploadId"), object_key
+
+
+def _hotel_upload_snapshot_key(tour_id: str, upload_id: str) -> str:
+    return f"tours/{tour_id}/uploads/hotel-allocation/{upload_id}.snapshot.json"
+
+
+def _update_upload_status(tour_id: str, upload_id: str, fields: Dict[str, Any], expected_status: str) -> bool:
+    """Conditionally SET fields on the upload status record; False if the status no longer matches."""
+    names = {"#status": "status"}
+    values: Dict[str, Any] = {":expected": expected_status}
+    assignments = []
+    for index, (name, value) in enumerate(fields.items()):
+        names[f"#f{index}"] = name
+        values[f":v{index}"] = value
+        assignments.append(f"#f{index} = :v{index}")
+    try:
+        get_tour_table("Hotel", tour_id).update_item(
+            Key={"hotelId": f"UPLOAD#{upload_id}"},
+            UpdateExpression="SET " + ", ".join(assignments),
+            ConditionExpression="#status = :expected",
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return False
+        raise
+    return True
+
+
+def _reject_upload(
+    tour_id: str,
+    upload_id: str,
+    errors: List[Dict[str, Any]],
+    max_stored_errors: int,
+    row_count: Optional[int] = None,
+) -> Dict[str, Any]:
+    unique: List[Dict[str, Any]] = []
+    seen = set()
+    for error in sorted(errors, key=lambda entry: entry["row"]):
+        marker = (error["row"], error["code"], error["message"])
+        if marker not in seen:
+            seen.add(marker)
+            unique.append(error)
+    now = utc_now_iso()
+    fields: Dict[str, Any] = {
+        "status": HotelUploadStatus.REJECTED.value,
+        "errorCount": len(unique),
+        "errors": unique[:max_stored_errors],
+        "appliedCount": 0,
+        "processedAt": now,
+        "updatedAt": now,
+    }
+    if row_count is not None:
+        fields["rowCount"] = row_count
+    _update_upload_status(tour_id, upload_id, fields, HotelUploadStatus.VALIDATING.value)
+    logger.info("Hotel upload %s/%s rejected with %d error(s)", tour_id, upload_id, len(unique))
+    return {"status": HotelUploadStatus.REJECTED.value, "tourId": tour_id, "uploadId": upload_id}
+
+
+def _read_hotel_upload_file(bucket: str, key: str, max_bytes: int) -> Tuple[str, List[Dict[str, Any]]]:
+    obj = s3_client.get_object(Bucket=bucket, Key=key)
+    size = int(obj.get("ContentLength", 0))
+    if size > max_bytes:
+        obj["Body"].close()
+        return "", [_upload_error(FILE_LEVEL_ROW, "FILE_TOO_LARGE", f"File is {size} bytes; the maximum is {max_bytes} bytes.")]
+    try:
+        return obj["Body"].read().decode("utf-8-sig"), []
+    except UnicodeDecodeError:
+        return "", [_upload_error(FILE_LEVEL_ROW, "INVALID_ENCODING", "File must be a UTF-8 encoded CSV.")]
+
+
+def _parse_hotel_upload_header(cells: List[str], line_no: int) -> Tuple[List[str], List[Dict[str, Any]]]:
+    columns: List[str] = []
+    errors: List[Dict[str, Any]] = []
+    for cell in cells:
+        canonical = HOTEL_UPLOAD_COLUMNS.get(cell.lower())
+        if not canonical:
+            errors.append(_upload_error(line_no, "INVALID_HEADER", f"Unknown column '{_clip(cell)}'."))
+        elif canonical in columns:
+            errors.append(_upload_error(line_no, "INVALID_HEADER", f"Duplicate column '{canonical}'."))
+        else:
+            columns.append(canonical)
+    for required in ("riderId", "roomNo"):
+        if required not in columns:
+            errors.append(_upload_error(line_no, "INVALID_HEADER", f"Missing required column '{required}'."))
+    return columns, errors
+
+
+def _parse_hotel_upload_csv(
+    text: str,
+) -> Tuple[Dict[str, Tuple[int, str]], List[str], List[Tuple[int, List[str]]], List[Dict[str, Any]]]:
+    """Split the file into directives, header columns and data rows, keeping physical line numbers."""
+    directives: Dict[str, Tuple[int, str]] = {}
+    columns: Optional[List[str]] = None
+    rows: List[Tuple[int, List[str]]] = []
+    errors: List[Dict[str, Any]] = []
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            match = HOTEL_UPLOAD_DIRECTIVE_PATTERN.match(stripped) if columns is None else None
+            if match and match.group(1).lower() in HOTEL_UPLOAD_DIRECTIVES:
+                directives[HOTEL_UPLOAD_DIRECTIVES[match.group(1).lower()]] = (line_no, match.group(2).strip())
+            continue
+        try:
+            cells = [cell.strip() for cell in next(csv.reader([line]))]
+        except csv.Error:
+            errors.append(_upload_error(line_no, "MALFORMED_ROW", "Row could not be parsed as CSV."))
+            continue
+        if columns is None:
+            columns, header_errors = _parse_hotel_upload_header(cells, line_no)
+            if header_errors:
+                errors.extend(header_errors)
+                return directives, columns, rows, errors
+            continue
+        rows.append((line_no, cells))
+    if columns is None:
+        errors.append(_upload_error(FILE_LEVEL_ROW, "INVALID_HEADER", "Header row is missing."))
+    return directives, columns or [], rows, errors
+
+
+def _resolve_stay_dates(
+    directives: Dict[str, Tuple[int, str]], max_stay_dates: int
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    stay_dates = directives.get("stayDates")
+    start_date = directives.get("startDate")
+    nights = directives.get("nights")
+    errors: List[Dict[str, Any]] = []
+    dates: List[str] = []
+    if stay_dates and (start_date or nights):
+        return [], [_upload_error(stay_dates[0], "INVALID_STAY_DATES", "Use either stayDates or startDate with nights, not both.")]
+    if stay_dates:
+        line_no, value = stay_dates
+        for raw in value.split(","):
+            stay_date = raw.strip()
+            if not stay_date:
+                continue
+            if not _passes(validate_iso_date, stay_date):
+                errors.append(_upload_error(line_no, "INVALID_STAY_DATES", f"Invalid stay date '{_clip(stay_date)}'. Expected YYYY-MM-DD."))
+            elif stay_date not in dates:
+                dates.append(stay_date)
+    elif start_date or nights:
+        if not (start_date and nights):
+            line_no = (start_date or nights)[0]
+            return [], [_upload_error(line_no, "INVALID_STAY_DATES", "startDate and nights must be provided together.")]
+        if not _passes(validate_iso_date, start_date[1]):
+            errors.append(_upload_error(start_date[0], "INVALID_STAY_DATES", f"Invalid startDate '{_clip(start_date[1])}'. Expected YYYY-MM-DD."))
+        if not nights[1].isdigit() or int(nights[1]) < 1:
+            errors.append(_upload_error(nights[0], "INVALID_STAY_DATES", "nights must be a positive whole number."))
+        if not errors:
+            first = calendar_date.fromisoformat(start_date[1])
+            count = min(int(nights[1]), max_stay_dates + 1)
+            dates = [(first + timedelta(days=offset)).isoformat() for offset in range(count)]
+    else:
+        return [], [_upload_error(
+            FILE_LEVEL_ROW,
+            "MISSING_STAY_DATES",
+            "Add '# stayDates=YYYY-MM-DD,...' or '# startDate=YYYY-MM-DD' with '# nights=N' before the header row.",
+        )]
+    if not errors and not dates:
+        errors.append(_upload_error((stay_dates or (FILE_LEVEL_ROW,))[0], "MISSING_STAY_DATES", "stayDates does not contain any dates."))
+    if len(dates) > max_stay_dates:
+        errors.append(_upload_error(FILE_LEVEL_ROW, "TOO_MANY_STAY_DATES", f"A file can cover at most {max_stay_dates} stay dates."))
+    return sorted(dates), errors
+
+
+def _validate_hotel_upload_rows(
+    rows: List[Tuple[int, List[str]]],
+    columns: List[str],
+    directives: Dict[str, Tuple[int, str]],
+    riders: Dict[str, Dict[str, Any]],
+    hotel_ids: set,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Phase 1: per-row structural and reference checks; every failing row is reported."""
+    errors: List[Dict[str, Any]] = []
+    records: List[Dict[str, Any]] = []
+    default_hotel = None
+    if "hotelId" in directives:
+        line_no, default_hotel = directives["hotelId"]
+        if not _passes(validate_hotel_id, default_hotel):
+            errors.append(_upload_error(line_no, "INVALID_HOTEL_ID", f"Invalid default hotelId '{_clip(default_hotel)}'."))
+        elif default_hotel not in hotel_ids:
+            errors.append(_upload_error(line_no, "UNKNOWN_HOTEL_ID", f"Default hotel {default_hotel} does not exist in this tour."))
+
+    for line_no, cells in rows:
+        if len(cells) > len(columns):
+            errors.append(_upload_error(line_no, "MALFORMED_ROW", f"Row has {len(cells)} values but the header has {len(columns)} columns."))
+            continue
+        values = dict(zip(columns, cells + [""] * (len(columns) - len(cells))))
+
+        rider_id = values.get("riderId", "")
+        if not rider_id:
+            errors.append(_upload_error(line_no, "MISSING_RIDER_ID", "riderId is required."))
+        elif not _passes(validate_rider_id, rider_id):
+            errors.append(_upload_error(line_no, "INVALID_RIDER_ID", f"Invalid riderId '{_clip(rider_id)}'."))
+        elif rider_id not in riders:
+            errors.append(_upload_error(line_no, "UNKNOWN_RIDER_ID", f"Rider {rider_id} is not registered for this tour."))
+        elif riders[rider_id].get("status") in INELIGIBLE_RIDER_STATUSES:
+            errors.append(_upload_error(line_no, "RIDER_NOT_ELIGIBLE", f"Rider {rider_id} is {riders[rider_id].get('status')} and cannot be allocated."))
+
+        row_hotel = values.get("hotelId", "")
+        hotel_id = row_hotel or default_hotel
+        if not hotel_id:
+            errors.append(_upload_error(line_no, "MISSING_HOTEL_ID", "hotelId is required when no default '# hotelId=' is set."))
+        elif row_hotel and not _passes(validate_hotel_id, row_hotel):
+            errors.append(_upload_error(line_no, "INVALID_HOTEL_ID", f"Invalid hotelId '{_clip(row_hotel)}'."))
+        elif row_hotel and row_hotel not in hotel_ids:
+            errors.append(_upload_error(line_no, "UNKNOWN_HOTEL_ID", f"Hotel {row_hotel} does not exist in this tour."))
+
+        room_no = values.get("roomNo", "")
+        if not room_no:
+            errors.append(_upload_error(line_no, "MISSING_ROOM_NO", "roomNo is required."))
+        elif not ROOM_NO_PATTERN.match(room_no):
+            errors.append(_upload_error(line_no, "INVALID_ROOM_NO", f"Invalid roomNo '{_clip(room_no)}'."))
+
+        raw_capacity = values.get("roomCapacity", "")
+        capacity = int(raw_capacity) if raw_capacity.isdigit() else (2 if not raw_capacity else None)
+        if capacity not in (2, 3):
+            errors.append(_upload_error(line_no, "INVALID_ROOM_CAPACITY", "roomCapacity must be 2 or 3."))
+            capacity = None
+
+        sharing_with = [rider.strip() for rider in values.get("sharingWith", "").split(";") if rider.strip()]
+        invalid_mates = [mate for mate in sharing_with if not _passes(validate_rider_id, mate)]
+        if invalid_mates:
+            errors.append(_upload_error(line_no, "INVALID_SHARING_WITH", f"Invalid rider ID(s) in sharingWith: {_clip(', '.join(invalid_mates))}."))
+        elif rider_id in sharing_with:
+            errors.append(_upload_error(line_no, "INVALID_SHARING_WITH", "A rider cannot share a room with themselves."))
+        elif len(set(sharing_with)) != len(sharing_with):
+            errors.append(_upload_error(line_no, "INVALID_SHARING_WITH", "sharingWith contains duplicate rider IDs."))
+        elif capacity and len(sharing_with) > capacity - 1:
+            errors.append(_upload_error(line_no, "ROOM_CAPACITY_EXCEEDED", f"A room of capacity {capacity} can have at most {capacity - 1} room-mate(s)."))
+
+        records.append({
+            "row": line_no,
+            "riderId": rider_id,
+            "hotelId": hotel_id,
+            "roomNo": room_no,
+            "roomCapacity": capacity,
+            "sharingWith": sharing_with,
+        })
+    return records, errors
+
+
+def _check_hotel_upload_room_rules(
+    stay_date: str, merged: Dict[str, Dict[str, Any]], file_rows: Dict[str, int]
+) -> List[Dict[str, Any]]:
+    """Reciprocity, consistency, clash and capacity rules (§5.4) over file rows merged with existing data."""
+    errors: List[Dict[str, Any]] = []
+    rooms: Dict[Tuple[Any, Any], List[str]] = {}
+    for rider_id, allocation in merged.items():
+        rooms.setdefault((allocation.get("hotelId"), allocation.get("roomNo")), []).append(rider_id)
+
+    def same_room(first: Dict[str, Any], second: Dict[str, Any]) -> bool:
+        return (
+            first.get("hotelId") == second.get("hotelId")
+            and first.get("roomNo") == second.get("roomNo")
+            and int(first.get("roomCapacity", 2)) == int(second.get("roomCapacity", 2))
+        )
+
+    for rider_id, row in file_rows.items():
+        allocation = merged[rider_id]
+        capacity = int(allocation["roomCapacity"])
+        where = f"room {allocation['roomNo']} at {allocation['hotelId']} on {stay_date}"
+        for mate in allocation["sharingWith"]:
+            mate_allocation = merged.get(mate)
+            if not mate_allocation:
+                errors.append(_upload_error(row, "NON_RECIPROCAL_SHARING", f"{mate} has no allocation on {stay_date}; add {mate} to {where}."))
+            elif not same_room(allocation, mate_allocation):
+                errors.append(_upload_error(
+                    row,
+                    "NON_RECIPROCAL_SHARING",
+                    f"{mate} is in room {mate_allocation.get('roomNo')} at {mate_allocation.get('hotelId')} "
+                    f"(capacity {int(mate_allocation.get('roomCapacity', 2))}) on {stay_date}, not {where} (capacity {capacity}).",
+                ))
+            elif rider_id not in (mate_allocation.get("sharingWith") or []):
+                errors.append(_upload_error(row, "NON_RECIPROCAL_SHARING", f"{mate} does not list {rider_id} in sharingWith on {stay_date}."))
+        occupants = rooms[(allocation["hotelId"], allocation["roomNo"])]
+        for other in occupants:
+            if other != rider_id and other not in allocation["sharingWith"]:
+                errors.append(_upload_error(row, "ROOM_CLASH", f"{where[0].upper()}{where[1:]} is also allocated to {other}."))
+        if len(occupants) > capacity:
+            errors.append(_upload_error(row, "ROOM_CAPACITY_EXCEEDED", f"{len(occupants)} riders are allocated to {where}; capacity is {capacity}."))
+
+    for rider_id, allocation in merged.items():
+        if rider_id in file_rows:
+            continue
+        for mate in allocation.get("sharingWith") or []:
+            if mate not in file_rows:
+                continue
+            mate_allocation = merged[mate]
+            if not same_room(allocation, mate_allocation) or rider_id not in mate_allocation["sharingWith"]:
+                errors.append(_upload_error(
+                    file_rows[mate],
+                    "NON_RECIPROCAL_SHARING",
+                    f"{rider_id} still lists {mate} as a room-mate in room {allocation.get('roomNo')} at "
+                    f"{allocation.get('hotelId')} on {stay_date}; include {rider_id} in the file or update that allocation first.",
+                ))
+    return errors
+
+
+def _validate_hotel_upload_batch(
+    tour_id: str, records: List[Dict[str, Any]], stay_dates: List[str], check_time
+) -> Tuple[Dict[Tuple[str, str], Dict[str, Any]], List[Dict[str, Any]]]:
+    """Phase 2: cross-row and existing-data checks; returns existing items keyed by (stayDate, riderId)."""
+    errors: List[Dict[str, Any]] = []
+    file_rows: Dict[str, int] = {}
+    for record in records:
+        first_row = file_rows.get(record["riderId"])
+        if first_row is not None:
+            errors.append(_upload_error(
+                record["row"],
+                "DUPLICATE_RIDER_FOR_DATE",
+                f"Rider {record['riderId']} already appears on row {first_row}; a rider can have one allocation per stay date.",
+            ))
+        else:
+            file_rows[record["riderId"]] = record["row"]
+    if errors:
+        return {}, errors
+
+    existing: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for stay_date in stay_dates:
+        check_time()
+        items = query_tour_items(
+            "RoomAllocation",
+            tour_id,
+            key_condition_expression="stayDate = :stayDate",
+            expression_values={":stayDate": stay_date},
+        )
+        merged: Dict[str, Dict[str, Any]] = {}
+        for item in items:
+            existing[(stay_date, item["riderId"])] = item
+            merged[item["riderId"]] = item
+        for record in records:
+            merged[record["riderId"]] = record
+        errors.extend(_check_hotel_upload_room_rules(stay_date, merged, file_rows))
+    return existing, errors
+
+
+def _build_hotel_upload_items(
+    records: List[Dict[str, Any]],
+    stay_dates: List[str],
+    existing: Dict[Tuple[str, str], Dict[str, Any]],
+    upload_id: str,
+    updated_by: Optional[str],
+) -> List[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]]:
+    now = utc_now_iso()
+    entries = []
+    for stay_date in stay_dates:
+        for record in records:
+            previous = existing.get((stay_date, record["riderId"]))
+            item = RoomAllocation(
+                stayDate=stay_date,
+                riderId=record["riderId"],
+                hotelId=record["hotelId"],
+                roomNo=record["roomNo"],
+                roomCapacity=record["roomCapacity"],
+                sharingWith=record["sharingWith"],
+                source="UPLOAD",
+                uploadId=upload_id,
+                createdAt=(previous or {}).get("createdAt", now),
+                updatedAt=now,
+                updatedBy=updated_by,
+            ).to_dict()
+            entries.append((item, previous))
+    return entries
+
+
+def _json_number(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    raise TypeError(f"Unsupported type {type(value).__name__}")
+
+
+def _write_hotel_upload_snapshot(
+    bucket: str, tour_id: str, upload_id: str, entries: List[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]]
+) -> None:
+    body = {
+        "tourId": tour_id,
+        "uploadId": upload_id,
+        "entries": [
+            {"key": {"stayDate": item["stayDate"], "riderId": item["riderId"]}, "previous": previous}
+            for item, previous in entries
+        ],
+    }
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=_hotel_upload_snapshot_key(tour_id, upload_id),
+        Body=json.dumps(body, default=_json_number).encode("utf-8"),
+        ContentType="application/json",
+    )
+
+
+def _read_hotel_upload_snapshot(
+    bucket: str, tour_id: str, upload_id: str
+) -> List[Tuple[Dict[str, str], Optional[Dict[str, Any]]]]:
+    obj = s3_client.get_object(Bucket=bucket, Key=_hotel_upload_snapshot_key(tour_id, upload_id))
+    body = json.loads(obj["Body"].read(), parse_float=Decimal)
+    return [(entry["key"], entry.get("previous")) for entry in body.get("entries", [])]
+
+
+def _rollback_hotel_upload(
+    tour_id: str, upload_id: str, entries: List[Tuple[Dict[str, str], Optional[Dict[str, Any]]]]
+) -> None:
+    """Restore pre-upload items; only touches items still owned by this upload."""
+    table = get_tour_table("RoomAllocation", tour_id)
+    owned = {"ConditionExpression": "uploadId = :uploadId", "ExpressionAttributeValues": {":uploadId": upload_id}}
+    for key, previous in entries:
+        try:
+            if previous:
+                table.put_item(Item=previous, **owned)
+            else:
+                table.delete_item(Key=key, **owned)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+    logger.info("Rolled back %d allocation(s) for hotel upload %s/%s", len(entries), tour_id, upload_id)
+
+
+def _put_condition(previous: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Optimistic check that the item is unchanged since validation read it."""
+    if previous is None:
+        return {"ConditionExpression": "attribute_not_exists(riderId)"}
+    if previous.get("updatedAt") is None:
+        return {"ConditionExpression": "attribute_exists(riderId) AND attribute_not_exists(updatedAt)"}
+    return {
+        "ConditionExpression": "updatedAt = :previousUpdatedAt",
+        "ExpressionAttributeValues": {":previousUpdatedAt": previous["updatedAt"]},
+    }
+
+
+def _apply_hotel_upload(
+    tour_id: str,
+    upload_id: str,
+    entries: List[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]],
+    check_time,
+) -> None:
+    table = get_tour_table("RoomAllocation", tour_id)
+    committed: List[Tuple[Dict[str, str], Optional[Dict[str, Any]]]] = []
+    try:
+        for start in range(0, len(entries), TRANSACT_MAX_ITEMS):
+            check_time()
+            chunk = entries[start:start + TRANSACT_MAX_ITEMS]
+            table.meta.client.transact_write_items(
+                TransactItems=[
+                    {"Put": {"TableName": table.name, "Item": item, **_put_condition(previous)}}
+                    for item, previous in chunk
+                ]
+            )
+            committed.extend(
+                ({"stayDate": item["stayDate"], "riderId": item["riderId"]}, previous) for item, previous in chunk
+            )
+    except ClientError as exc:
+        _rollback_hotel_upload(tour_id, upload_id, committed)
+        reasons = exc.response.get("CancellationReasons") or []
+        if exc.response.get("Error", {}).get("Code") == "TransactionCanceledException" and any(
+            reason.get("Code") == "ConditionalCheckFailed" for reason in reasons
+        ):
+            raise HotelUploadRejected(
+                "CONCURRENT_MODIFICATION",
+                f"Room allocations changed while this file was being processed. {NOTHING_CHANGED}; re-upload the file.",
+            ) from exc
+        raise
+    except Exception:
+        _rollback_hotel_upload(tour_id, upload_id, committed)
+        raise
+
+
+def process_hotel_upload(bucket: Optional[str], key: Optional[str], context: Any = None) -> Dict[str, Any]:
+    """Validate an uploaded hotel allocation CSV in full, then apply it all-or-nothing (D21)."""
+    target = _parse_hotel_upload_key(bucket, key)
+    if not target:
+        logger.warning("Ignoring object outside hotel upload scope: %s/%s", bucket, key)
+        return {"status": "IGNORED"}
+    tour_id, upload_id, object_key = target
+
+    started = utc_now_iso()
+    claimed = _update_upload_status(
+        tour_id,
+        upload_id,
+        {"status": HotelUploadStatus.VALIDATING.value, "processingStartedAt": started, "updatedAt": started},
+        HotelUploadStatus.PENDING.value,
+    )
+    if not claimed:
+        logger.info("Hotel upload %s/%s is not PENDING; skipping", tour_id, upload_id)
+        return {"status": "IGNORED", "tourId": tour_id, "uploadId": upload_id}
+
+    config = _get_hotel_upload_config()
+    max_errors = config["maxStoredErrors"]
+
+    def check_time() -> None:
+        _ensure_time_remaining(context, config["timeReserveSeconds"])
+
+    row_count: Optional[int] = None
+    try:
+        text, errors = _read_hotel_upload_file(bucket, object_key, config["maxFileSizeBytes"])
+        if errors:
+            return _reject_upload(tour_id, upload_id, errors, max_errors)
+        check_time()
+
+        directives, columns, rows, errors = _parse_hotel_upload_csv(text)
+        row_count = len(rows)
+        if not errors and not rows:
+            errors = [_upload_error(FILE_LEVEL_ROW, "EMPTY_FILE", "The file has no data rows.")]
+        if not errors and row_count > config["maxDataRows"]:
+            errors = [_upload_error(FILE_LEVEL_ROW, "TOO_MANY_ROWS", f"The file has {row_count} data rows; the maximum is {config['maxDataRows']}.")]
+        if errors:
+            return _reject_upload(tour_id, upload_id, errors, max_errors, row_count)
+
+        stay_dates, errors = _resolve_stay_dates(directives, config["maxStayDates"])
+        riders = {item["riderId"]: item for item in scan_tour_items("TourRider", tour_id)}
+        hotel_ids = {
+            item["hotelId"] for item in scan_tour_items("Hotel", tour_id) if str(item.get("hotelId", "")).startswith("HTL-")
+        }
+        records, row_errors = _validate_hotel_upload_rows(rows, columns, directives, riders, hotel_ids)
+        errors.extend(row_errors)
+        # Phase 2 only runs on a structurally clean file to avoid misleading cross-row errors.
+        if errors:
+            return _reject_upload(tour_id, upload_id, errors, max_errors, row_count)
+        check_time()
+
+        existing, errors = _validate_hotel_upload_batch(tour_id, records, stay_dates, check_time)
+        if errors:
+            return _reject_upload(tour_id, upload_id, errors, max_errors, row_count)
+        check_time()
+
+        status_item = get_tour_item("Hotel", tour_id, {"hotelId": f"UPLOAD#{upload_id}"}) or {}
+        entries = _build_hotel_upload_items(records, stay_dates, existing, upload_id, status_item.get("createdBy"))
+        _write_hotel_upload_snapshot(bucket, tour_id, upload_id, entries)
+        apply_started = utc_now_iso()
+        if not _update_upload_status(
+            tour_id,
+            upload_id,
+            {"applyStartedAt": apply_started, "updatedAt": apply_started},
+            HotelUploadStatus.VALIDATING.value,
+        ):
+            logger.warning("Hotel upload %s/%s left VALIDATING before apply; aborting", tour_id, upload_id)
+            return {"status": "IGNORED", "tourId": tour_id, "uploadId": upload_id}
+
+        _apply_hotel_upload(tour_id, upload_id, entries, check_time)
+        finished = utc_now_iso()
+        _update_upload_status(
+            tour_id,
+            upload_id,
+            {
+                "status": HotelUploadStatus.APPLIED.value,
+                "rowCount": row_count,
+                "errorCount": 0,
+                "errors": [],
+                "appliedCount": len(entries),
+                "processedAt": finished,
+                "updatedAt": finished,
+            },
+            HotelUploadStatus.VALIDATING.value,
+        )
+        logger.info("Hotel upload %s/%s applied %d allocation(s)", tour_id, upload_id, len(entries))
+        return {"status": HotelUploadStatus.APPLIED.value, "tourId": tour_id, "uploadId": upload_id}
+    except HotelUploadDeadline:
+        logger.warning("Hotel upload %s/%s stopped: time reserve reached", tour_id, upload_id)
+        error = _upload_error(
+            FILE_LEVEL_ROW,
+            "PROCESSING_TIMEOUT",
+            f"Processing did not finish in time. {NOTHING_CHANGED}; re-upload the file or split it into smaller files.",
+        )
+        return _reject_upload(tour_id, upload_id, [error], max_errors, row_count)
+    except HotelUploadRejected as exc:
+        return _reject_upload(tour_id, upload_id, [_upload_error(FILE_LEVEL_ROW, exc.code, exc.message)], max_errors, row_count)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.exception("Hotel upload %s/%s failed", tour_id, upload_id)
+        error = _upload_error(FILE_LEVEL_ROW, "PROCESSING_ERROR", f"The file could not be processed. {NOTHING_CHANGED}; re-upload the file.")
+        return _reject_upload(tour_id, upload_id, [error], max_errors, row_count)
+
+
+def handle_hotel_upload_failure(event: Dict[str, Any]) -> Dict[str, Any]:
+    """OnFailure destination for the processor: records hard timeouts/crashes and rolls back a started apply."""
+    detail = (event.get("requestPayload") or {}).get("detail") or {}
+    bucket = (detail.get("bucket") or {}).get("name")
+    target = _parse_hotel_upload_key(bucket, (detail.get("object") or {}).get("key"))
+    if not target:
+        logger.warning("Ignoring failure record outside hotel upload scope")
+        return {"status": "IGNORED"}
+    tour_id, upload_id, _ = target
+
+    status_item = get_tour_item("Hotel", tour_id, {"hotelId": f"UPLOAD#{upload_id}"})
+    if not status_item or status_item.get("status") != HotelUploadStatus.VALIDATING.value:
+        logger.info("Hotel upload %s/%s is not VALIDATING; nothing to recover", tour_id, upload_id)
+        return {"status": "IGNORED", "tourId": tour_id, "uploadId": upload_id}
+
+    response_payload = event.get("responsePayload") or {}
+    error_type = str(response_payload.get("errorType", ""))
+    error_message = str(response_payload.get("errorMessage", ""))
+    logger.error("Hotel upload %s/%s processor failed: %s %s", tour_id, upload_id, error_type, error_message)
+    timed_out = error_type == "Sandbox.Timedout" or "timed out" in error_message.lower()
+
+    rolled_back = True
+    if status_item.get("applyStartedAt"):
+        try:
+            _rollback_hotel_upload(tour_id, upload_id, _read_hotel_upload_snapshot(bucket, tour_id, upload_id))
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.exception("Rollback failed for hotel upload %s/%s", tour_id, upload_id)
+            rolled_back = False
+
+    if not rolled_back:
+        error = _upload_error(
+            FILE_LEVEL_ROW,
+            "PROCESSING_ERROR",
+            "Processing failed and some allocations may not have been restored. Contact an administrator before re-uploading.",
+        )
+    elif timed_out:
+        error = _upload_error(
+            FILE_LEVEL_ROW,
+            "PROCESSING_TIMEOUT",
+            f"Processing did not finish in time. {NOTHING_CHANGED}; re-upload the file or split it into smaller files.",
+        )
+    else:
+        error = _upload_error(FILE_LEVEL_ROW, "PROCESSING_ERROR", f"The file could not be processed. {NOTHING_CHANGED}; re-upload the file.")
+    return _reject_upload(tour_id, upload_id, [error], HOTEL_UPLOAD_CONFIG_DEFAULTS["maxStoredErrors"])
 
 
 def _validate_user_role(role: str) -> None:

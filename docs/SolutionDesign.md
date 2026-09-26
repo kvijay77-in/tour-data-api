@@ -234,7 +234,9 @@ Provisioning methods create the same tour-specific DynamoDB tables (TourRider, R
 
 **Notes:**
 - API readers consume enabled entries only.
-- Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`.
+- `GET /v1/config` returns any config type present in the table; no code change is needed to expose a new config type.
+- Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`, `HOTEL_UPLOAD`.
+- `HOTEL_UPLOAD` / `PROCESSING` holds limits for the hotel allocation CSV processor: `maxFileSizeBytes` (1048576), `maxDataRows` (500), `maxStayDates` (31), `maxStoredErrors` (200), and `timeReserveSeconds` (20; the processor stops, rolls back and records `PROCESSING_TIMEOUT` when less time than this is left). If the item is missing or disabled, or a value is invalid, the defaults shown are used. `seed_app_config.py` only inserts this item when it doesn't exist, so values tuned at runtime survive deploys. Clients are not expected to use it, but it is readable via `GET /v1/config`.
 
 ## Tour-Specific Table 6: Artifacts-{tourId}
 

@@ -68,7 +68,9 @@ tour-data-api/
 │   │   │   ├── get_hotel_stays_by_hotel.py # GET /v1/tours/{tourId}/hotels/{hotelId}/hotelstays?date={date}
 │   │   │   ├── update_hotel_stay.py   # PUT /v1/tours/{tourId}/hotelstays/{stayDate}/{riderId}
 │   │   │   ├── presign_upload.py      # POST /v1/tours/{tourId}/hotelstays/uploads/presign
-│   │   │   └── get_upload_status.py   # GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}
+│   │   │   ├── get_upload_status.py   # GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}
+│   │   │   ├── process_upload.py      # EventBridge (S3 Object Created) - hotel CSV validate + apply
+│   │   │   └── process_upload_failure.py # OnFailure destination of process_upload (timeout/crash recovery)
 │   │   ├── config/
 │   │   │   ├── __init__.py
 │   │   │   └── get_config.py          # GET /v1/config
@@ -155,6 +157,7 @@ tour-data-api/
 │   ├── test_rider_app_apis.py        # Rider-app API Lambda function tests
 │   ├── test_rider_exit_apis.py       # Rider exit + baggage lifecycle API tests
 │   ├── test_event_engine_apis.py     # Event engine, hotel, and tour-user API tests
+│   ├── test_hotel_upload_processor.py # Hotel allocation CSV processor + failure handler tests
 │   ├── test_tour_provisioning.py     # Tour provisioning utility tests
 │   ├── test_validation.py            # Validation utility tests
 │   └── fixtures/

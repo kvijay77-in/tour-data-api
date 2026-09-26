@@ -154,7 +154,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `GET /v1/config` | None | `configType` (optional) | None | `configType` supports `ALL`, `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`, or comma-separated combination of supported values (`ALL` cannot be combined); returns enabled items only; supports `If-None-Match` and `304 Not Modified`; invalid values return `400 INVALID_CONFIG_TYPE` |
+| `GET /v1/config` | None | `configType` (optional) | None | `configType` accepts `ALL` (default when omitted), any single config type (e.g. `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`, `HOTEL_UPLOAD`), or a comma-separated list of types; values are normalized to uppercase; returns enabled items only; `ALL` combined with other values returns `400 BAD_REQUEST`; returns `404 INVALID_CONFIG_TYPE` ("Missing or Invalid configType") when no enabled rows exist for the requested type(s); supports `If-None-Match` and `304 Not Modified` |
 
 #### Tours
 
@@ -2408,7 +2408,7 @@ Response `200 OK`: the stored allocation, the same as the `R57` item in [List Ho
 POST /v1/tours/TOT-2026/hotelstays/uploads/presign
 ```
 
-Response `200 OK`. Upload the CSV with `PUT` and `Content-Type: text/csv`:
+Response `200 OK`. Upload the CSV with `PUT` and `Content-Type: text/csv`. Uploading starts processing automatically. Each attempt needs a new presign; if the same URL is used again, the second upload is ignored:
 ```json
 {
   "uploadId": "UPL-418273645501",
@@ -2418,24 +2418,49 @@ Response `200 OK`. Upload the CSV with `PUT` and `Content-Type: text/csv`:
 }
 ```
 
+CSV format. Directive lines go before the header row. Use either `stayDates` or `startDate` with `nights`. `hotelId` is an optional default hotel. `sharingWith` separates rider IDs with `;`. `roomCapacity` is `2` (default) or `3`:
+```csv
+# stayDates=2026-02-11,2026-02-12
+# hotelId=HTL-MDU-01
+riderId,hotelId,roomNo,roomCapacity,sharingWith
+R1,HTL-MDU-01,204,2,R2
+R2,,204,2,R1
+R57,HTL-MDU-02,311,2,
+```
+
+Each row is expanded into one `RoomAllocation` per stay date. Riders already allocated on those dates but not in the file are kept. For riders in the file, their existing allocation for each date is replaced.
+
 ##### Get Hotel Allocation Upload Status
 
 ```http
 GET /v1/tours/TOT-2026/hotelstays/uploads/UPL-418273645501
 ```
 
-Response `200 OK`. The API currently sets only `PENDING`. `VALIDATING`, `REJECTED`, and `APPLIED` are reserved for the CSV processor, which is not implemented yet. Per D21, `APPLIED` will only occur when `errorCount=0` for the whole file (no partial apply):
+Response `200 OK`. Poll every few seconds until `status` is `REJECTED` or `APPLIED`. The status moves `PENDING` → `VALIDATING` → `REJECTED` | `APPLIED`. Per D21 the whole file is applied or nothing is: `APPLIED` means every row was written, and `REJECTED` means no allocation was changed:
 ```json
 {
   "uploadId": "UPL-418273645501",
-  "status": "PENDING",
-  "rowCount": 0,
-  "errorCount": 0,
-  "errors": [],
+  "status": "REJECTED",
+  "rowCount": 3,
+  "errorCount": 1,
+  "errors": [
+    { "row": 5, "code": "UNKNOWN_HOTEL_ID", "message": "Hotel HTL-MDU-09 does not exist in this tour." }
+  ],
   "appliedCount": 0,
-  "processedAt": null
+  "processedAt": "2026-02-10T08:15:02Z"
 }
 ```
+
+`row` is the line number in the source file. `row: 0` means the error is about the whole file. `errorCount` is the total number of errors, but `errors` returns at most `maxStoredErrors` of them. Error codes:
+
+| Scope | Codes |
+|-------|-------|
+| File | `FILE_TOO_LARGE`, `INVALID_ENCODING`, `INVALID_HEADER`, `EMPTY_FILE`, `TOO_MANY_ROWS`, `MISSING_STAY_DATES`, `INVALID_STAY_DATES`, `TOO_MANY_STAY_DATES` |
+| Row | `MALFORMED_ROW`, `MISSING_RIDER_ID`, `INVALID_RIDER_ID`, `UNKNOWN_RIDER_ID`, `RIDER_NOT_ELIGIBLE` (`WITHDRAWN`/`EXITED`), `MISSING_HOTEL_ID`, `INVALID_HOTEL_ID`, `UNKNOWN_HOTEL_ID`, `MISSING_ROOM_NO`, `INVALID_ROOM_NO`, `INVALID_ROOM_CAPACITY`, `INVALID_SHARING_WITH` |
+| Cross-row / existing data | `DUPLICATE_RIDER_FOR_DATE`, `NON_RECIPROCAL_SHARING`, `ROOM_CLASH`, `ROOM_CAPACITY_EXCEEDED` |
+| Processing | `CONCURRENT_MODIFICATION`, `PROCESSING_TIMEOUT`, `PROCESSING_ERROR` |
+
+Limits (`maxFileSizeBytes`, `maxDataRows`, `maxStayDates`, `maxStoredErrors`) are set in AppConfig under `HOTEL_UPLOAD` / `PROCESSING`.
 
 #### Users Examples
 
