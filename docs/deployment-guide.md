@@ -542,3 +542,7 @@ Add to GitHub Secrets:
 ---
 
 [← Back to README](../README.md)
+
+
+## Deployment note: rider profile config seed
+Run the AppConfig seed step (`scripts/seed_app_config.py`) so `RIDER_PROFILE_SECTION`, `RIDER_PROFILE_ATTRIBUTE`, and `LOV` defaults are present before using rider profile APIs.

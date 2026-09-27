@@ -503,3 +503,8 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 ---
 
 [← Back to README](../README.md)
+
+
+## Rider profile config resources
+Added Lambda functions for admin profile-config read/write and profile-attribute upload/download.
+IAM scopes are least-privilege: AppConfig write only for admin config writer; S3 access for attribute files limited to `riders/*` prefix.

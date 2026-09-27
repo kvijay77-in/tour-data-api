@@ -1,9 +1,4 @@
-"""
-Get profile picture Lambda function
-
-Generates a presigned S3 URL to download the rider's profile picture.
-Route: GET /v1/riders/profile/{profileId}/picture
-"""
+"""Generate presigned URL for rider profile photo download."""
 
 import sys
 sys.path.insert(0, '/opt/python')
@@ -14,139 +9,70 @@ import boto3
 
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
-
-from response import (
-    success_response, bad_request_response, not_found_response,
-    forbidden_response,
-    internal_error_response
-)
+from response import success_response, bad_request_response, not_found_response, internal_error_response
 from dynamodb_utils import get_item
+from ownership import require_own_profile, is_rider_api_request
 
 logger = get_logger(__name__)
-
 s3_client = boto3.client('s3')
-RIDER_LINK_TABLE_ENV = 'RIDER_COGNITO_USER_TABLE'
 
 DEFAULT_EXPIRY_SECONDS = 300
 MAX_EXPIRY_SECONDS = 3600
 
 
-def _is_authenticated(event):
-    claims = (
-        event.get('requestContext', {})
-        .get('authorizer', {})
-        .get('jwt', {})
-        .get('claims', {})
-    )
-    return bool(claims.get('sub'))
-
-
-def _get_authenticated_user(event):
-    claims = (
-        event.get('requestContext', {})
-        .get('authorizer', {})
-        .get('jwt', {})
-        .get('claims', {})
-    )
-    return claims.get('sub')
-
-
-def _authorize_profile_access(event, profile_id):
-    deny = require_permission(event, Permission.READ)
-    if not deny:
-        return None
-
-    user_id = _get_authenticated_user(event)
-    if not user_id:
-        return deny
-
-    rider_link = get_item(
-        table_name_env=RIDER_LINK_TABLE_ENV,
-        key={'cognitoUserName': user_id}
-    )
-    if rider_link and rider_link.get('profileId') == profile_id:
-        return None
-
-    return deny
-
-
 def lambda_handler(event, context):
-    """
-    Generate a presigned URL for profile picture download
-
-    Path Parameters:
-        profileId: Rider profile ID
-
-    Query Parameters:
-        expiresIn (optional): URL validity in seconds (60-3600, default 300)
-
-    Returns:
-    - 200: Presigned URL and S3 key
-    - 400: Invalid input
-    - 404: Profile or profile picture not found
-    - 500: Server error
-    """
     try:
         log_event(logger, event)
 
-        if not _is_authenticated(event):
-            return forbidden_response("Authenticated user context is required")
-
         profile_id = (event.get('pathParameters') or {}).get('profileId')
-
         if not profile_id:
-            return bad_request_response("profileId is required in path")
+            return bad_request_response('profileId is required in path')
 
-        existing_rider = get_item(
-            table_name_env='RIDER_PROFILE_TABLE',
-            key={'profileId': profile_id}
-        )
+        api_id = (event.get('requestContext', {}) or {}).get('apiId')
+        if is_rider_api_request(event):
+            deny = require_own_profile(event, profile_id)
+            if deny:
+                return deny
+        elif api_id:
+            rbac_deny = require_permission(event, Permission.READ)
+            if rbac_deny:
+                return rbac_deny
 
+        existing_rider = get_item('RIDER_PROFILE_TABLE', {'profileId': profile_id})
         if not existing_rider:
-            return not_found_response("RiderProfile", profile_id)
-
-        deny = _authorize_profile_access(event, profile_id)
-        if deny:
-            return deny
+            return not_found_response('RiderProfile', profile_id)
 
         s3_key = existing_rider.get('photoS3Key')
         if not s3_key:
-            return not_found_response("ProfilePicture", profile_id)
+            return not_found_response('ProfilePicture', profile_id)
 
         expires_in = DEFAULT_EXPIRY_SECONDS
-        expires_in_param = (event.get('queryStringParameters') or {}).get('expiresIn')
-        if expires_in_param:
+        expires_param = (event.get('queryStringParameters') or {}).get('expiresIn')
+        if expires_param:
             try:
-                expires_in = int(expires_in_param)
+                expires_in = int(expires_param)
             except (TypeError, ValueError):
-                return bad_request_response("expiresIn must be an integer")
+                return bad_request_response('expiresIn must be an integer')
             if expires_in < 60 or expires_in > MAX_EXPIRY_SECONDS:
-                return bad_request_response(
-                    f"expiresIn must be between 60 and {MAX_EXPIRY_SECONDS} seconds"
-                )
+                return bad_request_response(f'expiresIn must be between 60 and {MAX_EXPIRY_SECONDS} seconds')
 
         bucket_name = os.environ.get('PHOTOS_BUCKET')
         if not bucket_name:
-            return internal_error_response("Photos bucket not configured")
+            return internal_error_response('Photos bucket not configured')
 
         presigned_url = s3_client.generate_presigned_url(
             'get_object',
-            Params={
-                'Bucket': bucket_name,
-                'Key': s3_key
-            },
-            ExpiresIn=expires_in
+            Params={'Bucket': bucket_name, 'Key': s3_key},
+            ExpiresIn=expires_in,
         )
-
-        logger.info(f"Generated download URL for profile {profile_id}")
 
         return success_response({
             'downloadUrl': presigned_url,
             'photoS3Key': s3_key,
             'expiresIn': expires_in,
-            'profileId': profile_id
+            'profileId': profile_id,
         })
 
-    except Exception as e:
-        logger.error(f"Error generating download URL: {str(e)}", exc_info=True)
-        return internal_error_response("Failed to generate download URL")
+    except Exception as exc:
+        logger.error(f'Error generating download URL: {str(exc)}', exc_info=True)
+        return internal_error_response('Failed to generate download URL')

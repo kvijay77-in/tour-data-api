@@ -959,3 +959,9 @@ If volume increases significantly (1000+ riders or many concurrent tours):
 | Not Riding (NR) | Rider not participating in a specific ride |
 | Quit Riding (QR) | Rider stopping mid-ride |
 | QR Code | Quick Response code for rider identification |
+
+## Rider profile attributes (configuration-driven)
+- Rider profile definitions are now sourced from AppConfig types: `RIDER_PROFILE_SECTION`, `RIDER_PROFILE_ATTRIBUTE`, and `LOV`.
+- Runtime validation/merge/filtering is implemented in `src/layers/common/profile_schema.py`.
+- Rider API ownership is enforced through `src/layers/common/ownership.py` using `RiderCognitoUser` mapping (`sub -> profileId`).
+- See `docs/rider-profile-attributes-design.md` for full contract and API details.

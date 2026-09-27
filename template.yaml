@@ -40,6 +40,7 @@ Globals:
         # Metadata
         SUBSCRIPTION_ID: !Ref SubscriptionId
         ENVIRONMENT: !Ref Environment
+        RIDER_API_ID: !Ref RiderApi
         PHOTOS_BUCKET: !Ref PhotosBucket
         ARTIFACTS_BUCKET: !Ref ArtifactsBucket
         MGMT_USER_POOL_ID: !If
@@ -621,6 +622,10 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
       Events:
         HttpApi:
           Type: HttpApi
@@ -646,6 +651,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RiderToursTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
       Events:
         HttpApi:
           Type: HttpApi
@@ -671,6 +678,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RiderToursTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
       Events:
         HttpApi:
           Type: HttpApi
@@ -696,7 +705,17 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
       Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}
+            Method: PUT
         RiderHttpApi:
           Type: HttpApi
           Properties:
@@ -715,6 +734,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
         - Statement:
             - Effect: Allow
               Action:
@@ -769,6 +790,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
         - Statement:
             - Effect: Allow
               Action:
@@ -795,6 +818,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
         - Statement:
             - Effect: Allow
               Action:
@@ -821,6 +846,10 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
         - Statement:
             - Effect: Allow
               Action:
@@ -828,6 +857,18 @@ Resources:
               Resource:
                 - !Sub '${RiderProfileTable.Arn}/index/*'
       Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile
+            Method: POST
+        HttpApiWithProfileId:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}
+            Method: POST
         RiderHttpApi:
           Type: HttpApi
           Properties:
@@ -1009,6 +1050,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
         - Statement:
             - Effect: Allow
               Action:
@@ -1034,6 +1077,8 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
         - Statement:
             - Effect: Allow
               Action:
@@ -1052,6 +1097,76 @@ Resources:
           Properties:
             ApiId: !Ref TourDataApi
             Path: /v1/riders/profile/{profileId}/picture
+            Method: GET
+
+  UploadProfileAttributeFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: upload_profile_attribute_file.lambda_handler
+      Description: Generate presigned URL for rider profile attribute file upload
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                - !Sub '${PhotosBucket.Arn}/riders/*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/riders/profile/{profileId}/attributes/{key}/upload
+            Method: POST
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}/attributes/{key}/upload
+            Method: POST
+
+  DownloadProfileAttributeFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: download_profile_attribute_file.lambda_handler
+      Description: Generate presigned URL for rider profile attribute file download
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub '${PhotosBucket.Arn}/riders/*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/riders/profile/{profileId}/attributes/{key}/download
+            Method: GET
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/riders/profile/{profileId}/attributes/{key}/download
             Method: GET
 
   PresignTourArtifactUploadFunction:
@@ -3057,6 +3172,44 @@ Resources:
             ApiId: !Ref RiderApi
             Path: /v1/config
             Method: GET
+
+  GetAdminConfigFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/config/
+      Handler: get_admin_config.lambda_handler
+      Description: Admin-only rider profile configuration reader
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/admin/config/{configType}
+            Method: GET
+
+  PutAdminConfigFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/config/
+      Handler: put_admin_config.lambda_handler
+      Description: Admin-only rider profile configuration writer
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AppConfigTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/admin/config/{configType}/{configId}
+            Method: PUT
 
   # ============================================================================
   # DYNAMODB TABLES (Shared - SAM-managed)

@@ -1,50 +1,32 @@
-"""
-Lambda function to get a rider profile by profile ID
-
-Shared RiderProfile table (partition key: profileId).
-Route: GET /v1/riders/profile/{profileId}
-"""
+"""Get rider profile by profile ID with ownership and role-based attribute filtering."""
 
 import sys
 sys.path.insert(0, '/opt/python')
 
-from logger import get_logger
+from logger import get_logger, log_event
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from dynamodb_utils import get_item
 from validation import build_emergency_contact_from_profile
+from ownership import require_own_profile, is_rider_api_request
+from profile_schema import filter_profile_for_response
 
 logger = get_logger(__name__)
 
 
 def lambda_handler(event, context):
-    """
-    Get a rider profile by profile ID
-    
-    Path parameter: profileId (UUID)
-    
-    Returns:
-    - 200: Rider profile found
-    - 400: Missing profileId
-    - 404: Profile not found
-    - 500: Server error
-    """
     try:
-        # Extract profile ID from path parameters
-        profile_id = event.get('pathParameters', {}).get('profileId')
-        
+        log_event(logger, event)
+        profile_id = (event.get('pathParameters') or {}).get('profileId')
         if not profile_id:
-            return bad_request_response("profileId is required in path")
-        
-        # Get rider profile from DynamoDB
-        logger.info(f"Fetching rider profile: {profile_id}")
-        rider = get_item(
-            table_name_env='RIDER_PROFILE_TABLE',
-            key={'profileId': profile_id}
-        )
-        
+            return bad_request_response('profileId is required in path')
+
+        deny = require_own_profile(event, profile_id)
+        if deny:
+            return deny
+
+        rider = get_item('RIDER_PROFILE_TABLE', {'profileId': profile_id})
         if not rider:
-            logger.info(f"Rider profile not found: {profile_id}")
-            return not_found_response("RiderProfile", profile_id)
+            return not_found_response('RiderProfile', profile_id)
 
         emergency_contact = build_emergency_contact_from_profile(rider)
         if emergency_contact is not None:
@@ -54,10 +36,11 @@ def lambda_handler(event, context):
         rider.pop('emergencyContactPhone', None)
         rider.pop('emergencyContactRelationship', None)
         rider.pop('Relationship', None)
-        
-        logger.info(f"Successfully retrieved rider profile: {profile_id}")
-        return success_response(rider)
-        
-    except Exception as e:
-        logger.error(f"Error getting rider profile: {str(e)}", exc_info=True)
-        return internal_error_response("Failed to get rider profile")
+
+        staff_mode = not is_rider_api_request(event)
+        filtered = filter_profile_for_response(rider, event=event, staff_mode=staff_mode)
+        return success_response(filtered)
+
+    except Exception as exc:
+        logger.error(f'Error getting rider profile: {str(exc)}', exc_info=True)
+        return internal_error_response('Failed to get rider profile')

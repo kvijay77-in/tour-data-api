@@ -2982,3 +2982,13 @@ Not critical for initial implementation given low volume, but consider:
 - Historical ride queries
 - Check-in analytics
 - Export to Excel
+
+
+## Rider profile attribute APIs
+- `GET /v1/admin/config/{configType}` (ADMINISTRATOR, TourDataApi)
+- `PUT /v1/admin/config/{configType}/{configId}` (ADMINISTRATOR, TourDataApi)
+- `POST /v1/riders/profile/{profileId}/attributes/{key}/upload`
+- `GET /v1/riders/profile/{profileId}/attributes/{key}/download`
+
+### Additional error codes
+`UNKNOWN_OR_DISABLED_ATTRIBUTE`, `ADMIN_ONLY_ATTRIBUTE`, `PROFILE_DEFINITIONS_CHANGED`, `CONFIG_VERSION_CONFLICT`, `SYSTEM_ATTRIBUTE_PROTECTED`, `IMMUTABLE_FIELD`, `PROFILE_ACCESS_DENIED`.

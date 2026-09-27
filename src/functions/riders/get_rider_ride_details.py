@@ -1,15 +1,4 @@
-"""
-Get rider details for dashboard popup Lambda function.
-
-Returns lightweight rider details for a selected ride:
-- rider
-- checkInTimeline
-- latestStatus
-
-Uses tour-specific tables: Ride-{tourId}, TourRider-{tourId}, CheckIn-{tourId}
-and shared RiderProfile table.
-Route: GET /v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details
-"""
+"""Get rider details for dashboard popup with profile attribute filtering."""
 
 import sys
 sys.path.insert(0, '/opt/python')
@@ -18,18 +7,12 @@ import hashlib
 import json
 
 from logger import get_logger, log_event
-from response import (
-    success_response,
-    not_found_response,
-    bad_request_response,
-    internal_error_response,
-    not_modified_response,
-    DecimalEncoder,
-)
+from response import success_response, not_found_response, bad_request_response, internal_error_response, not_modified_response, DecimalEncoder
 from dynamodb_utils import get_tour_item, get_item, query_tour_items
 from validation import validate_tour_id, validate_ride_id, validate_rider_id, ValidationError
 from rbac import require_permission, Permission
 from models import is_cancelled_checkin_item
+from profile_schema import filter_profile_for_response
 
 logger = get_logger(__name__)
 
@@ -62,7 +45,6 @@ def _derive_latest_status(checkin_timeline):
 
 
 def lambda_handler(event, context):
-    """Get rider popup details for a specific ride."""
     try:
         log_event(logger, event)
 
@@ -82,32 +64,22 @@ def lambda_handler(event, context):
             validate_tour_id(tour_id)
             validate_ride_id(ride_id)
             validate_rider_id(rider_id)
-        except ValidationError as e:
-            return bad_request_response(str(e))
+        except ValidationError as exc:
+            return bad_request_response(str(exc))
 
-        ride = get_tour_item(
-            table_type='Ride',
-            tour_id=tour_id,
-            key={'rideId': ride_id},
-        )
+        ride = get_tour_item(table_type='Ride', tour_id=tour_id, key={'rideId': ride_id})
         if not ride:
             return not_found_response('Ride', ride_id)
 
-        tour_rider = get_tour_item(
-            table_type='TourRider',
-            tour_id=tour_id,
-            key={'riderId': rider_id},
-        )
+        tour_rider = get_tour_item(table_type='TourRider', tour_id=tour_id, key={'riderId': rider_id})
         if not tour_rider:
             return not_found_response('Rider', rider_id)
 
         profile = {}
         profile_id = tour_rider.get('profileId')
         if profile_id:
-            profile = get_item(
-                table_name_env='RIDER_PROFILE_TABLE',
-                key={'profileId': profile_id},
-            ) or {}
+            profile = get_item('RIDER_PROFILE_TABLE', {'profileId': profile_id}) or {}
+            profile = filter_profile_for_response(profile, event=event, staff_mode=True)
 
         rider_checkins = query_tour_items(
             table_type='CheckIn',
@@ -117,10 +89,7 @@ def lambda_handler(event, context):
             index_name='RiderIdIndex',
         )
 
-        ride_timeline_raw = [
-            checkin for checkin in rider_checkins
-            if checkin.get('rideId') == ride_id and not is_cancelled_checkin_item(checkin)
-        ]
+        ride_timeline_raw = [checkin for checkin in rider_checkins if checkin.get('rideId') == ride_id and not is_cancelled_checkin_item(checkin)]
         ride_timeline_raw.sort(key=lambda item: (item.get('timestamp', ''), item.get('checkInId', '')))
         checkin_timeline = [_timeline_entry(checkin) for checkin in ride_timeline_raw]
 
@@ -135,6 +104,8 @@ def lambda_handler(event, context):
             },
             'checkInTimeline': checkin_timeline,
             'latestStatus': _derive_latest_status(checkin_timeline),
+            'profileAttributes': profile.get('attributes', {}),
+            'sensitiveKeys': profile.get('sensitiveKeys', []),
         }
 
         payload_json = json.dumps(payload, sort_keys=True, cls=DecimalEncoder)
@@ -151,6 +122,6 @@ def lambda_handler(event, context):
         response['headers']['ETag'] = etag
         return response
 
-    except Exception as e:
-        logger.error(f'Error getting rider details: {str(e)}', exc_info=True)
+    except Exception as exc:
+        logger.error(f'Error getting rider details: {str(exc)}', exc_info=True)
         return internal_error_response('Failed to retrieve rider details')
