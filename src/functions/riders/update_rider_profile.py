@@ -43,11 +43,10 @@ def lambda_handler(event, context):
         if not isinstance(body, dict):
             return bad_request_response('Request body must be a JSON object')
 
-        ensure_definitions_version(body.get('definitionsVersion'))
-
         existing_rider = get_item('RIDER_PROFILE_TABLE', {'profileId': profile_id})
         if not existing_rider:
             return not_found_response('RiderProfile', profile_id)
+        ensure_definitions_version(body.get('definitionsVersion'))
 
         legacy_contact_fields = {'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship', 'Relationship'}
         legacy_fields_present = any(field in body for field in legacy_contact_fields)

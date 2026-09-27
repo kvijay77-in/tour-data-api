@@ -10,9 +10,10 @@ import uuid
 import boto3
 
 from logger import get_logger, log_event
+from rbac import Permission, require_permission
 from response import success_response, bad_request_response, not_found_response, internal_error_response
 from dynamodb_utils import get_item
-from ownership import require_own_profile
+from ownership import require_own_profile, is_rider_api_request
 from profile_schema import get_user_role_flags
 
 logger = get_logger(__name__)
@@ -28,9 +29,15 @@ def lambda_handler(event, context):
             return bad_request_response('profileId is required in path')
 
         role_flags = get_user_role_flags(event)
-        deny = require_own_profile(event, profile_id)
-        if deny and not role_flags['is_admin']:
-            return deny
+        api_id = (event.get('requestContext', {}) or {}).get('apiId')
+        if is_rider_api_request(event):
+            deny = require_own_profile(event, profile_id)
+            if deny and not role_flags['is_admin']:
+                return deny
+        elif api_id and not role_flags['is_admin']:
+            deny = require_permission(event, Permission.RIDER_SELF_UPDATE)
+            if deny:
+                return deny
 
         existing_rider = get_item('RIDER_PROFILE_TABLE', {'profileId': profile_id})
         if not existing_rider:
@@ -50,7 +57,7 @@ def lambda_handler(event, context):
 
         ext = 'jpg' if content_type == 'image/jpeg' else 'png'
         file_id = str(uuid.uuid4())
-        s3_key = f'profiles/{profile_id}/{file_id}.{ext}'
+        s3_key = f'riders/{profile_id}/photo/{file_id}.{ext}'
 
         bucket_name = os.environ.get('PHOTOS_BUCKET')
         if not bucket_name:

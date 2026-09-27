@@ -12,7 +12,7 @@ from response import success_response, bad_request_response, conflict_response, 
 from dynamodb_utils import put_item, query_items, get_item
 from validation import build_emergency_contact_from_profile, ValidationError
 from models import utc_now_iso
-from ownership import require_own_profile
+from ownership import require_own_profile, resolve_profile_id_for_sub, is_rider_api_request
 from profile_schema import (
     ensure_definitions_version,
     merge_profile_values,
@@ -44,14 +44,23 @@ def lambda_handler(event, context):
         if not isinstance(body, dict):
             return bad_request_response('Request body must be a JSON object')
 
-        profile_id = (event.get('pathParameters') or {}).get('profileId') or body.get('profileId')
-        if not profile_id:
-            profile_id = str(uuid.uuid4())
+        claims = _claims(event)
+        rider_api_call = is_rider_api_request(event)
+        linked_profile_id = resolve_profile_id_for_sub(claims.get('sub') or '') if rider_api_call else None
+        path_profile_id = (event.get('pathParameters') or {}).get('profileId')
 
-        deny = require_own_profile(event, profile_id)
+        if rider_api_call and path_profile_id and not linked_profile_id:
+            return error_response('PROFILE_ACCESS_DENIED', 'Profile ID cannot be supplied before rider link is established', status_code=403)
+
+        profile_id = path_profile_id or linked_profile_id or str(uuid.uuid4())
+
         role_flags = get_user_role_flags(event)
+        explicit_profile_id = path_profile_id
+        deny = require_own_profile(event, profile_id)
         if deny and not role_flags['is_admin']:
-            return deny
+            rider_api_create_without_link = rider_api_call and not linked_profile_id and not explicit_profile_id
+            if not rider_api_create_without_link:
+                return deny
 
         ensure_definitions_version(body.get('definitionsVersion'))
 
@@ -61,7 +70,6 @@ def lambda_handler(event, context):
                 body['emergencyContact'] = derived
 
         now = utc_now_iso()
-        claims = _claims(event)
         draft_profile = {'profileId': profile_id, 'createdAt': now, 'updatedAt': now, 'attributes': {}}
 
         # COGNITO_EMAIL is system-controlled; prefill from token claim when available.

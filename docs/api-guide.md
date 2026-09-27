@@ -2992,3 +2992,8 @@ Not critical for initial implementation given low volume, but consider:
 
 ### Additional error codes
 `UNKNOWN_OR_DISABLED_ATTRIBUTE`, `ADMIN_ONLY_ATTRIBUTE`, `PROFILE_DEFINITIONS_CHANGED`, `CONFIG_VERSION_CONFLICT`, `SYSTEM_ATTRIBUTE_PROTECTED`, `IMMUTABLE_FIELD`, `PROFILE_ACCESS_DENIED`.
+
+
+Attribute file routes are exposed on both APIs:
+- RiderApi: owner access
+- TourDataApi: management access subject to role/visibility filtering (and ownership when RiderApi context applies).

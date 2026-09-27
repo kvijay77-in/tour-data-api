@@ -104,16 +104,18 @@ def get_definitions() -> Definitions:
     if _CACHE['data'] and _CACHE['expires_at'] > _now():
         return _CACHE['data']
 
+    load_failed = False
     try:
         sections = {item['configId']: item for item in _load_enabled(PROFILE_SECTION_TYPE)}
         attributes = {item['configId']: item for item in _load_enabled(PROFILE_ATTRIBUTE_TYPE)}
         lovs = {item['configId']: item for item in _load_enabled(LOV_TYPE)}
     except Exception:
+        load_failed = True
         sections = {}
         attributes = {}
         lovs = {}
 
-    if not attributes:
+    if load_failed:
         data = copy.deepcopy(_DEFAULT_DEFINITIONS)
         _CACHE['data'] = data
         _CACHE['expires_at'] = _now() + CACHE_TTL_SECONDS
@@ -170,6 +172,13 @@ def _attr_flags(attr: Dict[str, Any]) -> Dict[str, Any]:
         'sensitive': bool(cfg.get('sensitive')),
         'visibleToAllMgmtUsers': bool(cfg.get('visibleToAllMgmtUsers', True)),
     }
+
+
+def get_attribute_flags(attribute_key: str) -> Dict[str, Any]:
+    attr_def = get_attribute_definition(attribute_key)
+    if not attr_def:
+        return {'required': False, 'adminOnly': False, 'sensitive': False, 'visibleToAllMgmtUsers': True}
+    return _attr_flags(attr_def)
 
 
 def read_attribute_value(profile: Dict[str, Any], attribute_key: str, attr_def: Optional[Dict[str, Any]] = None) -> Any:
@@ -310,7 +319,7 @@ def _validate_group(value: Any, key: str, attr_cfg: Dict[str, Any], definitions:
                     raise ValidationError(f"{key}.{field_key} is required")
                 continue
             pseudo_attr = {'config': {'type': field_type, 'validation': field.get('validation', {}), 'lovId': field.get('lovId'), 'dependsOn': field.get('dependsOn')}}
-            _validate_scalar_value(field_value, f"{key}.{field_key}", pseudo_attr, definitions, profile)
+            _validate_scalar_value(field_value, f"{key}.{field_key}", pseudo_attr, definitions, profile, group_context=item)
 
     if repeatable:
         if not isinstance(value, list):
@@ -324,7 +333,14 @@ def _validate_group(value: Any, key: str, attr_cfg: Dict[str, Any], definitions:
     _validate_group_item(value)
 
 
-def _validate_scalar_value(value: Any, key: str, attr_def: Dict[str, Any], definitions: Definitions, profile: Dict[str, Any]) -> Any:
+def _validate_scalar_value(
+    value: Any,
+    key: str,
+    attr_def: Dict[str, Any],
+    definitions: Definitions,
+    profile: Dict[str, Any],
+    group_context: Optional[Dict[str, Any]] = None,
+) -> Any:
     cfg = attr_def.get('config') or {}
     attr_type = _attr_type(attr_def)
     validation = cfg.get('validation') or {}
@@ -397,7 +413,10 @@ def _validate_scalar_value(value: Any, key: str, attr_def: Dict[str, Any], defin
         depends_on = cfg.get('dependsOn')
         parent_value = None
         if depends_on:
-            parent_value = read_attribute_value(profile, depends_on)
+            if group_context and depends_on in group_context:
+                parent_value = group_context.get(depends_on)
+            else:
+                parent_value = read_attribute_value(profile, depends_on)
         try:
             _validate_lov_value(key, value, cfg, definitions, parent_value=parent_value)
         except ValidationError:
@@ -610,6 +629,18 @@ def filter_profile_for_response(
     filtered_attrs: Dict[str, Any] = {}
     sensitive_keys: List[str] = []
 
+    for key, attr_def in definitions.attributes.items():
+        attr_flags = _attr_flags(attr_def)
+        storage = _storage_for(attr_def)
+        should_include = not staff_mode or include_restricted or attr_flags['visibleToAllMgmtUsers']
+
+        if storage.get('scope') == 'CORE':
+            core_path = storage.get('path')
+            if core_path and not should_include:
+                result.pop(core_path, None)
+            if should_include and attr_flags['sensitive'] and core_path and core_path in result:
+                sensitive_keys.append(key)
+
     for key, value in (stored_attributes or {}).items():
         attr_def = definitions.attributes.get(key)
         if not attr_def:
@@ -632,7 +663,7 @@ def get_attribute_definition(attribute_key: str) -> Optional[Dict[str, Any]]:
     return get_definitions().attributes.get(attribute_key)
 
 
-def validate_attribute_upload_request(attribute_key: str, content_type: str, size_bytes: int) -> Dict[str, Any]:
+def require_file_attribute_definition(attribute_key: str) -> Dict[str, Any]:
     attr_def = get_attribute_definition(attribute_key)
     if not attr_def:
         raise ProfileSchemaError(
@@ -657,6 +688,12 @@ def validate_attribute_upload_request(attribute_key: str, content_type: str, siz
             status_code=422,
         )
 
+    return attr_def
+
+
+def validate_attribute_upload_request(attribute_key: str, content_type: str, size_bytes: int) -> Dict[str, Any]:
+    attr_def = require_file_attribute_definition(attribute_key)
+    cfg = attr_def.get('config') or {}
     validation = cfg.get('validation') or {}
     allowed = validation.get('allowedMimeTypes') or []
     if allowed and content_type not in allowed:

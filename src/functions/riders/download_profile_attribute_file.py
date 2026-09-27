@@ -10,8 +10,13 @@ import boto3
 from logger import get_logger, log_event
 from response import success_response, bad_request_response, not_found_response, error_response, internal_error_response
 from dynamodb_utils import get_item
-from ownership import require_own_profile
-from profile_schema import get_attribute_definition, ProfileSchemaError, get_user_role_flags, _attr_flags
+from ownership import require_own_profile, is_rider_api_request
+from profile_schema import (
+    ProfileSchemaError,
+    get_user_role_flags,
+    get_attribute_flags,
+    require_file_attribute_definition,
+)
 
 
 logger = get_logger(__name__)
@@ -28,26 +33,24 @@ def lambda_handler(event, context):
             return bad_request_response('profileId and key are required in path')
 
         role_flags = get_user_role_flags(event)
+        rider_api_call = is_rider_api_request(event)
         deny = require_own_profile(event, profile_id)
         if deny and not role_flags['is_admin']:
-            attr_def = get_attribute_definition(attr_key)
-            if not attr_def:
-                return error_response('UNKNOWN_OR_DISABLED_ATTRIBUTE', f"Attribute '{attr_key}' is unknown or disabled", status_code=422)
-            attr_flags = _attr_flags(attr_def)
-            if not (role_flags['is_admin'] or role_flags['is_super_user'] or attr_flags['visibleToAllMgmtUsers']):
-                return error_response('PROFILE_ACCESS_DENIED', 'Attribute is not visible for this role', status_code=403)
+            return deny
 
         rider = get_item('RIDER_PROFILE_TABLE', {'profileId': profile_id})
         if not rider:
             return not_found_response('RiderProfile', profile_id)
 
-        attr_def = get_attribute_definition(attr_key)
-        if not attr_def:
-            return error_response('UNKNOWN_OR_DISABLED_ATTRIBUTE', f"Attribute '{attr_key}' is unknown or disabled", status_code=422)
+        require_file_attribute_definition(attr_key)
 
-        attr_flags = _attr_flags(attr_def)
-        if deny and not role_flags['is_admin'] and not role_flags['is_super_user'] and not attr_flags['visibleToAllMgmtUsers']:
-            return error_response('PROFILE_ACCESS_DENIED', 'Attribute is not visible for this role', status_code=403)
+        attr_flags = get_attribute_flags(attr_key)
+        enforce_staff_visibility = not rider_api_call
+        if enforce_staff_visibility:
+            if attr_flags.get('sensitive') and not (role_flags['is_admin'] or role_flags['is_super_user']):
+                return error_response('PROFILE_ACCESS_DENIED', 'Sensitive attribute download requires elevated role', status_code=403)
+            if not role_flags['is_admin'] and not role_flags['is_super_user'] and not attr_flags['visibleToAllMgmtUsers']:
+                return error_response('PROFILE_ACCESS_DENIED', 'Attribute is not visible for this role', status_code=403)
 
         attr_val = (rider.get('attributes') or {}).get(attr_key)
         if not isinstance(attr_val, dict) or not attr_val.get('s3Key'):
