@@ -7,6 +7,9 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 
+# Runtime-tunable config: seeded once, never overwritten by later deploys.
+INSERT_ONLY_CONFIG_TYPES = {'HOTEL_UPLOAD'}
+
 
 def utc_now_iso():
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -44,6 +47,19 @@ def build_seed_items(updated_by):
                 'idCode': {'pattern': 'TICKET:VID:([0-9A-Z]{5});', 'flags': '', 'group': 1},
                 'idCodeType': {'pattern': '^(.)', 'flags': '', 'group': 1},
                 'personalCode': {'pattern': '^.(.{4})$', 'flags': '', 'group': 1},
+            },
+        },
+        {
+            'configType': 'HOTEL_CSV_FILE',
+            'configId': 'MAX-SIZE',
+            'enabled': True,
+            'description': 'Hotel room allocation CSV File Maximum Size',
+            'version': 1,
+            'updatedAt': now,
+            'updatedBy': updated_by,
+            'config': {
+                'maxSize': '5',
+                'maxSizeUnit': 'MB',
             },
         },
     ]
@@ -99,6 +115,25 @@ def build_seed_items(updated_by):
             }
         )
 
+    items.append(
+        {
+            'configType': 'HOTEL_UPLOAD',
+            'configId': 'PROCESSING',
+            'enabled': True,
+            'description': 'Hotel allocation CSV processing limits',
+            'version': 1,
+            'updatedAt': now,
+            'updatedBy': updated_by,
+            'config': {
+                'maxFileSizeBytes': 1048576,
+                'maxDataRows': 500,
+                'maxStayDates': 31,
+                'maxStoredErrors': 200,
+                'timeReserveSeconds': 20,
+            },
+        }
+    )
+
     return items
 
 
@@ -119,9 +154,15 @@ def main():
 
     for item in items:
         try:
-            table.put_item(Item=item)
+            if item['configType'] in INSERT_ONLY_CONFIG_TYPES:
+                table.put_item(Item=item, ConditionExpression='attribute_not_exists(configType)')
+            else:
+                table.put_item(Item=item)
             print(f"Upserted {item['configType']} / {item['configId']}")
         except ClientError as exc:
+            if exc.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+                print(f"Kept existing {item['configType']} / {item['configId']}")
+                continue
             print(f"Failed to upsert {item['configType']} / {item['configId']}: {exc}")
             raise
 

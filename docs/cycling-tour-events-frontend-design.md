@@ -232,19 +232,20 @@ Each new screen gets an equivalent wrapper; wrappers do no logic beyond destruct
 
 **Purpose:** Bulk-load `RoomAllocation` records via the S3 presigned-upload + async-processing flow (backend §8.21/§8.22, design decision D11), with a **strict all-or-nothing apply** (backend §8.22a/§8.22b, D21) — the frontend must never present a "partially applied" outcome, since one cannot occur.
 
-**Layout (`onClose` modal-style, matching admin screen convention):** File-pick button (native document picker), selected-file name display, "Upload" action. On upload: progress bar tracking the S3 `PUT`, then a "Validating…" spinner while polling. On completion, exactly one of two outcomes is shown — never a mixed one:
+**Layout (`onClose` modal-style, matching admin screen convention):** File-pick button (native document picker), selected-file name display, "Upload" action. On upload: progress bar tracking the S3 `PUT`, then a "Validating…" spinner while polling. On completion, exactly one of two outcomes (`APPLIED` or `REJECTED`) is shown — never a mixed one. `REJECTED` has two presentations, depending on the error group:
 - **Applied:** a success banner "{appliedCount} allocations applied for {rowCount} rows." with a "Done" action closing the modal.
 - **Rejected:** an error banner "This file was not applied — fix the {errorCount} issue(s) below and re-upload the corrected file. No allocations were changed." followed by a row-level error table with columns Row, Code, Message — each row number mapped directly back to the source CSV so the organiser can locate and fix it — plus a "Choose another file" action that re-opens the file picker. The banner's wording is deliberately explicit that **nothing was written**, so the organiser does not assume the valid-looking rows went through.
+- **Processing failed:** a `REJECTED` status whose only error has a *Processing*-group code (backend §8.25a) uses a different banner showing the server `message` verbatim, with an "Upload again" action. The file itself may be valid, and in rare cases the server message says allocations may not have been restored. The fixed "No allocations were changed" wording must not be used for these (§14.7).
 
 **Flow detail:**
-1. Screen calls backend §8.21 to get `{ uploadId, uploadUrl, s3Key, expiresIn }`.
-2. App performs the S3 `PUT` of the picked CSV file to `uploadUrl`, tracking progress via the HTTP client's upload-progress callback.
-3. App polls backend §8.22 with the returned `uploadId` on a fixed interval (e.g. every 3s) until `status` is `APPLIED` or `REJECTED`, capped at a maximum poll duration with a "still validating — check back later" fallback message.
-4. On `REJECTED`, errors are rendered from the `errors[]` array in the poll response, each `{ row, code, message }` mapped 1:1 to a table row; on `APPLIED`, `appliedCount` is shown and no error table is rendered.
+1. Screen calls backend §8.21 to get `{ uploadId, uploadUrl, s3Key, expiresIn }`. **Every attempt, including "Choose another file" and "Upload again", starts with a new §8.21 call.** A presigned URL is never reused (§14.3).
+2. App performs the S3 `PUT` of the picked CSV file to `uploadUrl` with header `Content-Type: text/csv` (the URL is signed for that type), tracking progress via the HTTP client's upload-progress callback.
+3. App polls backend §8.22 with the returned `uploadId` every 3s while `status` is `PENDING` or `VALIDATING`, until it is `APPLIED` or `REJECTED`. Polling is capped at 3 minutes, after which a "still validating — check back later" fallback message is shown (§14.5).
+4. On `REJECTED`, errors are rendered from the `errors[]` array in the poll response, each `{ row, code, message }` mapped 1:1 to a table row (`row: 0` shown as "File"; a "Showing N of M" note when `errors.length < errorCount`, §14.6). On `APPLIED`, `appliedCount` is shown, no error table is rendered, and the local hotel-stay cache is refreshed (§14.8).
 
-**States:** loading (initial presign call), uploading (progress bar), validating (poll spinner, labelled "Validating…" rather than "Processing…" to make clear nothing is applied yet), error (presign failure, S3 `PUT` failure, or `REJECTED` status — both are "expected" outcomes handled in-screen per §9, not thrown exceptions), offline (upload is online-only — screen shows "Connect to the internet to upload hotel allocations" and disables the file picker).
+**States:** loading (initial presign call), uploading (progress bar), validating (poll spinner for both `PENDING` and `VALIDATING`, labelled "Validating…" rather than "Processing…" to make clear nothing is applied yet), error (presign failure, S3 `PUT` failure, or `REJECTED` status — all "expected" outcomes handled in-screen per §9, not thrown exceptions), offline (upload is online-only — screen shows "Connect to the internet to upload hotel allocations" and disables the file picker).
 
-**API calls:** backend §8.21/§8.22.
+**API calls:** backend §8.21/§8.22. Processing behaviour: backend §8.22a–§8.22c; status error codes: backend §8.25a. Full integration guidance: §14.
 
 ### 4.9 Manual hotel allocation adjustment
 
@@ -300,7 +301,7 @@ Reusable components introduced:
 
 - **`ActivityStepper`** — props: `activities: { activityId, name, status }[]`, `onNodePress?`. Used by §4.4 and reusable inside §4.2's read-only header (rendered without status icons, activity list only).
 - **`ScanConfirmationCard`** — props mirror the existing check-in confirmation card component but add `variantOptions?`, `allowOptOut`, `onOptOut?`. Extracted from `CheckInScreen`'s inline confirmation card if not already a standalone component, so both check-in and event scanning share one implementation.
-- **`RowErrorTable`** — props: `errors: { row, code, message }[]`. Used only by §4.8.
+- **`RowErrorTable`** — props: `errors: { row, code, message }[]`, `errorCount: number`. Renders `row: 0` as "File", keeps the server order, shows `message` verbatim, and adds a "Showing {errors.length} of {errorCount} issues" footer when the list is capped (§14.6). Used only by §4.8.
 - **`ReadOnlyProfileHeader`** — props: `riderId, name, photoUrl`. Used by §4.9 and reusable wherever a read-only rider identity strip is needed.
 
 Existing components reused as-is: `RiderCardModal` (extended with a new "View event progress" action linking to §4.4, and a "Release baggage" action linking to §4.10), the existing `StatusMessage` component (`kind: 'error' | 'info' | 'warning'`), and `COLORS`/`QR_SCANNER_COLORS` from `src/constants/colors.ts` for all new scan-related UI.
@@ -497,6 +498,8 @@ Every backend error code from backend §8.25 maps to a user-facing message. Wher
 | `USER_ALREADY_EXISTS` | "A user with this ID already exists." | error |
 | `INVALID_EVENT_ASSIGNMENT` | "One or more assignments reference an event or hotel that does not exist." (§4.11, shown inline next to the offending field) | error |
 
+**Hotel upload status codes (backend §8.25a)** are not HTTP errors and are not mapped in the table above. They arrive in `errors[]` of a `REJECTED` §8.22 response, are rendered by `RowErrorTable` with the server `message` verbatim, and are grouped (File / Row / Cross-row / Processing) only to choose the banner and helper copy (§14.6, §14.7).
+
 ## 10. `tour-mgmt-app` task list
 
 | # | Task | Acceptance criteria | Dependencies | Affected paths | Phase |
@@ -512,10 +515,11 @@ Every backend error code from backend §8.25 maps to a user-facing message. Wher
 | 9 | Build Event Scan screen | §4.3, reusing/extracting `ScanConfirmationCard`, resolving effective `enabled`/`allowedTypeCodes` via `activityOverrides` | Tasks 1–6 | `src/screens/events/EventScanScreen.tsx` | 3 |
 | 10 | Build Rider Progress stepper | §4.4 | Tasks 1–3 | `src/screens/events/RiderProgressScreen.tsx`, `ActivityStepper` component | 3 |
 | 11 | Build Occurrence dashboard + Baggage reconciliation screens | §4.5, §4.6 | Tasks 1–3 | `src/screens/events/{OccurrenceDashboard,BaggageReconciliation}Screen.tsx` | 3 |
-| 12 | Build Hotel management, upload (all-or-nothing outcome only, §4.8), and manual-adjustment (multi-select `sharingWith` + `roomCapacity`, §4.9) screens | §4.7–§4.9 | Tasks 1–5 | `src/screens/events/Hotel*.tsx` | 3 |
+| 12 | Build Hotel management, upload (all-or-nothing outcome only, §4.8), and manual-adjustment (multi-select `sharingWith` + `roomCapacity`, §4.9) screens | §4.7–§4.9; upload screen meets §14 (new presign per attempt, `Content-Type: text/csv`, `PENDING`/`VALIDATING` polling with a 3-minute cap, processing-failed banner, capped-error footer, cache refresh on `APPLIED`) | Tasks 1–5 | `src/screens/events/Hotel*.tsx` | 3 |
 | 13 | Extend rider-exit UI with baggage disposition (`RETAINED`/`WITH_RIDER`) + release action | §4.10 | Task 3 | existing rider-exit screen/component | 2 |
 | 14 | Build the `TourUserAssignment` screen for `User-{tourId}` create/update | §4.11 | Task 3 | `src/screens/events/TourUserAssignmentScreen.tsx` | 3 |
 | 15 | Sync service integration | §7.3/§7.4 new operation types handled by outbound/inbound timers | Task 5 | `src/services/sync/syncService.ts` | 2 |
+| 16 | Hotel upload processing integration in `hotelsApi.ts` + `HotelAllocationUploadScreen` | §14.3–§14.8 implemented; status/error unions typed from backend §8.22/§8.25a; unknown upload error codes fall back to the Row group | Tasks 3, 12 | `src/services/api/hotelsApi.ts`, `src/types/api.ts`, `src/screens/events/HotelAllocationUploadScreen.tsx`, `RowErrorTable` | 3 |
 
 ## 11. `tour-rider-app` task list
 
@@ -529,9 +533,9 @@ Every backend error code from backend §8.25 maps to a user-facing message. Wher
 
 **Unit:** `resolveScannedRiderId()` backwards-compatibility (existing `['RIDER']` behaviour byte-for-byte unchanged) and new `TYPE_NOT_ALLOWED_FOR_EVENT` path; `hasPermission` mapping for the five new backend permissions (including `USER_MANAGE`); SQLite DDL migration idempotency; `activityOverrides` effective-value resolution (activity → occurrence override → event default precedence, §4.3/backend §5.2a).
 
-**Component:** `EventScanScreen` state rendering for each state in §4.3 (loading/empty/error/offline/permission-denied/blocked-scan); `OccurrenceManagementScreen` read-only header rendering (activities must not be editable from this screen) and per-activity override editor + mobile quick-action toggles (§4.2); room-clash and room-capacity banner rendering in `HotelAllocationAdjustScreen` (§4.9); `HotelAllocationUploadScreen` renders only the `Applied`/`Rejected` outcomes (§4.8) and never a partial-success state; `TourUserAssignmentScreen` field-level `INVALID_EVENT_ASSIGNMENT` rendering (§4.11); `EventDefinitionEditorScreen` renders the table layout above the web/mobile breakpoint and the expandable-card layout below it (§4.1).
+**Component:** `EventScanScreen` state rendering for each state in §4.3 (loading/empty/error/offline/permission-denied/blocked-scan); `OccurrenceManagementScreen` read-only header rendering (activities must not be editable from this screen) and per-activity override editor + mobile quick-action toggles (§4.2); room-clash and room-capacity banner rendering in `HotelAllocationAdjustScreen` (§4.9); `HotelAllocationUploadScreen` renders only the `Applied`/`Rejected` outcomes (§4.8) and never a partial-success state; `HotelAllocationUploadScreen` also renders the processing-failed banner with the verbatim server message for Processing-group codes, shows `row: 0` as "File" and the "Showing N of M" footer when `errors.length < errorCount`, keeps polling through `PENDING`→`VALIDATING`, and calls §8.21 again for every retry (§14); `TourUserAssignmentScreen` field-level `INVALID_EVENT_ASSIGNMENT` rendering (§4.11); `EventDefinitionEditorScreen` renders the table layout above the web/mobile breakpoint and the expandable-card layout below it (§4.1).
 
-**Manual QA scenarios:** end-to-end scan of all 5 Day-0-Registration activities for one rider including a variant choice and an opt-out; end-to-end Baggage Loading → Baggage Unloading with one bag deliberately withheld to verify the reconciliation drill-down; wrong-hotel-staff scan producing the exact `HOTEL_MISMATCH` message; airplane-mode scan followed by reconnection and successful sync; CSV upload with a deliberately malformed row producing a full-batch rejection with zero rows applied (never a partial count); a mobile quick-action toggle of `selfServiceEnabled` for one activity on one occurrence, verified not to affect any other occurrence of the same event; a `roomCapacity=3` triple-sharing save followed by a fourth-rider attempt producing `ROOM_CAPACITY_EXCEEDED`.
+**Manual QA scenarios:** end-to-end scan of all 5 Day-0-Registration activities for one rider including a variant choice and an opt-out; end-to-end Baggage Loading → Baggage Unloading with one bag deliberately withheld to verify the reconciliation drill-down; wrong-hotel-staff scan producing the exact `HOTEL_MISMATCH` message; airplane-mode scan followed by reconnection and successful sync; CSV upload with a deliberately malformed row producing a full-batch rejection with zero rows applied (never a partial count); a valid CSV reaching `APPLIED` with `appliedCount` = rows × stay dates and the allocations visible in §4.9; re-uploading a corrected file after `REJECTED` (new `uploadId`); a CSV saved as non-UTF-8 producing `INVALID_ENCODING`; a mobile quick-action toggle of `selfServiceEnabled` for one activity on one occurrence, verified not to affect any other occurrence of the same event; a `roomCapacity=3` triple-sharing save followed by a fourth-rider attempt producing `ROOM_CAPACITY_EXCEEDED`.
 
 ## 13. Accessibility and field-usability notes
 
@@ -539,3 +543,122 @@ Every backend error code from backend §8.25 maps to a user-facing message. Wher
 - `QR_SCANNER_COLORS` high-contrast palette is reused as-is for outdoor/bright-sunlight legibility; no new palette is introduced.
 - `playSuccess`/`playFailure`/`playScanTick` audio feedback (existing `feedbackService`) is reused for every new scan outcome, so staff can operate by sound alone in one-handed, eyes-on-the-bag scanning scenarios.
 - The confirmation card's auto-submit toggle (existing pattern) is preserved for event scanning so a single hand can hold a bag while scanning without needing a second tap to confirm.
+
+## 14. Hotel allocation CSV processing — frontend integration (2026-09 enhancement)
+
+### 14.1 What changed
+
+The backend now implements the CSV processor that was designed but missing (backend §8.22a, §8.22b, §8.22c). Before, an upload stayed `PENDING` forever. Now every upload whose file reaches S3 ends in `APPLIED` or `REJECTED`.
+
+- **No new endpoints and no change to the shape of §8.21/§8.22.** The app still presigns, `PUT`s the file and polls.
+- **New for the app to handle:**
+  - the full status lifecycle `PENDING` → `VALIDATING` → `REJECTED` | `APPLIED` (backend §8.22)
+  - the upload status error codes (backend §8.25a), including Processing-group rejections
+  - a capped `errors[]` list (`errorCount` can be larger)
+  - a new presign for every attempt
+- **Notifications are not part of this enhancement** (§14.9). Polling is how the result reaches the user.
+
+### 14.2 End-to-end flow
+
+```mermaid
+sequenceDiagram
+  participant App as tour-mgmt-app
+  participant API as TourDataApi
+  participant S3 as S3 (artifacts bucket)
+  participant P as CSV processor (backend §8.22c)
+  App->>API: POST /hotelstays/uploads/presign (§8.21)
+  API-->>App: uploadId, uploadUrl, expiresIn (status PENDING)
+  App->>S3: PUT file, Content-Type text/csv
+  S3-)P: Object Created (async)
+  P->>P: PENDING to VALIDATING, validate (§8.22a), apply (§8.22b)
+  loop every 3 s, max 3 min
+    App->>API: GET /hotelstays/uploads/{uploadId} (§8.22)
+    API-->>App: PENDING or VALIDATING
+  end
+  P->>P: REJECTED (errors) or APPLIED
+  App->>API: GET /hotelstays/uploads/{uploadId}
+  API-->>App: REJECTED or APPLIED
+```
+
+The organiser's correction loop is: pick file → upload → wait for the result → if `REJECTED`, fix the file and pick it again, which starts a new presign. A valid file is applied in the same pass. There is no separate "confirm and apply" step.
+
+### 14.3 Upload rules the app must follow
+
+- **New presign per attempt.** "Choose another file", "Upload again" and any retry after an S3 `PUT` failure all call §8.21 again. The backend ignores a second upload through a URL that has already been used (backend §8.22c), so reusing one leaves the new file unprocessed.
+- **`Content-Type: text/csv` on the `PUT`.** The URL is signed for that content type. Any other value makes S3 reject the `PUT` (`403`), which is handled as an S3 `PUT` failure.
+- **URL expiry.** The URL is valid for `expiresIn` seconds (900). If the user waits longer than that before uploading, presign again.
+- **Encoding.** The file must be UTF-8 (Excel's "CSV UTF-8" format; a BOM is fine). The app does not parse or transcode the CSV.
+- **No hardcoded limits.** File size, row count, stay-date count and error-list size are AppConfig values enforced by the backend (backend §8.22c); the client does not replicate them. Client-side checks are limited to "a `.csv` file was picked and it is not empty". Everything else is reported by the server (`FILE_TOO_LARGE`, `TOO_MANY_ROWS`, `TOO_MANY_STAY_DATES`).
+
+### 14.4 CSV format help text
+
+The upload screen should offer a collapsible "File format" help panel so organisers can fix errors themselves. Its content comes from `cycling-tour-events.md` §8 and backend §8.22a, and must not add rules of its own:
+
+```csv
+# stayDates=2026-02-11,2026-02-12,2026-02-13
+# hotelId=HTL-MDU-01
+riderId,hotelId,roomNo,roomCapacity,sharingWith
+R1,HTL-MDU-01,204,2,R2
+R2,,204,2,R1
+R58,HTL-MDU-01,207,3,R59;R60
+```
+
+- Directive lines (`# stayDates=…`, or `# startDate=…` with `# nights=…`, plus an optional default `# hotelId=…`) go **before** the header row.
+- `riderId` and `roomNo` are required columns. `hotelId` can be left blank when a default is set. `roomCapacity` is `2` (default) or `3`. `sharingWith` separates rider IDs with `;`.
+- Each rider appears once per file. Every room-mate must name the rider back, with the same hotel, room and capacity.
+- **What gets changed** (help-text wording): "Only the riders listed in this file are updated for these dates. Allocations for other riders stay as they are." This is the merge rule in backend §8.22a.
+- Error row numbers are **line numbers in the file**, counting directive lines, so they match the row numbers shown in a spreadsheet or text editor.
+
+### 14.5 Status handling and polling
+
+| §8.22 `status` | Screen state | App action |
+|---|---|---|
+| `PENDING` | Validating… | Keep polling (file received, processing not yet started) |
+| `VALIDATING` | Validating… | Keep polling |
+| `APPLIED` | Applied banner (§4.8) | Stop polling; refresh cache (§14.8) |
+| `REJECTED`, File/Row/Cross-row codes | Rejected banner + `RowErrorTable` (§4.8, §14.6) | Stop polling; offer "Choose another file" |
+| `REJECTED`, Processing code | Processing-failed banner (§14.7) | Stop polling; offer "Upload again" |
+| `404 UPLOAD_NOT_FOUND` | Full-screen message + back action (§9.1) | Stop polling |
+
+- **Interval and cap:** poll every 3s for up to 3 minutes. Backend §8.22c guarantees a final status well within that once the file is in S3.
+- **Past the cap:** if the status is still `PENDING`, the file most likely never reached S3. Show the "still validating — check back later" message from §4.8 with an "Upload again" action.
+- **Recommended (optional):** keep the last `uploadId` per tour in local app state, so reopening the screen can resume polling instead of losing the result.
+- **Transient failures:** a network error or `5xx` on a single poll does not end the flow. Keep polling within the cap and only show an error if the cap is reached.
+
+### 14.6 Rendering validation errors (`RowErrorTable`)
+
+- Columns are Row, Code, Message. Show `row: 0` as "File". Show `message` verbatim; it already names the rider, room, hotel or date involved.
+- Keep the order the server returns, which is sorted by row.
+- `errorCount` is the total. `errors[]` may be capped by the backend. When `errors.length < errorCount`, show the footer "Showing {errors.length} of {errorCount} issues. Fix these and re-upload to see the rest." The banner's `{errorCount}` uses the total.
+- **"More issues may follow" hint.** The backend runs cross-row checks only after every row passes its own checks (backend §8.22a). So unless every error is in the Cross-row group, add "More issues may be reported after these are fixed." under the banner.
+- **Grouping** by code follows backend §8.25a (File / Row / Cross-row / Processing) and is used only to choose banner and hint copy. Keep the code-to-group map in one constant in `hotelsApi.ts`. An unknown code is treated as Row group, so a new backend code never breaks the screen.
+
+### 14.7 Processing-group rejections
+
+`CONCURRENT_MODIFICATION`, `PROCESSING_TIMEOUT` and `PROCESSING_ERROR` (backend §8.25a) mean processing stopped for a reason other than the file's content, and the backend rolled back. The app:
+
+- shows a processing-failed banner containing the server `message` verbatim instead of the fixed "No allocations were changed" text. The server message states the outcome, and in the rare rollback-failure case it asks the user to contact an administrator.
+- does not render the error table for these codes, since there is a single file-level entry.
+- offers "Upload again" (new presign; the same file may be picked). For `PROCESSING_TIMEOUT` the server message suggests splitting the file, e.g. by stay dates.
+
+### 14.8 After `APPLIED`
+
+- `appliedCount` is the number of allocations written: data rows × stay dates. The Applied banner wording from §4.8 is unchanged.
+- Written allocations carry `source=UPLOAD` and `uploadId` (backend §5.4). The manual adjustment screen (§4.9) treats them like any other allocation.
+- Invalidate `hotelStayStore` and re-fetch today's stays (the same refresh as §7.5), so the §4.9 room-clash pre-check and hotel-staff views use the new data.
+
+### 14.9 Notifications (future phase)
+
+The backend has a TO-DO (backend §8.22; `TODO.md` #35) to notify the uploader when an upload reaches `REJECTED` or `APPLIED`, as part of the platform Notification phase. No frontend work is required now. When it ships, the app may stop polling when the notification arrives, but polling (§14.5) stays as the fallback.
+
+## 15. Summary of changes (2026-09 hotel CSV processing enhancement)
+
+| Section | Change |
+|---|---|
+| §4.8 Hotel allocation CSV upload | Added the Processing-failed outcome; flow now requires a new presign per attempt, `Content-Type: text/csv`, polling through `PENDING`/`VALIDATING` with a 3-minute cap, `row: 0` and capped-error rendering, and a cache refresh on `APPLIED`; references §14 |
+| §5 Component design | `RowErrorTable` gains an `errorCount` prop, the "File" label for `row: 0`, verbatim messages and the capped-list footer |
+| §9.2 Error code to message mapping | Note that hotel upload status codes (backend §8.25a) are rendered verbatim by `RowErrorTable` and are not part of the HTTP error mapping |
+| §10 `tour-mgmt-app` task list | Task 12 acceptance criteria extended; new Task 16 for the processing integration |
+| §12 Frontend test strategy | Component checks for processing-failed banner, `row: 0`, capped footer, polling through `PENDING`/`VALIDATING`, and re-presign; manual QA for `APPLIED`, corrected re-upload and `INVALID_ENCODING` |
+| §14 (new) | Frontend integration guide: flow diagram, upload rules, CSV format help text, status/polling table, error rendering, Processing-group handling, post-apply refresh, notification TO-DO |
+| Backend design (referenced) | Processor section renumbered to §8.22c (adds time-to-final-status note); new §8.25a lists the upload status error codes this document references |

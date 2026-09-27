@@ -234,7 +234,9 @@ Provisioning methods create the same tour-specific DynamoDB tables (TourRider, R
 
 **Notes:**
 - API readers consume enabled entries only.
-- Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`.
+- `GET /v1/config` returns any config type present in the table; no code change is needed to expose a new config type.
+- Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`, `HOTEL_UPLOAD`.
+- `HOTEL_UPLOAD` / `PROCESSING` holds limits for the hotel allocation CSV processor: `maxFileSizeBytes` (1048576), `maxDataRows` (500), `maxStayDates` (31), `maxStoredErrors` (200), and `timeReserveSeconds` (20; the processor stops, rolls back and records `PROCESSING_TIMEOUT` when less time than this is left). If the item is missing or disabled, or a value is invalid, the defaults shown are used. `seed_app_config.py` only inserts this item when it doesn't exist, so values tuned at runtime survive deploys. Clients are not expected to use it, but it is readable via `GET /v1/config`.
 
 ## Tour-Specific Table 6: Artifacts-{tourId}
 
@@ -307,7 +309,7 @@ Both endpoints support optional query parameters:
 | appliedOn | String | ISO 8601 timestamp when rider applied |
 | confirmedOn | String | ISO 8601 timestamp when rider was confirmed |
 | tourFeePaidOn | String | ISO 8601 timestamp when tour fee payment was confirmed |
-| registredOn | String | Registration completion timestamp (current field spelling retained for compatibility) |
+| registeredOn | String | Registration completion timestamp |
 | riderId | String | Tour rider ID when allocated |
 | status | String | Participation status (for example `APPLIED`, `CONFIRMED`, `REGISTERED`) |
 | updatedAt | String | ISO 8601 timestamp |
@@ -478,6 +480,8 @@ Notes:
 - Small table (~15 users per tour)
 - Each tour has its own user assignments (team composition can change between tours)
 - The Cycling Tour Events engine adds optional `hotelId`, `eventAssignments`, and `assignedActivityIds` attributes to this table, and a dedicated `POST`/`PUT /v1/tours/{tourId}/users[/{userId}]` API (permission `USER_MANAGE`) to create/update them — see [cycling-tour-events-design.md](cycling-tour-events-design.md) §5.7/§8.23a. This is distinct from the pre-existing `/v1/admin/usermgmt/users` endpoints, which manage the underlying Cognito identity rather than this tour-scoped record.
+- `userId` is the linking attribute back to the Cognito identity (it *is* the Cognito `sub`, validated against the same format used by `/v1/admin/usermgmt/users`, and must already exist as a managed user before it can be assigned to a tour). `username`/`email`/`name` are a **point-in-time snapshot copied from the Cognito profile at assignment time** (`POST`), not a live mirror — this is intentional, so the tour record retains this information even if the Cognito user pool or user is later deleted. Because it's a snapshot, these fields do not auto-update if the Cognito profile changes later; `PUT /v1/tours/{tourId}/users/{userId}` accepts explicit `username`/`email`/`name` updates so a caller (e.g. the frontend, in response to a Cognito profile edit) can resync them on demand.
+- `GET /v1/tours/{tourId}/users/me` (permission `READ`, granted to every role) lets the authenticated caller read their own tour-scoped record without needing `USER_LIST` — closing the gap where `PS_<n>_USER`/`HOTEL_STAFF` users had no way to self-discover their own `hotelId`/`eventAssignments`/`assignedActivityIds`.
 
 ## Tour-Specific Table 5: Notification-{tourId}
 

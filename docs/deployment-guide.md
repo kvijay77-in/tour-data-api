@@ -163,7 +163,7 @@ Runs automated checks. If any test fails, deployment **stops** and nothing chang
 
 Packages the application code:
 - Validates the infrastructure configuration
-- Bundles all 20 Lambda functions with their dependencies
+- Bundles the Lambda functions with their dependencies
 - Prepares packages for upload to AWS
 
 ### Stage 3: Deploy to AWS (~3-5 min)
@@ -176,7 +176,7 @@ Creates or updates all required resources in your AWS account.
 |---|---|---|
 | API Gateway (HTTP API) | 1 | Receives requests from your apps |
 | Cognito User Pool + App Client | 1 | User authentication (auto-created) |
-| Lambda Functions | 20 | Business logic for each API endpoint |
+| Lambda Functions | Multiple | Business logic for each API endpoint |
 | Lambda Layer | 1 | Shared utilities across all functions |
 | DynamoDB Tables (shared) | 5 | RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig |
 | S3 Bucket | 1 | Rider photos and archived tour data |
@@ -191,6 +191,11 @@ Creates or updates all required resources in your AWS account.
 - `User-{tourId}` — Staff accounts
 - `Notification-{tourId}` — Tour notifications
 - `Artifacts-{tourId}` — Tour and ride artifact metadata
+- `Event-{tourId}` — Event definitions
+- `EventOccurrence-{tourId}` — Event occurrences
+- `EventActivityLogs-{tourId}` — Event activity records
+- `Hotel-{tourId}` — Hotel master data
+- `RoomAllocation-{tourId}` — Per-night rider room allocations
 
 When a tour is archived, these tables can be exported and deleted to save costs.
 
@@ -239,7 +244,7 @@ make provision-tour \
   ENV=prod
 ```
 
-The script creates the Tour record in the shared TourMaster table and provisions 6 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts).
+The script creates the Tour record in the shared TourMaster table and provisions 11 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts, Event, EventOccurrence, EventActivityLogs, Hotel, RoomAllocation).
 
 ### Method 2: API Endpoint (Runtime Method)
 
@@ -259,7 +264,7 @@ curl -X POST https://<api-url>/v1/tours \
   }'
 ```
 
-By default, `POST /v1/tours` creates only the TourMaster record. To provision the 6 tour-specific DynamoDB tables in the same request, include `"provisioning": true`. The `provisioning` request attribute is not stored in TourMaster.
+By default, `POST /v1/tours` creates only the TourMaster record. To provision the 11 tour-specific DynamoDB tables in the same request, include `"provisioning": true`. The `provisioning` request attribute is not stored in TourMaster.
 
 ```bash
 curl -X POST https://<api-url>/v1/tours \

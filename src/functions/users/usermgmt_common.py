@@ -14,16 +14,12 @@ from botocore.exceptions import ClientError
 from logger import get_logger
 from rbac import get_user_groups as get_request_user_groups
 from response import error_response, forbidden_response
-from validation import ValidationError, validate_email
+from validation import ValidationError, validate_cognito_user_id, validate_email
 
 
 logger = get_logger(__name__)
 
 E164_PATTERN = re.compile(r"^\+[1-9]\d{1,14}$")
-COGNITO_SUB_PATTERN = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-)
 
 
 def get_cognito_client():
@@ -86,15 +82,6 @@ def parse_limit(value: Optional[str]) -> Optional[int]:
     if parsed <= 0:
         raise ValidationError("limit must be a positive integer")
     return parsed
-
-
-def validate_cognito_user_id(cognito_user_id: str) -> None:
-    """Validate Cognito user id (sub) without enforcing RFC UUID version bits."""
-    if not cognito_user_id or not COGNITO_SUB_PATTERN.fullmatch(cognito_user_id):
-        raise ValidationError(
-            "cognitoUserId must be a valid Cognito sub",
-            {"field": "cognitoUserId", "value": cognito_user_id},
-        )
 
 
 def validate_phone_number(phone_number: str) -> None:

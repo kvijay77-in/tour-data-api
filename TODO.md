@@ -13,6 +13,14 @@ This document lists all gaps found between project documentation and actual deve
 
 > **Update (2026-03-17):** Item #34 added for Tour Rider App API requirements. 7 new Lambda functions, Notification table, updated RBAC, comprehensive tests added. #34 RESOLVED.
 
+> **Update (2026-09-26):** Item #35 added. The hotel CSV upload processor is implemented; notifying the uploader is deferred to the Notification phase.
+
+---
+
+## 35. 🔲 TODO: Notify Uploader When Hotel CSV Processing Completes (Notification phase)
+
+The hotel allocation CSV processor (`process_upload.py` / `process_upload_failure.py`) records `REJECTED` or `APPLIED` on the upload status record, and clients poll `GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}`. When the platform notification feature is built, send a notification to the uploader (`createdBy` on the `UPLOAD#{uploadId}` record) on either final status. Keep polling as the fallback. See `docs/cycling-tour-events-design.md` §8.22.
+
 ---
 
 ## 34. ✅ RESOLVED: Tour Rider App API Requirements (Issue #12)

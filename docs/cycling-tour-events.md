@@ -196,7 +196,7 @@ R60,HTL-MDU-01,207,3,R58;R59
 R57,HTL-MDU-02,311,2,
 ```
 
-The processor must also support `startDate + nights` as an alternative to an explicit `stayDates` list. With a default `hotelId`, a row can omit the hotel and only provide `riderId,roomNo` for single-hotel days. One source row expands into N `RoomAllocation` records. Re-upload for a date must replace that date's rows idempotently.
+The processor must also support `startDate + nights` as an alternative to an explicit `stayDates` list. With a default `hotelId`, a row can omit the hotel and only provide `riderId,roomNo` for single-hotel days. One source row expands into N `RoomAllocation` records. Re-upload for a date must replace that date's rows idempotently. This works per rider: each rider in the file gets their allocation for that date replaced, and riders not in the file keep theirs.
 
 The upload apply is **strict all-or-nothing**: the entire file is validated in full before anything is written, and if any row has an issue (unknown riderId, unknown hotelId, room-capacity overflow, room clash, non-reciprocal `sharingWith`, duplicate rider for a date), the entire batch is rejected and **no partial write occurs** — including rows that individually passed validation. There is no partial-success outcome to report. Row-level errors must be reported against the source row number so users can map comments back to the original file and re-upload a corrected file. Manual adjustment edits a single night only.
 

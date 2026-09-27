@@ -138,13 +138,13 @@ class TestProvisionTourTables:
     """Test end-to-end tour table provisioning"""
 
     def test_provision_creates_all_tour_tables(self, dynamodb_client_mock):
-        """Provisioning creates all six tour-specific tables."""
+        """Provisioning creates all eleven tour-specific tables."""
         created = provision_tour_tables(
             dynamodb_client_mock,
             MOCK_TOUR_ID,
             ignore_existing=True,
         )
-        assert len(created) == 6
+        assert len(created) == 11
 
         # Verify table names
         expected_prefix = f"{MOCK_STACK_NAME}-"
@@ -166,6 +166,11 @@ class TestProvisionTourTables:
             f"{MOCK_STACK_NAME}-User-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-Notification-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-Artifacts-{MOCK_TOUR_ID}",
+            f"{MOCK_STACK_NAME}-Event-{MOCK_TOUR_ID}",
+            f"{MOCK_STACK_NAME}-EventOccurrence-{MOCK_TOUR_ID}",
+            f"{MOCK_STACK_NAME}-EventActivityLogs-{MOCK_TOUR_ID}",
+            f"{MOCK_STACK_NAME}-Hotel-{MOCK_TOUR_ID}",
+            f"{MOCK_STACK_NAME}-RoomAllocation-{MOCK_TOUR_ID}",
         ]
         assert sorted(created) == sorted(expected_names)
 
@@ -200,6 +205,13 @@ class TestProvisionTourTables:
         assert 'DateIndex' in gsi_names
         assert 'StatusIndex' in gsi_names
 
+        resp = dynamodb_client_mock.describe_table(
+            TableName=f"{MOCK_STACK_NAME}-EventOccurrence-{MOCK_TOUR_ID}"
+        )
+        gsi_names = [g['IndexName'] for g in resp['Table'].get('GlobalSecondaryIndexes', [])]
+        assert 'DateIndex' in gsi_names
+        assert 'StatusIndex' in gsi_names
+
     def test_create_single_table(self, dynamodb_client_mock):
         """Creating a single tour table works correctly"""
         table_name = create_tour_table(dynamodb_client_mock, 'TourRider', MOCK_TOUR_ID)
@@ -220,7 +232,7 @@ class TestProvisionTourTables:
             ignore_existing=True,
         )
 
-        assert len(created) == 6
+        assert len(created) == 11
         for table_type in TOUR_TABLE_TYPES:
             resp = dynamodb_client_mock.describe_table(
                 TableName=f"{MOCK_STACK_NAME}-{table_type}-{MOCK_TOUR_ID}"

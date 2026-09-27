@@ -349,6 +349,7 @@ class TestRequirePitStopStageAccess:
             Permission.CHECKIN,
             Permission.PIT_STOP_MANAGE,
             Permission.DASHBOARD,
+            Permission.EVENT_SCAN,
         }
 
     def test_multiple_groups_union_permissions(self):
@@ -1361,3 +1362,23 @@ class TestGetCurrentUserGroups:
         assert response['statusCode'] == 200
         body = json.loads(response['body'])
         assert body['data']['groups'] == []
+
+    def test_email_verified_string_claim_returned_as_boolean(self):
+        get_current_user = _load_handler('users', 'get_current_user')
+        event = _make_event(groups=['ADMINISTRATOR'])
+        response = get_current_user.lambda_handler(event, None)
+        body = json.loads(response['body'])
+        assert body['data']['emailVerified'] is True
+
+    def test_email_verified_false_or_missing_returned_as_false(self):
+        get_current_user = _load_handler('users', 'get_current_user')
+        for claim_value in ('false', None):
+            event = _make_event(groups=['ADMINISTRATOR'])
+            claims = event['requestContext']['authorizer']['jwt']['claims']
+            if claim_value is None:
+                claims.pop('email_verified')
+            else:
+                claims['email_verified'] = claim_value
+            response = get_current_user.lambda_handler(event, None)
+            body = json.loads(response['body'])
+            assert body['data']['emailVerified'] is False

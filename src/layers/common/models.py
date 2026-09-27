@@ -135,11 +135,65 @@ class ArtifactCategory(str, Enum):
     RIDE = "ride"
 
 
+class DietaryPreference(str, Enum):
+    """Supported rider dietary preferences."""
+    VEG = "VEG"
+    NON_VEG = "NON_VEG"
+
+
+class BaggageStatus(str, Enum):
+    """Tour rider baggage custody status."""
+    ACTIVE = "ACTIVE"
+    RETAINED = "RETAINED"
+    WITH_RIDER = "WITH_RIDER"
+
+
+class EventType(str, Enum):
+    """Event repetition type values."""
+    SINGLE = "SINGLE"
+    REPEATING = "REPEATING"
+
+
+class EventOccurrenceStatus(str, Enum):
+    """Event occurrence lifecycle states."""
+    PLANNED = "PLANNED"
+    ACTIVE = "ACTIVE"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class EventRecordOutcome(str, Enum):
+    """Event activity record outcomes."""
+    COMPLETED = "COMPLETED"
+    OPTED_OUT = "OPTED_OUT"
+    FLAGGED = "FLAGGED"
+
+
+class HotelUploadStatus(str, Enum):
+    """Hotel allocation CSV upload lifecycle states."""
+    PENDING = "PENDING"
+    VALIDATING = "VALIDATING"
+    REJECTED = "REJECTED"
+    APPLIED = "APPLIED"
+
+
 # ============================================================================
 # TOUR-SPECIFIC TABLE TYPES (for dynamic table name resolution)
 # ============================================================================
 
-TOUR_TABLE_TYPES = ['TourRider', 'Ride', 'CheckIn', 'User', 'Notification', 'Artifacts']
+TOUR_TABLE_TYPES = [
+    'TourRider',
+    'Ride',
+    'CheckIn',
+    'User',
+    'Notification',
+    'Artifacts',
+    'Event',
+    'EventOccurrence',
+    'EventActivityLogs',
+    'Hotel',
+    'RoomAllocation',
+]
 
 
 # ============================================================================
@@ -161,6 +215,7 @@ class RiderProfile:
     address: Optional[Dict[str, str]] = None
     dateOfBirth: Optional[str] = None
     gender: Optional[str] = None
+    dietaryPreference: Optional[str] = None
     personalCode: Optional[str] = None
     photoS3Key: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
@@ -241,8 +296,15 @@ class TourRider:
     status: TourRiderStatus
     qrCodeData: Optional[str] = None
     registeredAt: str = field(default_factory=utc_now_iso)
+    prevStatus: Optional[str] = None
     exitedAt: Optional[str] = None
     exitedBy: Optional[str] = None
+    baggageStatus: str = BaggageStatus.ACTIVE.value
+    baggageExitedAt: Optional[str] = None
+    baggageExitedBy: Optional[str] = None
+    baggageReleasedAt: Optional[str] = None
+    baggageReleasedBy: Optional[str] = None
+    baggageExitNote: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)
     
@@ -424,7 +486,12 @@ class User:
     role: str
     status: str = "ACTIVE"
     assignedStage: Optional[int] = None
+    hotelId: Optional[str] = None
+    eventAssignments: Optional[List[Dict[str, Any]]] = None
+    assignedActivityIds: Optional[List[str]] = None
+    createdBy: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
+    updatedBy: Optional[str] = None
     updatedAt: str = field(default_factory=utc_now_iso)
     
     def to_dict(self) -> Dict[str, Any]:
@@ -464,6 +531,159 @@ class Notification:
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         return self.to_dict()
+
+
+@dataclass
+class ActivityDefinition:
+    """Embedded activity configuration for an event definition."""
+    activityId: str
+    name: str
+    sequenceNo: int
+    enabled: bool = True
+    mandatory: bool = False
+    allowedTypeCodes: List[str] = field(default_factory=list)
+    allowOptOut: bool = False
+    prerequisiteActivityIds: List[str] = field(default_factory=list)
+    restrictToAssignedUsers: bool = True
+    variantOptions: List[str] = field(default_factory=list)
+    notes: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class EventDefinition:
+    """Event definition item stored in Event-{tourId}."""
+    eventId: str
+    eventName: str
+    eventType: EventType
+    location: str
+    sequenceEnforced: bool
+    defaultAllowedTypeCodes: List[str]
+    allowSelfService: bool = False
+    activities: List[ActivityDefinition] = field(default_factory=list)
+    createdAt: str = field(default_factory=utc_now_iso)
+    updatedAt: str = field(default_factory=utc_now_iso)
+    updatedBy: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = asdict(self)
+        data['eventType'] = self.eventType.value
+        data['activities'] = [activity.to_dict() for activity in self.activities]
+        return {k: v for k, v in data.items() if v is not None}
+
+
+@dataclass
+class ActivityOverride:
+    """Per-activity occurrence override."""
+    activityId: str
+    enabled: Optional[bool] = None
+    selfServiceEnabled: Optional[bool] = None
+    allowedTypeCodes: Optional[List[str]] = None
+    note: Optional[str] = None
+    updatedAt: Optional[str] = None
+    updatedBy: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+
+@dataclass
+class EventOccurrence:
+    """Concrete event occurrence item."""
+    eventId: str
+    dateSeq: str
+    occurrenceId: str
+    date: str
+    seq: int
+    status: EventOccurrenceStatus = EventOccurrenceStatus.PLANNED
+    activityOverrides: List[ActivityOverride] = field(default_factory=list)
+    selfServiceEnabled: bool = False
+    linkedOccurrenceRef: Optional[str] = None
+    restrictToAssignedUsers: bool = True
+    startedAt: Optional[str] = None
+    completedAt: Optional[str] = None
+    cancelledAt: Optional[str] = None
+    cancelledBy: Optional[str] = None
+    cancelReason: Optional[str] = None
+    createdAt: str = field(default_factory=utc_now_iso)
+    updatedAt: str = field(default_factory=utc_now_iso)
+    updatedBy: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = asdict(self)
+        data['status'] = self.status.value
+        data['activityOverrides'] = [override.to_dict() for override in self.activityOverrides]
+        return {k: v for k, v in data.items() if v is not None}
+
+
+@dataclass
+class EventActivityRecord:
+    """Activity completion/scan record item."""
+    occurrenceId: str
+    recordId: str
+    eventId: str
+    activityId: str
+    activityName: str
+    riderId: str
+    scannedBy: str
+    timestamp: str
+    method: str
+    outcome: EventRecordOutcome = EventRecordOutcome.COMPLETED
+    typeCode: Optional[str] = None
+    bagLabel: Optional[str] = None
+    variantSelected: Optional[str] = None
+    hotelId: Optional[str] = None
+    syncedAt: Optional[str] = None
+    isFlagged: bool = False
+    flagReason: Optional[str] = None
+    cancelledAt: Optional[str] = None
+    cancelledBy: Optional[str] = None
+    cancelReason: Optional[str] = None
+    createdAt: str = field(default_factory=utc_now_iso)
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = asdict(self)
+        data['outcome'] = self.outcome.value
+        return {k: v for k, v in data.items() if v is not None}
+
+
+@dataclass
+class Hotel:
+    """Hotel master item."""
+    hotelId: str
+    name: str
+    city: str
+    address: str
+    contact: Optional[str] = None
+    notes: Optional[str] = None
+    createdAt: str = field(default_factory=utc_now_iso)
+    updatedAt: str = field(default_factory=utc_now_iso)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+
+@dataclass
+class RoomAllocation:
+    """Per-rider per-night hotel allocation item."""
+    stayDate: str
+    riderId: str
+    hotelId: str
+    roomNo: str
+    roomCapacity: int = 2
+    sharingWith: List[str] = field(default_factory=list)
+    source: str = "MANUAL"
+    checkInDate: Optional[str] = None
+    checkOutDate: Optional[str] = None
+    uploadId: Optional[str] = None
+    createdAt: str = field(default_factory=utc_now_iso)
+    updatedAt: str = field(default_factory=utc_now_iso)
+    updatedBy: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: v for k, v in asdict(self).items() if v is not None}
 
 
 # ============================================================================

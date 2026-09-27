@@ -555,7 +555,7 @@ In the style of the existing "Access Patterns" section in `SolutionDesign.md`:
    - Get all records for a rider (rider progress stepper, rider-app self view)
    - Cancel an activity record
 4. **Reconciliation**
-   - Get the loading occurrence's records and the paired unloading occurrence's records (via `linkedOccurrenceRef`) and diff by `riderId` + `typeCode`
+   - Get the loading occurrence's records and the paired unloading occurrence's records (via `linkedOccurrenceRef`) and diff by `riderId` + `typeCode`, counting only scans at each occurrence's last enabled activity (§8.17)
 5. **Hotel management**
    - Get/list hotels for a tour
    - Create/update a hotel
@@ -719,7 +719,7 @@ Transitions `ACTIVE → COMPLETED`. Does **not** require all mandatory activitie
 Creates one `EventActivityLogs`.
 
 - Required permission: `EVENT_SCAN`, plus the second authorisation layer (§9.3) when the activity has `restrictToAssignedUsers=true` (default) or the event is a baggage event
-- Request body: `activityId` (required), `riderId` (required — resolved client-side from the scanned ID Code, see frontend §8), `typeCode` (required — the `AppConfig` `ID_CODE_TYPE` `code` scanned; must be a member of the activity's effective `allowedTypeCodes`, §4.3), `outcome` (optional, default `COMPLETED`; `OPTED_OUT` only when the activity has `allowOptOut=true`), `variantSelected` (required when the activity has `variantOptions`), `method` (`QR_SCAN`|`MANUAL`), `timestamp` (required — client-supplied for offline support, §7.9)
+- Request body: `activityId` (required), `riderId` (required — resolved client-side from the scanned ID Code, see frontend §8), `typeCode` (required unless `outcome=OPTED_OUT` — the `AppConfig` `ID_CODE_TYPE` `code` scanned; must be a member of the activity's effective `allowedTypeCodes`, §4.3), `outcome` (optional, default `COMPLETED`; `OPTED_OUT` only when the activity has `allowOptOut=true`), `variantSelected` (required when the activity has `variantOptions`), `method` (`QR_SCAN`|`MANUAL`), `timestamp` (required — client-supplied for offline support, §7.9)
 - Success (201): `{ "success": true, "data": <created EventActivityLogs, §5.3> }`
 - Errors:
   - `400 VALIDATION_ERROR` — missing required field, or `variantSelected` missing/invalid for a variant activity
@@ -761,6 +761,7 @@ Per-rider progress across all events (used by the rider progress stepper and `to
 
 Only valid for an occurrence whose own `linkedOccurrenceRef` (§5.2) is set.
 
+- Counting rule: a bag is a distinct `(riderId, typeCode)` pair from a non-cancelled record at the occurrence's **last enabled activity** (highest `sequenceNo` after `activityOverrides`); `OPTED_OUT` records and records without a `typeCode` are excluded. The same rule is applied to the linked occurrence, and `missingRiderIds` lists riders with a loaded bag that has no matching unloaded bag.
 - Required permission: `DASHBOARD`
 - Success (200): `{ "success": true, "data": { "loadedCount", "unloadedCount", "missingRiderIds": [ "R12", "R57" ] } }`
 - Errors: `401`, `403`, `404 OCCURRENCE_NOT_FOUND`, `400 NO_LINKED_OCCURRENCE`
@@ -795,6 +796,8 @@ Only valid for an occurrence whose own `linkedOccurrenceRef` (§5.2) is set.
 - `GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}` — `HOTEL_ALLOC_MANAGE`
 - Success (200): `{ "data": { "uploadId", "status": "PENDING"|"VALIDATING"|"REJECTED"|"APPLIED", "rowCount", "errorCount", "errors": [ { "row": 3, "code": "UNKNOWN_HOTEL_ID", "message": "..." } ], "appliedCount", "processedAt" } }`. Per D21/§8.22a, there is no partial-success state: `status` only ever reaches `APPLIED` when `errorCount=0` for the whole file, and `appliedCount` equals `rowCount`'s expanded `RoomAllocation` item count whenever `status=APPLIED` (never a partial count).
 - Errors: `404 UPLOAD_NOT_FOUND`
+- `errors[].row` is the physical line number in the source file (`0` = file-level). `errorCount` is the full total; `errors[]` is capped at `maxStoredErrors` (AppConfig `HOTEL_UPLOAD`/`PROCESSING`) to stay under the DynamoDB item size limit. Error codes are listed in §8.25a.
+- Result delivery is by polling this endpoint. **TO-DO (Notification phase):** when an upload reaches `REJECTED` or `APPLIED`, notify the uploader (`createdBy` on the upload status record). Polling stays as the fallback.
 
 ### 8.22a Hotel upload — phased validation (D21)
 
@@ -803,15 +806,29 @@ Per product-owner refinement, the CSV processor validates the **entire file** be
 1. **Phase 1 — structural/row validation.** Parses header comment lines (`stayDates`/`startDate`+`nights`/`hotelId` defaults) and every data row; checks per-row: unknown `riderId`, unknown `hotelId`, malformed `roomNo`, and `roomCapacity` bounds. Every failing row is collected (not just the first) so the full error set is reported in one pass.
 2. **Phase 2 — cross-row/domain validation.** Expands each row into its N `RoomAllocation` records (one per expanded `stayDate`) and validates the same reciprocity/capacity/consistency rules as manual adjustment (§5.4) across the **whole batch plus existing data** for the affected dates — duplicate rider for a date within the file, non-reciprocal `sharingWith` pairs (whether both sides are in this file or one side is pre-existing data), and room-capacity overflow.
 
-If **either phase** produces one or more errors, the upload status transitions straight to `REJECTED` with the full `errors[]` list (§8.22) and **zero** `RoomAllocation` items are written or modified — including rows that individually passed validation. There is no partial-success outcome.
+If **either phase** produces one or more errors, the upload status transitions straight to `REJECTED` with the full `errors[]` list (§8.22) and **zero** `RoomAllocation` items are written or modified — including rows that individually passed validation. There is no partial-success outcome. Phase 2 only runs when Phase 1 is clean, so cross-row errors are never reported against rows that are already invalid.
+
+Re-upload semantics are **merge per rider + stay date**: the file writes or replaces allocations only for the riders it contains. Other riders' allocations for the same dates, including `MANUAL` ones, are kept and included in Phase 2. An existing allocation that still names a file rider as a room-mate after the change is reported as `NON_RECIPROCAL_SHARING` against that file rider's row.
 
 ### 8.22b Hotel upload — transactional apply (D21)
 
 Only when both validation phases (§8.22a) produce zero errors does the processor proceed to apply:
 
-- All expanded `RoomAllocation` writes for the upload (creates and, for a re-upload covering an already-allocated date, idempotent replacements) are issued as a single DynamoDB `TransactWriteItems` batch (chunked into multiple transactions only when the item count exceeds the DynamoDB transaction item limit, in which case chunks are applied only after every chunk has independently passed a final pre-commit re-check, and any chunk failure rolls back by not committing subsequent chunks and marking the whole upload `REJECTED`).
+- All expanded `RoomAllocation` writes are issued as `TransactWriteItems` chunks of up to 100 items (the DynamoDB transaction limit). Each put checks that the item hasn't changed since validation read it (`attribute_not_exists` for new items, or `updatedAt` equal to the value read). A concurrent manual edit therefore cancels the transaction with `CONCURRENT_MODIFICATION`.
+- A transaction can't cover more than 100 items, so all-or-nothing across chunks works by compensation. Before the first chunk, the processor saves the pre-apply items to `tours/{tourId}/uploads/hotel-allocation/{uploadId}.snapshot.json` and sets `applyStartedAt`. If a chunk fails or the time reserve is reached, the chunks already committed are rolled back from that snapshot. The rollback restores previous items and deletes new ones, but only items still carrying this `uploadId`. The upload is then marked `REJECTED`.
 - On success, `status=APPLIED`, `appliedCount` is set, and `errorCount=0`.
 - Re-uploading for an overlapping date still replaces that date's rows atomically as a unit — the existing idempotent-replace behaviour (`cycling-tour-events.md` §8) is preserved, just wrapped in the same all-or-nothing guarantee.
+
+### 8.22c Hotel upload — processor trigger, limits and failure handling
+
+- **Trigger:** `ArtifactsBucket` sends events to EventBridge (`EventBridgeEnabled`). A rule matching `Object Created` on key `tours/*/uploads/hotel-allocation/*.csv` invokes `ProcessHotelUploadFunction` asynchronously. EventBridge was chosen over an S3 bucket notification to avoid a circular dependency: `Globals` passes `ARTIFACTS_BUCKET` to every function, and a bucket notification would make the bucket depend on the function too. The rule also keeps artifact uploads out of the processor.
+- **Idempotency:** the processor moves `PENDING` → `VALIDATING` with a conditional update. Duplicate events, or a second upload through the same presigned URL, are ignored. Every new attempt needs a new presign.
+- **Limits:** AppConfig `HOTEL_UPLOAD`/`PROCESSING` sets `maxFileSizeBytes`, `maxDataRows`, `maxStayDates`, `maxStoredErrors` and `timeReserveSeconds`. Code defaults apply if the item is missing, disabled or invalid. These limits are enforced by the backend; they are readable via `GET /v1/config?configType=HOTEL_UPLOAD` but clients are not required to use them.
+- **Rider eligibility:** a `TourRider` must exist and must not be `WITHDRAWN`/`EXITED` (`RIDER_NOT_ELIGIBLE`).
+- **Timeout capture:**
+  1. Before each phase, each stay-date lookup and each transaction chunk, the processor checks the remaining Lambda time. Below `timeReserveSeconds` it stops, rolls back and records `REJECTED`/`PROCESSING_TIMEOUT`.
+  2. For hard kills (timeout, out of memory, crash), the processor runs with `MaximumRetryAttempts: 0` and `OnFailure` → `ProcessHotelUploadFailureFunction`. That function reads `responsePayload.errorType` (`Sandbox.Timedout` → `PROCESSING_TIMEOUT`, otherwise `PROCESSING_ERROR`). If the apply had started (`applyStartedAt`), it rolls back from the snapshot. It then records `REJECTED`, but only if the status is still `VALIDATING`.
+- **Time to a final status:** the processor has a 120 s Lambda timeout, and the failure handler runs straight after a hard kill. Once the file is in S3, an upload therefore reaches `REJECTED` or `APPLIED` well within about 3 minutes.
 
 ### 8.23 Rider exit (extended) and baggage release
 
@@ -824,13 +841,22 @@ Only when both validation phases (§8.22a) produce zero errors does the processo
 Product-owner refinement: no endpoint previously existed to write a `User-{tourId}` record at all — only `GET /v1/tours/{tourId}/users` (list, `USER_LIST`) and the global Cognito-account endpoints under `/v1/admin/usermgmt/users` (which create the underlying Cognito identity and group membership, but not the tour-scoped assignment record). This gap is closed here, and is a prerequisite for the event/hotel assignment fields in §5.7 to be usable from `tour-mgmt-app`.
 
 - `POST /v1/tours/{tourId}/users` — `USER_MANAGE`
-  - Request body: `userId` (required — the Cognito user `sub`, must already exist as a managed user via `/v1/admin/usermgmt/users`), `username`, `email`, `name`, `role` (one of the existing `User-{tourId}.role` values, §5.7 header), `assignedStage` (optional, `PS_<n>_USER` only), `hotelId` (optional, `HOTEL_STAFF` only), `eventAssignments` (optional, list of `{ eventId, dates }`), `assignedActivityIds` (optional, list of activity IDs), `status` (optional, defaults to `ACTIVE`)
+  - Request body: `userId` (required — the Cognito user `sub`; validated against the same sub format as `/v1/admin/usermgmt/users` and must already exist as a managed user there), `role` (one of the existing `User-{tourId}.role` values, §5.7 header), `assignedStage` (optional, `PS_<n>_USER` only), `hotelId` (optional, `HOTEL_STAFF` only), `eventAssignments` (optional, list of `{ eventId, dates }`), `assignedActivityIds` (optional, list of activity IDs), `status` (optional, defaults to `ACTIVE`). `username`/`email`/`name` are **not** read from the request body — they are looked up from the Cognito profile for `userId` and snapshotted onto the created record, so the values are always accurate as of assignment time (§8.23a.1) and survive later deletion/changes to the Cognito identity.
   - Success (201): the created `User-{tourId}` item, including server-set `createdAt`, `createdBy` (caller's `userId`), `updatedAt`, `updatedBy`
-  - Errors: `400 VALIDATION_ERROR` (unknown `role`; `hotelId` set for a non-`HOTEL_STAFF` role), `404 USER_NOT_FOUND` (the referenced Cognito `userId` has no managed-user record — create it first via `/v1/admin/usermgmt/users`), `409 USER_ALREADY_EXISTS`, `400 INVALID_EVENT_ASSIGNMENT` (an `eventAssignments` entry's `eventId`, or `hotelId`, does not exist for this tour)
+  - Errors: `400 VALIDATION_ERROR` (unknown `role`; malformed `userId`; `hotelId` set for a non-`HOTEL_STAFF` role), `404 USER_NOT_FOUND` (the referenced Cognito `userId` has no managed-user record, or the managed-user pool could not be verified — create it first via `/v1/admin/usermgmt/users`), `409 USER_ALREADY_EXISTS`, `400 INVALID_EVENT_ASSIGNMENT` (an `eventAssignments` entry's `eventId`, or `hotelId`, does not exist for this tour), `500` (Cognito lookup failed)
 - `PUT /v1/tours/{tourId}/users/{userId}` — `USER_MANAGE`
-  - Request body: any subset of the writable attributes listed above (partial update; omitted fields are left unchanged; a field explicitly set to `null` clears it, consistent with the merge convention already used for `activityOverrides`, §8.9a)
+  - Request body: any subset of the writable attributes (partial update; omitted fields are left unchanged; a field explicitly set to `null` clears it, consistent with the merge convention already used for `activityOverrides`, §8.9a). This includes `username`/`email`/`name` — unlike `POST`, `PUT` accepts them from the caller so the tour-scoped snapshot can be explicitly resynced after a Cognito profile change (the frontend is expected to call this whenever it detects the underlying Cognito profile has changed).
   - Success (200): the updated `User-{tourId}` item, with `updatedAt`/`updatedBy` refreshed
   - Errors: `400 VALIDATION_ERROR`, `404 USER_NOT_FOUND`, `400 INVALID_EVENT_ASSIGNMENT`
+- `GET /v1/tours/{tourId}/users/me` — `READ` (granted to every role, unlike `USER_LIST` which is admin/super-user only)
+  - Looks up the caller's own `User-{tourId}` record by their JWT `sub`, so `PS_<n>_USER`/`HOTEL_STAFF` callers (who cannot call `GET /v1/tours/{tourId}/users`) can read their own `hotelId`/`eventAssignments`/`assignedActivityIds`/role without an admin permission.
+  - Success (200): the caller's `User-{tourId}` item
+  - Errors: `404 USER_NOT_FOUND` (caller has no tour-scoped record for this tour)
+
+#### 8.23a.1 Linking and snapshot semantics (D22 follow-up)
+
+- `userId` is the sole linking attribute between `User-{tourId}` and the Cognito identity — it is the Cognito `sub`, format-validated the same way as `/v1/admin/usermgmt/users/{cognitoUserId}`, and existence-checked against the managed user pool before the tour record can be created. This check fails closed: if `MGMT_USER_POOL_ID` is not configured, or the Cognito lookup errors, the request is rejected (`404`/`500`) rather than assumed valid.
+- `username`/`email`/`name` are intentionally duplicated into `User-{tourId}` (rather than only referencing Cognito) so this data is retained even if the Cognito user pool or the specific user is later deleted. They are a point-in-time snapshot captured from Cognito at `POST` time, not a live mirror, and are expected to be refreshed explicitly via `PUT` (see above) rather than kept automatically in sync.
 
 **Audit fields:** both endpoints set/refresh `createdAt`/`createdBy` (create only) and `updatedAt`/`updatedBy` (both), following the same audit-trail convention already used elsewhere in this design (for example `RoomAllocation.source`/manual-adjustment audit, `EventOccurrence` override `updatedAt`/`updatedBy`, §5.2a).
 
@@ -878,6 +904,35 @@ New error codes introduced by this design, in addition to the standard `400`/`40
 | `RECORD_ALREADY_CANCELLED` | 409 | Cancel called twice | "This activity record has already been cancelled." |
 | `USER_NOT_FOUND` | 404 | `userId` does not exist for the tour (§8.23a) | "User not found." |
 | `USER_ALREADY_EXISTS` | 409 | Duplicate `userId`/Cognito mapping on create (§8.23a) | "A user with this ID already exists." |
+
+### 8.25a Hotel upload status error codes
+
+These codes are not HTTP errors. They appear in `errors[].code` of the §8.22 status response when `status=REJECTED`. Every entry comes with a server-generated `message` naming the offending value, rider, room or date. Clients must show that message verbatim. `row` is the source-file line number; `0` means the error concerns the whole file.
+
+| Code | Group | Trigger |
+|---|---|---|
+| `FILE_TOO_LARGE` | File | File exceeds `maxFileSizeBytes` |
+| `INVALID_ENCODING` | File | File is not UTF-8 (a UTF-8 BOM is accepted) |
+| `INVALID_HEADER` | File | Header row missing, unknown/duplicate column, or `riderId`/`roomNo` column missing |
+| `EMPTY_FILE` | File | Header present but no data rows |
+| `TOO_MANY_ROWS` | File | More than `maxDataRows` data rows |
+| `MISSING_STAY_DATES` | File | No `# stayDates=` or `# startDate=` + `# nights=` directive |
+| `INVALID_STAY_DATES` | File | Bad date, bad `nights`, `startDate` without `nights`, or both forms used |
+| `TOO_MANY_STAY_DATES` | File | Expanded stay dates exceed `maxStayDates` |
+| `MALFORMED_ROW` | Row | Row has more values than header columns, or cannot be parsed |
+| `MISSING_RIDER_ID` / `INVALID_RIDER_ID` / `UNKNOWN_RIDER_ID` | Row | `riderId` blank / bad format / not registered for the tour |
+| `RIDER_NOT_ELIGIBLE` | Row | Rider is `WITHDRAWN` or `EXITED` |
+| `MISSING_HOTEL_ID` / `INVALID_HOTEL_ID` / `UNKNOWN_HOTEL_ID` | Row | No `hotelId` and no default / bad format / not in the tour (also reported against the `# hotelId=` directive line) |
+| `MISSING_ROOM_NO` / `INVALID_ROOM_NO` | Row | `roomNo` blank / not 1–10 characters of letters, digits, `/` or `-` |
+| `INVALID_ROOM_CAPACITY` | Row | `roomCapacity` not `2` or `3` |
+| `INVALID_SHARING_WITH` | Row | Bad rider ID, self-reference or duplicate in `sharingWith` |
+| `ROOM_CAPACITY_EXCEEDED` | Row / Cross-row | Too many room-mates for the capacity, or room over capacity on a date |
+| `DUPLICATE_RIDER_FOR_DATE` | Cross-row | Same rider appears more than once in the file |
+| `NON_RECIPROCAL_SHARING` | Cross-row | Room-mate missing, in a different room, or not naming this rider back (in the file or in existing data) |
+| `ROOM_CLASH` | Cross-row | Room already occupied on that date by a rider not in `sharingWith` |
+| `CONCURRENT_MODIFICATION` | Processing | Allocations changed while the file was being applied; rolled back |
+| `PROCESSING_TIMEOUT` | Processing | Processing ran out of time; rolled back |
+| `PROCESSING_ERROR` | Processing | Unexpected failure; rolled back. If rollback itself failed, the message says so and asks the user to contact an administrator |
 | `INVALID_EVENT_ASSIGNMENT` | 400 | An `eventAssignments` entry references an unknown `eventId`, or `hotelId` references an unknown hotel (§8.23a) | "One or more assignments reference an event or hotel that does not exist." |
 
 ## 9. RBAC and permission model
@@ -1073,7 +1128,7 @@ Per D5/D6, each occurrence created from `EVT-BAGLOAD` for a given date is expect
 | 7 | Implement `require_event_assignment_access()` helper | §9.3 checks enforced identically to `require_pit_stop_stage_access()` pattern | Task 1 | `src/layers/common/rbac.py` | 2 |
 | 8 | Implement dashboard/progress/reconciliation read handlers | §8.15–8.17 contracts met | Task 6 | `src/functions/events/{get_dashboard,get_dashboard_progress,get_rider_progress,get_reconciliation}.py` | 3 |
 | 9 | Implement `Hotel` and `RoomAllocation` CRUD/query handlers | §8.18–8.20 contracts met, including `ROOM_CLASH`/`NON_RECIPROCAL_SHARING` checks | Task 3 | `src/functions/hotels/*.py` | 2 |
-| 10 | Implement hotel-stay CSV presign + S3-triggered processor (phased validation + transactional apply, §8.22a/§8.22b) + status poll | §8.21–8.22b contracts met; any row-level error rejects the whole batch (no partial write); re-upload for a date replaces rows idempotently | Task 9 | `src/functions/hotels/{presign_upload,get_upload_status}.py`, new S3-triggered processor function | 3 |
+| 10 | Implement hotel-stay CSV presign + S3-triggered processor (phased validation + transactional apply, §8.22a/§8.22b) + status poll — ✅ Done | §8.21–8.22b contracts met; any row-level error rejects the whole batch (no partial write); re-upload for a date replaces rows idempotently | Task 9 | `src/functions/hotels/{presign_upload,get_upload_status,process_upload,process_upload_failure}.py`, `tests/test_hotel_upload_processor.py` | 3 |
 | 11 | Extend rider-exit handlers with `baggageDisposition`/baggage release | §8.23 contracts met, including `409 BAGGAGE_NOT_RETAINED` | Task 1 | `src/functions/riders/exit_tour_rider.py`, `cancel_rider_exit.py`, new `release_rider_baggage.py` | 2 |
 | 12 | Add `dietaryPreference` to `RiderProfile` create/update handlers | Optional field round-trips; existing profile tests unaffected | None | `src/functions/riders/{create_rider_profile,update_rider_profile}.py` | 1 |
 | 13 | Implement bootstrap endpoint | §8.24 contract met, ETag/304 supported | Tasks 4, 5, 9 | `src/functions/events/get_bootstrap.py` | 3 |

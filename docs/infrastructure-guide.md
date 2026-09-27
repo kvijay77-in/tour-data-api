@@ -476,6 +476,7 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 - **Deployment**: Multi-environment (dev/test/prod)
 - **CI/CD**: GitHub Actions with manual triggers
 - **Monitoring**: CloudWatch Logs and Metrics
+- **Asynchronous processing**: `ArtifactsBucket` publishes events to EventBridge (default bus; S3 events on it cost nothing). A rule on `tours/*/uploads/hotel-allocation/*.csv` invokes `ProcessHotelUploadFunction` (retries `0`), whose `OnFailure` destination is `ProcessHotelUploadFailureFunction`. Its limits live in AppConfig `HOTEL_UPLOAD`/`PROCESSING`. Logs: `make logs FUNCTION=ProcessHotelUploadFunction`.
 
 ### Code Quality
 

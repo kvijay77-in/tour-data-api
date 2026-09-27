@@ -1,0 +1,12 @@
+import sys
+sys.path.insert(0, '/opt/python')
+
+from rbac import Permission, require_permission
+from event_engine import update_activity_override
+
+
+def lambda_handler(event, context):
+    deny = require_permission(event, Permission.EVENT_OCCURRENCE_MANAGE)
+    if deny:
+        return deny
+    return update_activity_override(event)

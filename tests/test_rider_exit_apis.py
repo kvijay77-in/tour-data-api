@@ -47,6 +47,7 @@ def rider_exit_dynamodb_mock(aws_credentials):
             'riderId': 'R1',
             'profileId': 'P001',
             'status': TourRiderStatus.ACTIVE.value,
+            'baggageStatus': 'ACTIVE',
             'registeredAt': '2026-01-15T00:00:00Z',
             'createdAt': '2026-01-15T00:00:00Z',
             'updatedAt': '2026-01-15T00:00:00Z'
@@ -58,7 +59,7 @@ def rider_exit_dynamodb_mock(aws_credentials):
         yield dynamodb
 
 
-def _make_event(path, groups, rider_id='R1', sub='test-user-123'):
+def _make_event(path, groups, rider_id='R1', sub='test-user-123', body=None):
     return {
         'version': '2.0',
         'routeKey': f'POST {path}',
@@ -78,7 +79,8 @@ def _make_event(path, groups, rider_id='R1', sub='test-user-123'):
         'pathParameters': {
             'tourId': MOCK_TOUR_ID,
             'riderId': rider_id,
-        }
+        },
+        'body': json.dumps(body) if body is not None else None,
     }
 
 
@@ -93,7 +95,8 @@ class TestRiderExitApis:
         event = _make_event(
             path=f'/v1/tours/{MOCK_TOUR_ID}/riders/R1/exit',
             groups=['ADMINISTRATOR'],
-            sub='admin-sub-1'
+            sub='admin-sub-1',
+            body={'baggageDisposition': 'RETAINED'}
         )
 
         response = lambda_handler(event, None)
@@ -104,6 +107,8 @@ class TestRiderExitApis:
         assert data['status'] == TourRiderStatus.EXITED.value
         assert data['prevStatus'] == TourRiderStatus.ACTIVE.value
         assert data['exitedBy'] == 'admin-sub-1'
+        assert data['baggageStatus'] == 'RETAINED'
+        assert 'baggageExitedAt' in data
         assert 'exitedAt' in data
 
     def test_exit_forbidden_for_rider(self, rider_exit_dynamodb_mock):
@@ -115,7 +120,8 @@ class TestRiderExitApis:
 
         event = _make_event(
             path=f'/v1/tours/{MOCK_TOUR_ID}/riders/R1/exit',
-            groups=['RIDER']
+            groups=['RIDER'],
+            body={'baggageDisposition': 'RETAINED'}
         )
 
         response = lambda_handler(event, None)
@@ -132,7 +138,8 @@ class TestRiderExitApis:
         exit_event = _make_event(
             path=f'/v1/tours/{MOCK_TOUR_ID}/riders/R1/exit',
             groups=['ADMINISTRATOR'],
-            sub='admin-sub-1'
+            sub='admin-sub-1',
+            body={'baggageDisposition': 'WITH_RIDER'}
         )
         first = exit_handler(exit_event, None)
         assert first['statusCode'] == 200
@@ -149,6 +156,7 @@ class TestRiderExitApis:
         body = json.loads(response['body'])
         data = body['data']
         assert data['status'] == TourRiderStatus.ACTIVE.value
+        assert data['baggageStatus'] == 'ACTIVE'
         assert 'prevStatus' not in data
         assert 'exitedAt' not in data
         assert 'exitedBy' not in data
@@ -167,3 +175,51 @@ class TestRiderExitApis:
 
         response = lambda_handler(event, None)
         assert response['statusCode'] == 403
+
+    def test_exit_requires_baggage_disposition(self, rider_exit_dynamodb_mock):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from exit_tour_rider import lambda_handler
+
+        event = _make_event(
+            path=f'/v1/tours/{MOCK_TOUR_ID}/riders/R1/exit',
+            groups=['ADMINISTRATOR'],
+            sub='admin-sub-1',
+            body={}
+        )
+
+        response = lambda_handler(event, None)
+        assert response['statusCode'] == 400
+        assert json.loads(response['body'])['error']['code'] == 'BAGGAGE_DISPOSITION_REQUIRED'
+
+    def test_release_retained_baggage(self, rider_exit_dynamodb_mock):
+        import dynamodb_utils
+        dynamodb_utils.TABLES = {}
+        dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+        from exit_tour_rider import lambda_handler as exit_handler
+        from release_rider_baggage import lambda_handler as release_handler
+
+        exit_event = _make_event(
+            path=f'/v1/tours/{MOCK_TOUR_ID}/riders/R1/exit',
+            groups=['ADMINISTRATOR'],
+            sub='admin-sub-1',
+            body={'baggageDisposition': 'RETAINED'}
+        )
+        first = exit_handler(exit_event, None)
+        assert first['statusCode'] == 200
+
+        release_event = _make_event(
+            path=f'/v1/tours/{MOCK_TOUR_ID}/riders/R1/baggage/release',
+            groups=['SUPER_USER'],
+            sub='super-sub-1',
+            body={'note': 'Released at finish hotel'}
+        )
+
+        response = release_handler(release_event, None)
+        assert response['statusCode'] == 200
+        data = json.loads(response['body'])['data']
+        assert data['baggageStatus'] == 'WITH_RIDER'
+        assert data['baggageReleasedBy'] == 'super-sub-1'

@@ -12,6 +12,11 @@ Tour-specific tables:
 - User-{tourId}: Staff/crew user assignments
 - Notification-{tourId}: Tour rider notifications
 - Artifacts-{tourId}: Tour and ride artifact metadata
+- Event-{tourId}: Event definitions
+- EventOccurrence-{tourId}: Event occurrences
+- EventActivityLogs-{tourId}: Event activity records
+- Hotel-{tourId}: Hotel master data
+- RoomAllocation-{tourId}: Per-night room allocation data
 """
 
 import os
@@ -142,6 +147,103 @@ TOUR_TABLE_DEFINITIONS = {
         'KeySchema': [
             {'AttributeName': 'artifactFor', 'KeyType': 'HASH'},
             {'AttributeName': 'artifactId', 'KeyType': 'RANGE'},
+        ],
+    },
+    'Event': {
+        'AttributeDefinitions': [
+            {'AttributeName': 'eventId', 'AttributeType': 'S'},
+        ],
+        'KeySchema': [
+            {'AttributeName': 'eventId', 'KeyType': 'HASH'},
+        ],
+    },
+    'EventOccurrence': {
+        'AttributeDefinitions': [
+            {'AttributeName': 'eventId', 'AttributeType': 'S'},
+            {'AttributeName': 'dateSeq', 'AttributeType': 'S'},
+            {'AttributeName': 'date', 'AttributeType': 'S'},
+            {'AttributeName': 'status', 'AttributeType': 'S'},
+        ],
+        'KeySchema': [
+            {'AttributeName': 'eventId', 'KeyType': 'HASH'},
+            {'AttributeName': 'dateSeq', 'KeyType': 'RANGE'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'DateIndex',
+                'KeySchema': [
+                    {'AttributeName': 'date', 'KeyType': 'HASH'},
+                    {'AttributeName': 'eventId', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+            {
+                'IndexName': 'StatusIndex',
+                'KeySchema': [
+                    {'AttributeName': 'status', 'KeyType': 'HASH'},
+                    {'AttributeName': 'date', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    'EventActivityLogs': {
+        'AttributeDefinitions': [
+            {'AttributeName': 'occurrenceId', 'AttributeType': 'S'},
+            {'AttributeName': 'recordId', 'AttributeType': 'S'},
+            {'AttributeName': 'riderId', 'AttributeType': 'S'},
+            {'AttributeName': 'timestamp', 'AttributeType': 'S'},
+        ],
+        'KeySchema': [
+            {'AttributeName': 'occurrenceId', 'KeyType': 'HASH'},
+            {'AttributeName': 'recordId', 'KeyType': 'RANGE'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'RiderTimestampIndex',
+                'KeySchema': [
+                    {'AttributeName': 'riderId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    'Hotel': {
+        'AttributeDefinitions': [
+            {'AttributeName': 'hotelId', 'AttributeType': 'S'},
+        ],
+        'KeySchema': [
+            {'AttributeName': 'hotelId', 'KeyType': 'HASH'},
+        ],
+    },
+    'RoomAllocation': {
+        'AttributeDefinitions': [
+            {'AttributeName': 'stayDate', 'AttributeType': 'S'},
+            {'AttributeName': 'riderId', 'AttributeType': 'S'},
+            {'AttributeName': 'hotelId', 'AttributeType': 'S'},
+        ],
+        'KeySchema': [
+            {'AttributeName': 'stayDate', 'KeyType': 'HASH'},
+            {'AttributeName': 'riderId', 'KeyType': 'RANGE'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'RiderIdIndex',
+                'KeySchema': [
+                    {'AttributeName': 'riderId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'stayDate', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+            {
+                'IndexName': 'HotelDateIndex',
+                'KeySchema': [
+                    {'AttributeName': 'hotelId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'stayDate', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
         ],
     },
 }

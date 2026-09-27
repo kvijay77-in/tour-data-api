@@ -13,10 +13,11 @@ import os
 import boto3
 
 from logger import get_logger, log_event
-from rbac import require_permission, Permission
+from rbac import Permission, require_permission
 
 from response import (
     success_response, bad_request_response, not_found_response,
+    forbidden_response,
     internal_error_response
 )
 from dynamodb_utils import get_item
@@ -24,9 +25,49 @@ from dynamodb_utils import get_item
 logger = get_logger(__name__)
 
 s3_client = boto3.client('s3')
+RIDER_LINK_TABLE_ENV = 'RIDER_COGNITO_USER_TABLE'
 
 DEFAULT_EXPIRY_SECONDS = 300
 MAX_EXPIRY_SECONDS = 3600
+
+
+def _is_authenticated(event):
+    claims = (
+        event.get('requestContext', {})
+        .get('authorizer', {})
+        .get('jwt', {})
+        .get('claims', {})
+    )
+    return bool(claims.get('sub'))
+
+
+def _get_authenticated_user(event):
+    claims = (
+        event.get('requestContext', {})
+        .get('authorizer', {})
+        .get('jwt', {})
+        .get('claims', {})
+    )
+    return claims.get('sub')
+
+
+def _authorize_profile_access(event, profile_id):
+    deny = require_permission(event, Permission.READ)
+    if not deny:
+        return None
+
+    user_id = _get_authenticated_user(event)
+    if not user_id:
+        return deny
+
+    rider_link = get_item(
+        table_name_env=RIDER_LINK_TABLE_ENV,
+        key={'cognitoUserName': user_id}
+    )
+    if rider_link and rider_link.get('profileId') == profile_id:
+        return None
+
+    return deny
 
 
 def lambda_handler(event, context):
@@ -48,9 +89,8 @@ def lambda_handler(event, context):
     try:
         log_event(logger, event)
 
-        deny = require_permission(event, Permission.READ)
-        if deny:
-            return deny
+        if not _is_authenticated(event):
+            return forbidden_response("Authenticated user context is required")
 
         profile_id = (event.get('pathParameters') or {}).get('profileId')
 
@@ -64,6 +104,10 @@ def lambda_handler(event, context):
 
         if not existing_rider:
             return not_found_response("RiderProfile", profile_id)
+
+        deny = _authorize_profile_access(event, profile_id)
+        if deny:
+            return deny
 
         s3_key = existing_rider.get('photoS3Key')
         if not s3_key:

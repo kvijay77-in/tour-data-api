@@ -6,8 +6,9 @@ Route: GET /v1/config
 Query parameters:
 - configType (optional):
   - omitted or ALL -> all enabled config entries
-  - one type (e.g. ID_CODE_FORMAT)
+  - any configType (e.g. ID_CODE_FORMAT)
   - comma separated types (e.g. ID_CODE_FORMAT,ID_CODE_TYPE)
+  - returns 404 when no enabled rows exist for the requested type(s)
 
 Notes:
 - includeDisabled is intentionally out of scope.
@@ -35,8 +36,6 @@ from rbac import Permission, require_permission
 
 logger = get_logger(__name__)
 
-SUPPORTED_CONFIG_TYPES = {"ID_CODE_FORMAT", "ID_CODE_TYPE", "ARTIFACTS"}
-
 
 def _parse_config_types(raw_value: str) -> List[str]:
     if not raw_value:
@@ -50,10 +49,6 @@ def _parse_config_types(raw_value: str) -> List[str]:
         if len(entries) > 1:
             raise ValueError("configType=ALL cannot be combined with other configType values")
         return []
-
-    invalid = sorted([entry for entry in entries if entry not in SUPPORTED_CONFIG_TYPES])
-    if invalid:
-        raise ValueError(f"Unsupported configType value(s): {', '.join(invalid)}")
 
     # Preserve stable order and drop duplicates.
     deduped = []
@@ -102,14 +97,16 @@ def lambda_handler(event, context):
         try:
             config_types = _parse_config_types(raw_config_type)
         except ValueError as exc:
-            return error_response(
-                error_code='INVALID_CONFIG_TYPE',
-                message=str(exc),
-                status_code=400,
-            )
+            return bad_request_response(str(exc))
 
         if config_types:
             items = _query_enabled_by_type(config_types)
+            if not items:
+                return error_response(
+                    error_code='INVALID_CONFIG_TYPE',
+                    message='Missing or Invalid configType',
+                    status_code=404,
+                )
         else:
             items = _query_all_enabled()
 

@@ -1,8 +1,8 @@
 # Test Data Simulation Utility
 
-Generate and load tour-specific test data into DynamoDB tables for development and testing of the Tour Data API. This utility is template-driven — define a scenario in YAML and the script generates tour riders, rides, and check-in records accordingly.
+Generate and load tour-specific test data into DynamoDB tables for development and testing of the Tour Data API. This utility is template-driven — define a scenario in YAML and the script generates tour riders, rides, check-in records, or events-engine test data (event definitions, occurrences, activity scans, hotels, and room allocations) accordingly.
 
-**Important:** This script reads existing data from shared tables (RiderProfile, TourMaster) and only generates data for tour-specific tables (TourRider, Ride, CheckIn). Rider profiles and tour master records must already exist in DynamoDB.
+**Important:** This script reads existing data from shared tables (RiderProfile, TourMaster) and only generates data for tour-specific tables (TourRider, Ride, CheckIn, Event, EventOccurrence, EventActivityLogs, Hotel, RoomAllocation). Rider profiles and tour master records must already exist in DynamoDB, and the events-engine scenario additionally requires riders already registered for the tour via a `tour_data_generation` scenario run.
 
 ## Prerequisites
 
@@ -36,6 +36,17 @@ python scripts/simulate/generate_data.py \
 # Generate/load check-ins for today's ride only
 python scripts/simulate/generate_data.py \
   --scenario scripts/simulate/scenarios/tot_2026.yaml --today-checkins-only
+
+# Events engine: create a Day 0 Registration event + a fresh, PLANNED
+# occurrence for today, ready for manual QR-scan testing from the start
+python scripts/simulate/generate_data.py \
+  --scenario scripts/simulate/scenarios/event_day0_registration.yaml
+
+# Events engine: same, but seed today's occurrence with partial scans so
+# manual testing can continue from mid-event
+python scripts/simulate/generate_data.py \
+  --scenario scripts/simulate/scenarios/event_day0_registration.yaml \
+  --include-in-progress
 ```
 
 ## Usage
@@ -56,6 +67,8 @@ python scripts/simulate/generate_data.py --scenario <path> [options]
 | `--output-dir DIR` | Output directory for `--dry-run` (default: `scripts/simulate/output`) |
 | `--include-today-checkins` | Include today's ride check-ins (default behavior skips today's check-ins) |
 | `--today-checkins-only` | Generate/load check-ins only for today's ride; skips TourRider and Ride writes |
+| `--include-in-progress` | *(event_data_generation only)* Seed today's occurrence(s) with the partial activity records from the scenario's `in_progress` config, instead of leaving them freshly `PLANNED` with no scans |
+| `--in-progress-only` | *(event_data_generation only)* Only (re)populate today's occurrence(s) and their in-progress activity records; skips event/hotel/room-allocation and historical-occurrence writes. Implies `--include-in-progress` |
 
 ### Examples
 
@@ -126,6 +139,7 @@ Current supported scenario types:
 
 - `tour_data_generation`: creates tour riders, rides, and check-ins for a provisioned tour
 - `personal_code_update`: updates eligible RiderProfile rows with personal codes
+- `event_data_generation`: creates events-engine test data (event definitions, occurrences, activity scans, hotels, and room allocations) for a provisioned tour — see [Event Engine Simulation Scenario](#event-engine-simulation-scenario)
 
 Current supported scenario modes:
 
@@ -296,6 +310,117 @@ Field meanings:
 - `selection.limit`: expected payload-driven selection size
 - `payload`: scenario-specific input values used by the handler
 
+## Event Engine Simulation Scenario
+
+The `event_data_generation` scenario type populates the generic Events engine (`docs/cycling-tour-events-design.md`) with test data for any event you define — there is no hardcoded event, activity, or occurrence content in `generate_data.py`; everything comes from the scenario YAML. Two ready-to-use scenarios are provided:
+
+- `scenarios/event_day0_registration.yaml` — a single Day 0 Registration event
+- `scenarios/event_baggage_handling.yaml` — linked Baggage Loading/Unloading events, plus hotels and room allocations
+
+**This scenario reads riders from the tour-specific `TourRider-{tourId}` table** (populated by a prior `tour_data_generation` run, e.g. `tot_2026.yaml`) — it does not create riders itself. Run a tour-data scenario first.
+
+### Top-level structure
+
+```yaml
+scenario:          # type: event_data_generation, mode: create
+aws:               # AWS environment config (stack_name, region)
+tour:              # Tour reference (tour_id) — must already be provisioned
+date_strategy:     # anchor_date used as day_offset 0 ("today") for all occurrences/nights
+riders:            # How to select existing TourRider records to use
+hotels:            # Optional: Hotel-{tourId} master data
+room_allocation:   # Optional: RoomAllocation-{tourId} generation rules
+events:            # One or more full event definitions with activities and occurrences
+options:           # Script behaviour flags (clean_before_load, seed)
+```
+
+### `riders`
+
+```yaml
+riders:
+  source: tour_riders          # Only supported source: existing TourRider-{tourId} rows
+  status_in: [REGISTERED, ACTIVE]   # Optional TourRider.status filter
+  limit: 60                         # Optional cap on rider count (lowest rider IDs first)
+```
+
+### `hotels` and `room_allocation` (optional — for baggage-style events)
+
+```yaml
+hotels:
+  - hotel_id: HTL-CHD-01
+    name: Hotel Chidambaram Residency
+    city: Chidambaram
+    address: 1 Temple Street, Chidambaram
+    contact: "+91-4144-123456"
+
+room_allocation:
+  room_capacity: 2                  # Riders per room (reciprocal sharingWith is generated automatically)
+  room_number_start: 201
+  nights:
+    - day_offset: -1                # stayDate = anchor_date + day_offset
+      hotel_id: HTL-CHD-01
+    - day_offset: 0
+      hotel_id: HTL-THJ-01
+```
+
+Riders are assigned round-robin into rooms of `room_capacity` for each configured night, one hotel per night, with `sharingWith` populated reciprocally on every room-mate's record.
+
+### `events`
+
+Each entry is a complete `Event-{tourId}` definition plus the occurrences to create for it:
+
+```yaml
+events:
+  - event_id: EVT-REG
+    event_name: "Day 0 Registration"
+    event_type: SINGLE                        # SINGLE | REPEATING
+    location: "Tour start venue"
+    sequence_enforced: true
+    default_allowed_type_codes: ["1"]
+    allow_self_service: false
+    activities:
+      - activity_id: ACT-001
+        name: "ID Card collection"
+        sequence_no: 0
+        mandatory: true                       # optional, default false
+        allow_opt_out: false                  # optional, default false
+        allowed_type_codes: []                 # optional, defaults to Event.default_allowed_type_codes
+        prerequisite_activity_ids: []          # optional, default []
+        restrict_to_assigned_users: true       # optional, default true
+        variant_options: []                    # optional, e.g. [VEG, NON_VEG]
+
+    occurrences:
+      - day_offset: -2                         # date = anchor_date + day_offset
+        seq: 1
+        linked_event_id: null                  # for Baggage Loading <-> Unloading pairing
+        self_service_enabled: false            # optional, default false
+        progress:                              # only used when day_offset < 0 (historical)
+          activity_outcomes:
+            ACT-004:
+              opted_out_ratio: 0.1              # fraction of riders recorded as OPTED_OUT
+              variant_split: { VEG: 0.5, NON_VEG: 0.5 }
+        in_progress:                           # only used for day_offset == 0 ("today")
+          status: ACTIVE
+          activity_distribution:                # riders whose furthest completed activity is the key
+            ACT-003: 20
+            ACT-002: 10
+            ACT-001: 5
+```
+
+### Occurrence status and progress rules (generic, driven by `day_offset`)
+
+| `day_offset` (relative to `date_strategy.anchor_date`) | Default behaviour | With `--include-in-progress` |
+|---|---|---|
+| `< 0` (past) | `COMPLETED`, fully populated per `progress` | same — unaffected by the flag |
+| `== 0` ("today") | `PLANNED`, **zero** activity records — fresh start for manual QR-scan testing | occurrence status/records taken from `in_progress`; riders not listed in `activity_distribution` are left with no records so testing can start them from the first activity |
+| `> 0` (future) | `PLANNED`, no records | no change — future occurrences are never seeded |
+
+This directly supports the two testing modes requested for the events engine:
+
+- **Start of event:** run the scenario with no extra flags — today's occurrence(s) are created `PLANNED` with no scans, ready for manual QR-scan testing from the very beginning.
+- **Event already in progress:** run with `--include-in-progress` (or re-run later with `--in-progress-only` to avoid re-writing events/hotels/history) to pre-populate today's occurrence(s) per `in_progress.activity_distribution`, so manual testing can continue from that point for the riders not yet touched.
+
+Linked occurrences (for example Baggage Loading/Unloading) are resolved automatically: an occurrence with `linked_event_id: EVT-X` is paired with the occurrence in event `EVT-X` that has the same `day_offset` and `seq`, and `linkedOccurrenceRef` is set on both sides.
+
 ## Data Generation Details
 
 ### What is READ from DynamoDB (not modified)
@@ -319,11 +444,20 @@ If `options.update_tour_status` is true and `tour.target_status` is set, the scr
 
 ## Creating Custom Scenarios
 
+### Tour data (`tour_data_generation`)
+
 1. Copy `scenarios/tot_2026.yaml` to a new file
 2. Modify tour ID, rider count, ride schedule, and check-in distributions
 3. Ensure rider counts add up: `not_riding + quit + finished + in_progress = tour_riders.count`
 4. Run with `--dry-run` first to verify the generated data
 5. Run without `--dry-run` to load to DynamoDB
+
+### Events engine (`event_data_generation`)
+
+1. Copy `scenarios/event_day0_registration.yaml` or `scenarios/event_baggage_handling.yaml` to a new file
+2. Define your event(s)/activities/occurrences, and optional hotels/room allocations — no code changes are ever required
+3. Run with `--dry-run` first to verify the generated events, occurrences, and activity records
+4. Run without `--dry-run` to load to DynamoDB, adding `--include-in-progress` if you want today's occurrence(s) pre-seeded for continued manual testing
 
 ### Tips
 
@@ -331,19 +465,24 @@ If `options.update_tour_status` is true and `tour.target_status` is set, the scr
 - Use `finished: all_remaining` to auto-calculate finished riders
 - PLANNED rides need no `checkins` block
 - For multi-ride days, define `checkins` per ride using the `rides` list when distributions differ
+- For events-engine scenarios, use `day_offset` (relative to `date_strategy.anchor_date`) rather than explicit dates, so re-running the scenario on a later date still produces a sensible "today"
 
 ## File Structure
 
 ```
 scripts/simulate/
-├── README.md                   # This file
-├── generate_data.py            # Main data generation script
-├── scenarios/                  # Scenario configuration files
-│   └── tot_2026.yaml           # TOT-2026 tour scenario
-└── output/                     # Dry-run JSON output (git-ignored)
+├── README.md                        # This file
+├── generate_data.py                 # Main data generation script
+├── scenarios/                       # Scenario configuration files
+│   ├── tot_2026.yaml                # TOT-2026 tour scenario (tour_data_generation)
+│   ├── event_day0_registration.yaml # Day 0 Registration event (event_data_generation)
+│   └── event_baggage_handling.yaml  # Baggage Loading/Unloading events (event_data_generation)
+└── output/                          # Dry-run JSON output (git-ignored)
 ```
 
 ## Limitations
 
 - The script does not create or provision DynamoDB tables. Tables must exist before running.
 - Rider profiles must already exist in the RiderProfile table — the script does not create profiles.
+- `event_data_generation` scenarios require riders already registered in `TourRider-{tourId}` — run a `tour_data_generation` scenario for the tour first.
+- `room_allocation` generation assigns a single hotel per configured night; multi-hotel nights require multiple manually-listed room allocation entries (not currently auto-generated).

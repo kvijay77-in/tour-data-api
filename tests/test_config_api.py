@@ -209,7 +209,7 @@ def test_get_config_artifacts_type(app_config_mock):
     assert {item['config']["category"] for item in items} == {'tour', 'ride'}
 
 
-def test_get_config_invalid_type(app_config_mock):
+def test_get_config_unknown_type_returns_404(app_config_mock):
     import dynamodb_utils
     dynamodb_utils.TABLES = {}
     dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
@@ -217,10 +217,55 @@ def test_get_config_invalid_type(app_config_mock):
     from get_config import lambda_handler
 
     response = lambda_handler(_event(query={'configType': 'UNKNOWN'}), None)
-    assert response['statusCode'] == 400
+    assert response['statusCode'] == 404
 
     body = json.loads(response['body'])
     assert body['error']['code'] == 'INVALID_CONFIG_TYPE'
+    assert body['error']['message'] == 'Missing or Invalid configType'
+
+
+def test_get_config_any_type_returned(app_config_mock):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    dynamodb_utils.dynamodb.Table('test-app-config-table').put_item(Item={
+        'configType': 'HOTEL_UPLOAD',
+        'configId': 'PROCESSING',
+        'enabled': True,
+        'config': {'maxDataRows': 500},
+    })
+
+    from get_config import lambda_handler
+
+    response = lambda_handler(_event(query={'configType': 'hotel_upload'}), None)
+    assert response['statusCode'] == 200
+
+    items = json.loads(response['body'])['data']['items']
+    assert [(i['configType'], i['configId']) for i in items] == [('HOTEL_UPLOAD', 'PROCESSING')]
+
+
+def test_get_config_multiple_types_partial_match(app_config_mock):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from get_config import lambda_handler
+
+    response = lambda_handler(_event(query={'configType': 'ID_CODE_FORMAT,UNKNOWN'}), None)
+    assert response['statusCode'] == 200
+    assert len(json.loads(response['body'])['data']['items']) == 1
+
+
+def test_get_config_all_combined_rejected(app_config_mock):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from get_config import lambda_handler
+
+    response = lambda_handler(_event(query={'configType': 'ALL,ID_CODE_TYPE'}), None)
+    assert response['statusCode'] == 400
+    assert json.loads(response['body'])['error']['code'] == 'BAD_REQUEST'
 
 
 def test_get_config_etag_not_modified(app_config_mock):

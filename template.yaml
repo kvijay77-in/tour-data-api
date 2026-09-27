@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: 2010-09-09
 Transform: AWS::Serverless-2016-10-31
 Description: >
   tour-data-api
@@ -9,7 +9,9 @@ Description: >
   Table Strategy: Hybrid (Shared + Tour-Specific)
   - Shared tables (SAM-managed): RiderProfile, TourMaster
   - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
-    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId}
+    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId},
+    Event-{tourId}, EventOccurrence-{tourId}, EventActivityLogs-{tourId},
+    Hotel-{tourId}, RoomAllocation-{tourId}
 
 Metadata:
   cfn-lint:
@@ -916,6 +918,30 @@ Resources:
             Path: /v1/tours/{tourId}/riders/{riderId}/exit/cancel
             Method: POST
 
+  ReleaseRiderBaggageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/riders/
+      Handler: release_rider_baggage.lambda_handler
+      Description: Release retained rider baggage back to the rider
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/baggage/release
+            Method: POST
+
   LinkRiderCognitoUserFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1679,7 +1705,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/functions/checkins/
-      Handler: get_dashboard_progress.lambda_handler
+      Handler: get_event_dashboard_progress.lambda_handler
       Description: Get lightweight dashboard progress payload for a ride
       Timeout: 60
       Layers:
@@ -1700,6 +1726,858 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/rides/{rideId}/dashboard/progress
             Method: GET
+
+  # ============================================================================
+  # LAMBDA FUNCTIONS - EVENTS ENGINE
+  # ============================================================================
+
+  ListEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: list_events.lambda_handler
+      Description: List event definitions for a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events
+            Method: GET
+
+  GetEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: get_event.lambda_handler
+      Description: Get a single event definition
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}
+            Method: GET
+
+  CreateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: create_event.lambda_handler
+      Description: Create a new event definition
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub '${AppConfigTable.Arn}'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events
+            Method: POST
+
+  UpdateEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: update_event.lambda_handler
+      Description: Update an existing event definition
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub '${AppConfigTable.Arn}'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}
+            Method: PUT
+
+  ListEventOccurrencesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: list_occurrences.lambda_handler
+      Description: List event occurrences for an event
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences
+            Method: GET
+
+  GetEventOccurrenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: get_occurrence.lambda_handler
+      Description: Get a single event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}
+            Method: GET
+
+  CreateEventOccurrenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: create_occurrence.lambda_handler
+      Description: Create an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences
+            Method: POST
+
+  UpdateEventOccurrenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: update_occurrence.lambda_handler
+      Description: Update an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}
+            Method: PUT
+
+  GetEventActivityOverridesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: get_activity_overrides.lambda_handler
+      Description: Get activity overrides for an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides
+            Method: GET
+
+  UpdateEventActivityOverridesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: update_activity_overrides.lambda_handler
+      Description: Upsert activity override for an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+                - !Sub '${AppConfigTable.Arn}'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides
+            Method: PUT
+
+  StartEventOccurrenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: start_occurrence.lambda_handler
+      Description: Start an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start
+            Method: POST
+
+  CompleteEventOccurrenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: complete_occurrence.lambda_handler
+      Description: Complete an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete
+            Method: POST
+
+  CancelEventOccurrenceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: cancel_occurrence.lambda_handler
+      Description: Cancel an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel
+            Method: POST
+
+  CreateEventActivityRecordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: create_activity_record.lambda_handler
+      Description: Create an event activity record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-User-*'
+                - !Sub '${AppConfigTable.Arn}'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records
+            Method: POST
+
+  CancelEventActivityRecordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: cancel_activity_record.lambda_handler
+      Description: Cancel an event activity record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel
+            Method: POST
+
+  GetEventDashboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: get_dashboard.lambda_handler
+      Description: Get event dashboard data
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard
+            Method: GET
+
+  GetEventDashboardProgressFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: get_dashboard_progress.lambda_handler
+      Description: Get event dashboard progress data
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress
+            Method: GET
+
+  GetRiderEventProgressFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: get_rider_progress.lambda_handler
+      Description: Get per-rider event progress
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*/index/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/events/progress
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/events/progress
+            Method: GET
+
+  GetEventReconciliationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: get_reconciliation.lambda_handler
+      Description: Get event baggage reconciliation data
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation
+            Method: GET
+
+  GetEventsBootstrapFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: get_bootstrap.lambda_handler
+      Description: Get offline bootstrap payload for events engine
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/bootstrap
+            Method: GET
+
+  # ============================================================================
+  # LAMBDA FUNCTIONS - HOTELS
+  # ============================================================================
+
+  ListHotelsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: list_hotels.lambda_handler
+      Description: List all hotels for a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/hotels
+            Method: GET
+
+  CreateHotelFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: create_hotel.lambda_handler
+      Description: Create a hotel for a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/hotels
+            Method: POST
+
+  UpdateHotelFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: update_hotel.lambda_handler
+      Description: Update a hotel for a tour
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/hotels/{hotelId}
+            Method: PUT
+
+  GetHotelStaysByDateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: get_hotel_stays_by_date.lambda_handler
+      Description: Get hotel stays by date
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/hotelstays
+            Method: GET
+
+  GetHotelStaysByRiderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: get_hotel_stays_by_rider.lambda_handler
+      Description: Get hotel stays by rider
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*/index/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/riders/{riderId}/hotelstays
+            Method: GET
+
+  GetHotelStaysByHotelFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: get_hotel_stays_by_hotel.lambda_handler
+      Description: Get hotel stays by hotel and date
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*/index/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/hotels/{hotelId}/hotelstays
+            Method: GET
+
+  UpdateHotelStayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: update_hotel_stay.lambda_handler
+      Description: Create or update a manual hotel stay allocation
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/hotelstays/{stayDate}/{riderId}
+            Method: PUT
+
+  PresignHotelUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: presign_upload.lambda_handler
+      Description: Generate presigned URL for hotel allocation CSV upload
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/hotelstays/uploads/presign
+            Method: POST
+
+  GetHotelUploadStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: get_upload_status.lambda_handler
+      Description: Get hotel allocation upload status
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/hotelstays/uploads/{uploadId}
+            Method: GET
+
+  ProcessHotelUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: process_upload.lambda_handler
+      Description: Validate and apply an uploaded hotel allocation CSV (all-or-nothing)
+      Timeout: 120
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:ConditionCheckItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*/uploads/hotel-allocation/*'
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*/uploads/hotel-allocation/*.snapshot.json'
+      Events:
+        HotelCsvUploaded:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - aws.s3
+              detail-type:
+                - Object Created
+              detail:
+                bucket:
+                  name:
+                    - !Ref ArtifactsBucket
+                object:
+                  key:
+                    - wildcard: 'tours/*/uploads/hotel-allocation/*.csv'
+      # Failures are recorded on the upload status by the processor or its OnFailure handler.
+      EventInvokeConfig:
+        MaximumRetryAttempts: 0
+        DestinationConfig:
+          OnFailure:
+            Type: Lambda
+            Destination: !GetAtt ProcessHotelUploadFailureFunction.Arn
+
+  ProcessHotelUploadFailureFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/hotels/
+      Handler: process_upload_failure.lambda_handler
+      Description: Record hotel upload processor timeouts/crashes and roll back a started apply
+      Timeout: 120
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub '${ArtifactsBucket.Arn}/tours/*/uploads/hotel-allocation/*.snapshot.json'
 
   # ============================================================================
   # LAMBDA FUNCTIONS - USERS
@@ -1777,6 +2655,89 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/users
             Method: GET
+
+  GetCurrentTourUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/users/
+      Handler: get_current_tour_user.lambda_handler
+      Description: Get the caller's own tour-scoped user assignment record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-User-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/users/me
+            Method: GET
+
+  CreateTourUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/users/
+      Handler: create_tour_user.lambda_handler
+      Description: Create a tour-scoped user assignment record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-User-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+            - Effect: Allow
+              Action:
+                - cognito-idp:ListUsers
+              Resource:
+                - !If
+                  - CreateCognito
+                  - !GetAtt CognitoUserPool.Arn
+                  - !Ref CognitoUserPoolArn
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/users
+            Method: POST
+
+  UpdateTourUserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/users/
+      Handler: update_tour_user.lambda_handler
+      Description: Update a tour-scoped user assignment record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-User-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Hotel-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/users/{userId}
+            Method: PUT
 
   ListUserMgmtRolesFunction:
     Type: AWS::Serverless::Function
@@ -2275,7 +3236,8 @@ Resources:
           Value: SAM
 
   # ============================================================================
-  # Tour-specific tables (TourRider, Ride, CheckIn, User, Notification, Artifacts) are NOT defined here.
+  # Tour-specific tables (TourRider, Ride, CheckIn, User, Notification, Artifacts, Event,
+  # EventOccurrence, EventActivityLogs, Hotel, RoomAllocation) are NOT defined here.
   # They are provisioned at runtime by CreateTourFunction when a tour is created.
   # Table naming: {StackName}-{TableType}-{tourId}
   # ============================================================================
@@ -2299,6 +3261,9 @@ Resources:
         RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: !If [IsProd, Enabled, Suspended]
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
       LifecycleConfiguration:
         Rules:
           - Id: DeleteOldVersions

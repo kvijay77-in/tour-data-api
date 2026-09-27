@@ -46,12 +46,15 @@ def lambda_handler(event, context):
             logger.warning("No user ID (sub) in JWT claims")
             return unauthorized_response("Invalid authentication token")
         
+        # HTTP API JWT authorizers deliver claim values as strings (e.g. "true")
+        email_verified = str(jwt_claims.get('email_verified', '')).strip().lower() == 'true'
+
         # Build user response from JWT claims only
         user = {
             'userId': user_id,
             'email': email,
             'username': username,
-            'emailVerified': jwt_claims.get('email_verified', False),
+            'emailVerified': email_verified,
             'groups': get_user_groups(event)
         }
         
