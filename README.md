@@ -270,3 +270,8 @@ For detailed project organization and folder structure, see [docs/project-struct
 ## 📝 License
 
 [Specify your license here]
+
+
+## Rider profile configuration-driven backend
+This repository now supports configuration-driven rider profile attributes backed by AppConfig with Admin APIs, schema validation/merge, role-filtered staff responses, and Rider API ownership enforcement.
+See `docs/rider-profile-attributes-design.md`.

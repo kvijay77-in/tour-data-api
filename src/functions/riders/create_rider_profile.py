@@ -1,10 +1,4 @@
-"""
-Create rider profile Lambda function
-
-Creates a new rider profile in the shared RiderProfile table.
-Used during rider sign-up in the Tour Rider App.
-Routes: POST /v1/riders/profile and POST /v1/riders/profile/{profileId}
-"""
+"""Create rider profile using configuration-driven schema definitions."""
 
 import sys
 sys.path.insert(0, '/opt/python')
@@ -14,171 +8,134 @@ import uuid
 from botocore.exceptions import ClientError
 
 from logger import get_logger, log_event
-from response import (
-    success_response, bad_request_response, conflict_response,
-    internal_error_response, unprocessable_content_response
-)
-from dynamodb_utils import put_item, query_items
-from validation import (
-    validate_email,
-    validate_required_fields,
-    validate_rider_profile_optional_fields,
-    validate_emergency_contact,
-    ValidationError,
-    build_emergency_contact_from_profile,
-    normalize_personal_code,
-)
+from response import success_response, bad_request_response, conflict_response, internal_error_response, error_response
+from dynamodb_utils import put_item, query_items, get_item
+from validation import build_emergency_contact_from_profile, ValidationError
 from models import utc_now_iso
+from ownership import require_own_profile, resolve_profile_id_for_sub, is_rider_api_request
+from profile_schema import (
+    ensure_definitions_version,
+    merge_profile_values,
+    filter_profile_for_response,
+    ProfileSchemaError,
+    get_user_role_flags,
+)
 
 logger = get_logger(__name__)
 
 
+def _claims(event):
+    return (
+        event.get('requestContext', {})
+        .get('authorizer', {})
+        .get('jwt', {})
+        .get('claims', {})
+    )
+
+
 def lambda_handler(event, context):
-    """
-    Create a new rider profile
-
-    Path parameter (optional):
-        profileId: Profile ID to use for creation
-
-    Body:
-        name: Full name (required)
-        email: Email address (required)
-        phone: Phone number (required)
-        emergencyContact: Map with fields name, phone, relation (required)
-        dateOfBirth: ISO date string YYYY-MM-DD (required)
-        gender: Male|Female|Other|Prefer not to say (required)
-        address: Map with fields line1, city, country, postalCode (required)
-        personalCode: Rider personal code (optional, normalized to uppercase)
-        address.line2 and address.state are optional
-
-    Returns:
-    - 201: Rider profile created
-    - 400: Invalid input
-    - 409: Email already exists
-    - 500: Server error
-    """
     try:
         log_event(logger, event)
 
-        # Parse request body
         try:
-            body = json.loads(event.get('body', '{}'))
+            body = json.loads(event.get('body', '{}') or '{}')
         except json.JSONDecodeError:
-            return bad_request_response("Invalid JSON in request body")
+            return bad_request_response('Invalid JSON in request body')
+        if not isinstance(body, dict):
+            return bad_request_response('Request body must be a JSON object')
 
-        # Optional path override for profileId: use provided value when present.
-        profile_id = (event.get('pathParameters') or {}).get('profileId')
+        claims = _claims(event)
+        rider_api_call = is_rider_api_request(event)
+        linked_profile_id = resolve_profile_id_for_sub(claims.get('sub') or '') if rider_api_call else None
+        path_profile_id = (event.get('pathParameters') or {}).get('profileId')
 
-        # Backward compatibility: map legacy emergency contact attributes to emergencyContact.
+        if rider_api_call and path_profile_id and not linked_profile_id:
+            return error_response('PROFILE_ACCESS_DENIED', 'Profile ID cannot be supplied before rider link is established', status_code=403)
+
+        profile_id = path_profile_id or linked_profile_id or str(uuid.uuid4())
+
+        role_flags = get_user_role_flags(event)
+        explicit_profile_id = path_profile_id
+        deny = require_own_profile(event, profile_id)
+        if deny and not role_flags['is_admin']:
+            rider_api_create_without_link = rider_api_call and not linked_profile_id and not explicit_profile_id
+            if not rider_api_create_without_link:
+                return deny
+
+        ensure_definitions_version(body.get('definitionsVersion'))
+
         if 'emergencyContact' not in body:
-            derived_emergency_contact = build_emergency_contact_from_profile(body)
-            if derived_emergency_contact is not None:
-                body['emergencyContact'] = derived_emergency_contact
+            derived = build_emergency_contact_from_profile(body)
+            if derived is not None:
+                body['emergencyContact'] = derived
 
-        # Validate required fields
-        try:
-            validate_required_fields(body, [
-                'name', 'email', 'phone',
-                'emergencyContact', 'dateOfBirth',
-                'gender', 'address'
-            ])
-        except ValidationError as e:
-            return unprocessable_content_response(str(e))
+        now = utc_now_iso()
+        draft_profile = {'profileId': profile_id, 'createdAt': now, 'updatedAt': now, 'attributes': {}}
 
-        try:
-            validate_emergency_contact(body.get('emergencyContact'))
-        except ValidationError as e:
-            return unprocessable_content_response(str(e))
+        # COGNITO_EMAIL is system-controlled; prefill from token claim when available.
+        if claims.get('email') and 'email' not in body:
+            draft_profile['email'] = claims.get('email')
 
-        # Validate optional rider profile fields
-        try:
-            validate_rider_profile_optional_fields(body, require_mandatory_fields=True)
-        except ValidationError as e:
-            return unprocessable_content_response(str(e))
-
-        # Validate email
-        try:
-            validate_email(body['email'])
-        except ValidationError as e:
-            return unprocessable_content_response(str(e))
-
-        # Normalize optional personal code
-        try:
-            normalized_personal_code = normalize_personal_code(body.get('personalCode'))
-        except ValidationError as e:
-            return unprocessable_content_response(str(e))
-
-        # Check for duplicate email
-        existing = query_items(
-            table_name_env='RIDER_PROFILE_TABLE',
-            key_condition_expression='email = :email',
-            expression_values={':email': body['email']},
-            index_name='EmailIndex',
-            limit=1
+        merged_profile, definitions_version = merge_profile_values(
+            existing_profile=draft_profile,
+            submitted_payload=body,
+            event=event,
+            enforce_required=True,
+            is_save=True,
         )
 
-        if existing:
-            return conflict_response(
-                f"A rider profile with email '{body['email']}' already exists",
-                error_code="EMAIL_ALREADY_EXISTS"
+        email = merged_profile.get('email')
+        if email:
+            existing = query_items(
+                table_name_env='RIDER_PROFILE_TABLE',
+                key_condition_expression='email = :email',
+                expression_values={':email': email},
+                index_name='EmailIndex',
+                limit=1,
             )
+            if existing:
+                return conflict_response(
+                    f"A rider profile with email '{email}' already exists",
+                    error_code='EMAIL_ALREADY_EXISTS',
+                )
 
-        if normalized_personal_code:
+        personal_code = merged_profile.get('personalCode')
+        if personal_code:
             existing_code = query_items(
                 table_name_env='RIDER_PROFILE_TABLE',
                 key_condition_expression='personalCode = :personalCode',
-                expression_values={':personalCode': normalized_personal_code},
+                expression_values={':personalCode': personal_code},
                 index_name='PersonalCodeIndex',
-                limit=1
+                limit=1,
             )
             if existing_code:
                 return conflict_response(
-                    f"A rider profile with personalCode '{normalized_personal_code}' already exists",
-                    error_code="PERSONAL_CODE_ALREADY_EXISTS"
+                    f"A rider profile with personalCode '{personal_code}' already exists",
+                    error_code='PERSONAL_CODE_ALREADY_EXISTS',
                 )
 
-        # Create profile
-        if not profile_id:
-            profile_id = str(uuid.uuid4())
-        now = utc_now_iso()
-
-        item = {
-            'profileId': profile_id,
-            'name': body['name'],
-            'email': body['email'],
-            'phone': body['phone'],
-            'emergencyContact': body['emergencyContact'],
-            'dateOfBirth': body['dateOfBirth'],
-            'gender': body['gender'],
-            'dietaryPreference': body.get('dietaryPreference'),
-            'address': body['address'],
-            'createdAt': now,
-            'updatedAt': now
-        }
-
-        # Optional fields
-        if normalized_personal_code:
-            item['personalCode'] = normalized_personal_code
-
-        logger.info(f"Creating rider profile: {profile_id}")
         try:
             put_item(
                 table_name_env='RIDER_PROFILE_TABLE',
-                item=item,
-                condition_expression='attribute_not_exists(profileId)'
+                item=merged_profile,
+                condition_expression='attribute_not_exists(profileId)',
             )
-        except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code')
-            if error_code == 'ConditionalCheckFailedException':
+        except ClientError as exc:
+            if exc.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
                 return conflict_response(
                     f"Rider profile '{profile_id}' already exists",
-                    error_code="PROFILE_ALREADY_EXISTS"
+                    error_code='PROFILE_ALREADY_EXISTS',
                 )
             raise
 
-        logger.info(f"Successfully created rider profile: {profile_id}")
-        return success_response(item, status_code=201)
+        response_payload = filter_profile_for_response(merged_profile, event=event, staff_mode=False)
+        response_payload['definitionsVersion'] = definitions_version
+        return success_response(response_payload, status_code=201)
 
-    except Exception as e:
-        logger.error(f"Error creating rider profile: {str(e)}", exc_info=True)
-        return internal_error_response("Failed to create rider profile")
+    except ProfileSchemaError as exc:
+        return error_response(exc.code, exc.message, status_code=exc.status_code)
+    except ValidationError as exc:
+        return error_response('VALIDATION_ERROR', str(exc), status_code=422)
+    except Exception as exc:
+        logger.error(f'Error creating rider profile: {str(exc)}', exc_info=True)
+        return internal_error_response('Failed to create rider profile')

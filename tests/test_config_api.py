@@ -145,6 +145,21 @@ def test_get_config_default_returns_all_enabled(app_config_mock):
     assert all(item['enabled'] is True for item in items)
 
 
+def test_get_config_returns_definitions_version_from_profile_schema(app_config_mock):
+    import dynamodb_utils
+    from profile_schema import clear_schema_cache, get_definitions_version
+
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    clear_schema_cache()
+
+    from get_config import lambda_handler
+
+    response = lambda_handler(_event(), None)
+    assert response['statusCode'] == 200
+    assert json.loads(response['body'])['data']['definitionsVersion'] == get_definitions_version()
+
+
 def test_get_config_all_alias_returns_all_enabled(app_config_mock):
     import dynamodb_utils
     dynamodb_utils.TABLES = {}

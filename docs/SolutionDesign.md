@@ -154,6 +154,7 @@ Provisioning methods create the same tour-specific DynamoDB tables (TourRider, R
 | dateOfBirth | String | Optional ISO date (`YYYY-MM-DD`) |
 | gender | String | Optional one of `Male`, `Female`, `Other`, `Prefer not to say` |
 | photoS3Key | String | S3 object key for photo |
+| attributes | Map | Dynamic profile attributes map (config-driven by AppConfig `RIDER_PROFILE_ATTRIBUTE`) |
 | createdAt | String | ISO 8601 timestamp |
 | updatedAt | String | ISO 8601 timestamp |
 
@@ -235,7 +236,14 @@ Provisioning methods create the same tour-specific DynamoDB tables (TourRider, R
 **Notes:**
 - API readers consume enabled entries only.
 - `GET /v1/config` returns any config type present in the table; no code change is needed to expose a new config type.
-- Current supported config types: `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`, `HOTEL_UPLOAD`.
+- Current supported config types:
+  - `ID_CODE_FORMAT`: QR/id-code parsing strategy definitions
+  - `ID_CODE_TYPE`: code-to-type mappings (RIDER/BAGGAGE/etc.)
+  - `ARTIFACTS`: allowed artifact IDs and categories (tour/ride)
+  - `HOTEL_UPLOAD`: hotel CSV processing limits
+  - `RIDER_PROFILE_SECTION`: profile form section definitions
+  - `RIDER_PROFILE_ATTRIBUTE`: profile attribute definitions (type, storage, visibility, validation)
+  - `LOV`: reusable list-of-values catalogs used by profile attributes
 - `HOTEL_UPLOAD` / `PROCESSING` holds limits for the hotel allocation CSV processor: `maxFileSizeBytes` (1048576), `maxDataRows` (500), `maxStayDates` (31), `maxStoredErrors` (200), and `timeReserveSeconds` (20; the processor stops, rolls back and records `PROCESSING_TIMEOUT` when less time than this is left). If the item is missing or disabled, or a value is invalid, the defaults shown are used. `seed_app_config.py` only inserts this item when it doesn't exist, so values tuned at runtime survive deploys. Clients are not expected to use it, but it is readable via `GET /v1/config`.
 
 ## Tour-Specific Table 6: Artifacts-{tourId}

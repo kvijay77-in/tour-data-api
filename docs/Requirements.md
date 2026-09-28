@@ -158,3 +158,8 @@ Expected volume:
 - Very rarely more than 1 riders per day - Likely 1 multi-ride day once in 4 tours.
 - Maintain 5 past tour data
 - Concurrent App users 10 to 15.
+
+## Rider Profile (configuration-driven)
+Rider profile attributes are configuration-driven via AppConfig (`RIDER_PROFILE_SECTION`, `RIDER_PROFILE_ATTRIBUTE`, `LOV`).
+Backend validates rider profile writes against enabled definitions, merges submitted keys without deleting unsent/disabled stored data, and enforces Rider API profile ownership (`PROFILE_ACCESS_DENIED`).
+Medical/sensitive attributes are role-filtered for staff responses.
