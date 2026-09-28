@@ -40,7 +40,6 @@ Globals:
         # Metadata
         SUBSCRIPTION_ID: !Ref SubscriptionId
         ENVIRONMENT: !Ref Environment
-        RIDER_API_ID: !Ref RiderApi
         PHOTOS_BUCKET: !Ref PhotosBucket
         ARTIFACTS_BUCKET: !Ref ArtifactsBucket
         MGMT_USER_POOL_ID: !If

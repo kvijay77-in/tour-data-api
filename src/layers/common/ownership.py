@@ -28,6 +28,12 @@ def is_rider_api_request(event: Dict[str, Any]) -> bool:
     if configured_rider_api_id and api_id:
         return api_id == configured_rider_api_id
 
+    # In deployed environments apiId is present; without explicit RIDER_API_ID
+    # configuration we must not guess and accidentally enforce RiderApi ownership
+    # checks on TourDataApi routes.
+    if api_id and not configured_rider_api_id:
+        return False
+
     if not api_id:
         # Local/unit-test fallback is opt-in to avoid breaking legacy tests.
         if os.environ.get('FORCE_RIDER_API_OWNERSHIP', '').lower() != 'true':
