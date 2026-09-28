@@ -584,6 +584,12 @@ def _apply_handler_normalization(attr_def: Dict[str, Any], value: Any, profile: 
             )
         profile_id = str(profile.get('profileId') or '').strip()
         s3_key = value.strip()
+        if '..' in [segment for segment in s3_key.split('/') if segment]:
+            raise ProfileSchemaError(
+                message=f"{key} must not contain path traversal segments",
+                code='VALIDATION_ERROR',
+                status_code=422,
+            )
         if not profile_id or not s3_key.startswith((f'riders/{profile_id}/photo/', f'profiles/{profile_id}/')):
             raise ProfileSchemaError(
                 message=f"{key} must be under riders/{profile_id}/photo/ or profiles/{profile_id}/",

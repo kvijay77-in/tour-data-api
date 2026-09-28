@@ -116,6 +116,16 @@ def test_profile_photo_updates_with_storage_path_key(app_config_fixture):
     assert legacy['photoS3Key'] == 'profiles/P1/legacy-profile.jpg'
 
 
+def test_profile_photo_rejects_path_traversal(app_config_fixture):
+    with pytest.raises(ProfileSchemaError) as exc:
+        merge_profile_values(
+            {'profileId': 'P1', 'name': 'Old', 'gender': 'Male'},
+            {'name': 'Old', 'gender': 'Male', 'photoS3Key': 'riders/P1/photo/../../other/file.jpg'},
+            event=_event(['RIDER']),
+        )
+    assert exc.value.code == 'VALIDATION_ERROR'
+
+
 def test_optional_attribute_null_clears_value(app_config_fixture):
     merged, _ = merge_profile_values(
         {'profileId': 'P1', 'name': 'Old', 'gender': 'Male', 'attributes': {'bloodGroup': 'A+'}},
