@@ -422,7 +422,7 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 
 ### Lambda Functions
 
-- **Total Functions**: 99 (from `template.yaml`)
+- **Total Functions**: see `template.yaml` resources with `Type: AWS::Serverless::Function` (single source of truth)
 - **Coverage**: tours, riders/profile, rides/stages, check-ins, users/admin-usermgmt, artifacts, events, notifications, hotels, and helper processors
 
 ### Data Storage

@@ -658,7 +658,7 @@ def main():
         try:
             should_force_profile_config = args.force_profile_config and item['configType'] in FORCE_OVERWRITE_PROFILE_CONFIG_TYPES
             if item['configType'] in INSERT_ONLY_CONFIG_TYPES and not should_force_profile_config:
-                table.put_item(Item=item, ConditionExpression='attribute_not_exists(configType)')
+                table.put_item(Item=item, ConditionExpression='attribute_not_exists(configType) AND attribute_not_exists(configId)')
             else:
                 table.put_item(Item=item)
             print(f"Upserted {item['configType']} / {item['configId']}")

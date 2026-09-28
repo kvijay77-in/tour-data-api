@@ -126,6 +126,16 @@ def test_profile_photo_rejects_path_traversal(app_config_fixture):
     assert exc.value.code == 'VALIDATION_ERROR'
 
 
+def test_profile_photo_rejects_unusable_profile_id(app_config_fixture):
+    with pytest.raises(ProfileSchemaError) as exc:
+        merge_profile_values(
+            {'profileId': 'P/1', 'name': 'Old', 'gender': 'Male'},
+            {'name': 'Old', 'gender': 'Male', 'photoS3Key': 'riders/P/1/photo/profile.jpg'},
+            event=_event(['RIDER']),
+        )
+    assert exc.value.code == 'VALIDATION_ERROR'
+
+
 def test_optional_attribute_null_clears_value(app_config_fixture):
     merged, _ = merge_profile_values(
         {'profileId': 'P1', 'name': 'Old', 'gender': 'Male', 'attributes': {'bloodGroup': 'A+'}},
