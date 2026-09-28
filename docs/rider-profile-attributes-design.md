@@ -67,7 +67,8 @@ Seed script provides:
 
 ## Ownership security model
 `src/layers/common/ownership.py`:
-- Rider API identification via `requestContext.apiId == RIDER_API_ID` (env)
+- Rider API identification uses `requestContext.apiId == RIDER_API_ID` when `RIDER_API_ID` is configured.
+- Fail-closed behavior: if `apiId` is present but `RIDER_API_ID` is not configured, routes under `/v1/riders/` and `/v1/profile/` are treated as RiderApi requests for ownership enforcement.
 - `require_own_profile(event, profile_id)` enforces rider ownership using `RiderCognitoUser` (`sub -> profileId`)
 - Ownership mismatch returns `403 PROFILE_ACCESS_DENIED` **before data reads**
 - Link routes enforce path `{cognitoUserName} == JWT sub`
