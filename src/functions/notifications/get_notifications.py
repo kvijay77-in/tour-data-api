@@ -29,6 +29,7 @@ def _build_rider_audiences(profile_id, tour_rows):
         tour_id = row.get('tourId')
         if not tour_id:
             continue
+        audiences.add(f'TOUR#{tour_id}#ALL')
         audiences.add(f'TOUR#{tour_id}#APPLICANTS')
         status = row.get('status')
         if status:
@@ -51,7 +52,8 @@ def _fetch_tour_items_for_rider(tour_rows, since, limit):
         for audience in audiences:
             try:
                 items.extend(query_audience_items(table_name, audience, since, limit))
-            except Exception:
+            except Exception as exc:
+                logger.warning('Failed to query rider tour notification table %s audience=%s: %s', table_name, audience, str(exc))
                 continue
     return items
 
@@ -67,7 +69,8 @@ def _fetch_tour_items_for_mgmt(groups, since, limit):
         for audience in audiences:
             try:
                 items.extend(query_audience_items(table_name, audience, since, limit))
-            except Exception:
+            except Exception as exc:
+                logger.warning('Failed to query mgmt tour notification table %s audience=%s: %s', table_name, audience, str(exc))
                 continue
     return items
 
@@ -109,8 +112,9 @@ def lambda_handler(event, context):
         last_read_at = state.get('lastReadAt') if state else None
 
         normalized = [normalize_notification_item(row, last_read_at) for row in items]
-        merged = dedupe_notifications(normalized)[:limit]
-        unread_count = sum(1 for row in dedupe_notifications(normalized) if not row.get('isRead'))
+        deduped = dedupe_notifications(normalized)
+        merged = deduped[:limit]
+        unread_count = sum(1 for row in deduped if not row.get('isRead'))
 
         return success_response({'items': merged, 'unreadCount': unread_count})
 

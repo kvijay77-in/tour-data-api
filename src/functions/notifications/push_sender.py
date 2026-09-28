@@ -55,6 +55,19 @@ def _query_mgmt_tokens_for_group(group: str) -> List[str]:
     return [row.get('deviceToken') for row in rows if row.get('deviceToken')]
 
 
+def _scan_all_items(table) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    kwargs: Dict[str, Any] = {}
+    while True:
+        response = table.scan(**kwargs)
+        items.extend(response.get('Items', []))
+        last_key = response.get('LastEvaluatedKey')
+        if not last_key:
+            break
+        kwargs['ExclusiveStartKey'] = last_key
+    return items
+
+
 def _resolve_tokens(item: Dict[str, Any]) -> List[str]:
     audience = str(item.get('audience') or '')
     if audience.startswith('PROFILE#'):
@@ -66,11 +79,11 @@ def _resolve_tokens(item: Dict[str, Any]) -> List[str]:
 
     if audience == 'APP#RIDER':
         table = dynamodb.Table(os.environ['RIDER_PUSH_DEVICE_TABLE'])
-        return [row.get('token') for row in table.scan().get('Items', []) if row.get('token')]
+        return [row.get('token') for row in _scan_all_items(table) if row.get('token')]
 
     if audience == 'APP#MGMT':
         table = dynamodb.Table(os.environ['MGMT_PUSH_DEVICE_TABLE'])
-        return [split_base_token(row['token']) for row in table.scan().get('Items', []) if row.get('itemType') == 'DEVICE' and row.get('token')]
+        return [split_base_token(row['token']) for row in _scan_all_items(table) if row.get('itemType') == 'DEVICE' and row.get('token')]
 
     if audience.startswith('TOUR#') and '#RIDER#' in audience:
         tour_id = audience.split('#')[1]
@@ -90,10 +103,10 @@ def _delete_stale_token(token: str) -> None:
     rider_table = dynamodb.Table(os.environ['RIDER_PUSH_DEVICE_TABLE'])
     mgmt_table = dynamodb.Table(os.environ['MGMT_PUSH_DEVICE_TABLE'])
 
-    for row in rider_table.scan().get('Items', []):
+    for row in _scan_all_items(rider_table):
         if row.get('token') == token:
             rider_table.delete_item(Key={'profileId': row['profileId'], 'token': row['token']})
-    for row in mgmt_table.scan().get('Items', []):
+    for row in _scan_all_items(mgmt_table):
         if row.get('token') == token or row.get('deviceToken') == token:
             mgmt_table.delete_item(Key={'cognitoSub': row['cognitoSub'], 'token': row['token']})
 

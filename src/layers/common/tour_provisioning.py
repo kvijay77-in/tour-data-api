@@ -26,10 +26,12 @@ import boto3
 from botocore.exceptions import ClientError
 
 from dynamodb_utils import get_tour_table_name
+from logger import get_logger
 from models import TOUR_TABLE_TYPES
 
 
 TABLE_ALREADY_EXISTS_CODE = 'ResourceInUseException'
+logger = get_logger(__name__)
 
 
 # Table definitions for tour-specific tables
@@ -333,6 +335,13 @@ def create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=Fals
             if scan.get('Items'):
                 return table_name
 
+            if os.environ.get('ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE', 'false').lower() != 'true':
+                logger.info(
+                    "Legacy notification table detected for %s; skipping recreate because ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE is not true",
+                    table_name,
+                )
+                return table_name
+
             dynamodb_client.delete_table(TableName=table_name)
             waiter = dynamodb_client.get_waiter('table_not_exists')
             waiter.wait(TableName=table_name)
@@ -431,7 +440,12 @@ def provision_tour_tables(dynamodb_client, tour_id, ignore_existing=False):
                             ]
                         },
                     )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Unable to create push sender mapping for tour=%s table=%s error=%s",
+                tour_id,
+                notification_table,
+                str(exc),
+            )
 
     return created_tables

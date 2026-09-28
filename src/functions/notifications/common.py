@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
 import boto3
-from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.conditions import Key
 
 from dynamodb_utils import get_item, get_table, get_tour_table_name
 from logger import get_logger
@@ -97,14 +97,13 @@ def set_state_row(table_name: str, state_key: str, read_at: str) -> None:
 def query_audience_items(table_name: str, audience: str, since: Optional[str], limit: int) -> List[Dict[str, Any]]:
     table = boto3.resource("dynamodb").Table(table_name)
     key_expr = Key("audience").eq(audience)
+    if since:
+        key_expr = key_expr & Key("sk").gt(f"{since}#")
     kwargs: Dict[str, Any] = {
         "KeyConditionExpression": key_expr,
         "ScanIndexForward": False,
         "Limit": limit,
     }
-    if since:
-        kwargs["FilterExpression"] = Attr("createdAt").gt(since)
-
     resp = table.query(**kwargs)
     return resp.get("Items", [])
 

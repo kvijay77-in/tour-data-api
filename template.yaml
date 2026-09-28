@@ -517,6 +517,7 @@ Resources:
       Environment:
         Variables:
           PUSH_SENDER_FUNCTION_ARN: !GetAtt PushSenderFunction.Arn
+          ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE: 'false'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref TourMasterTable
@@ -534,7 +535,7 @@ Resources:
               Action:
                - lambda:ListEventSourceMappings
                - lambda:CreateEventSourceMapping
-              Resource: '*'
+              Resource: !GetAtt PushSenderFunction.Arn
       Events:
         HttpApi:
           Type: HttpApi
@@ -555,6 +556,7 @@ Resources:
       Environment:
         Variables:
           PUSH_SENDER_FUNCTION_ARN: !GetAtt PushSenderFunction.Arn
+          ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE: 'false'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref TourMasterTable
@@ -572,7 +574,7 @@ Resources:
               Action:
                - lambda:ListEventSourceMappings
                - lambda:CreateEventSourceMapping
-              Resource: '*'
+              Resource: !GetAtt PushSenderFunction.Arn
       Events:
         HttpApi:
           Type: HttpApi
@@ -593,6 +595,7 @@ Resources:
       Environment:
         Variables:
           PUSH_SENDER_FUNCTION_ARN: !GetAtt PushSenderFunction.Arn
+          ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE: 'false'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref TourMasterTable
@@ -610,7 +613,7 @@ Resources:
               Action:
                - lambda:ListEventSourceMappings
                - lambda:CreateEventSourceMapping
-              Resource: '*'
+              Resource: !GetAtt PushSenderFunction.Arn
       Events:
         HttpApi:
           Type: HttpApi
@@ -3574,7 +3577,10 @@ Resources:
             - Effect: Allow
               Action:
                 - kms:Decrypt
-              Resource: '*'
+              Resource: !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
 
   RiderNotificationStreamMapping:
     Type: AWS::Lambda::EventSourceMapping

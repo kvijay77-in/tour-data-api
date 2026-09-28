@@ -6,6 +6,7 @@ from unittest.mock import patch
 import boto3
 import pytest
 from moto import mock_aws
+from boto3.dynamodb.conditions import Key
 
 os.environ.setdefault('AWS_DEFAULT_REGION', 'us-east-1')
 os.environ.setdefault('AWS_ACCESS_KEY_ID', 'testing')
@@ -23,6 +24,7 @@ import get_unread_count
 import mark_read
 import create_rule
 import update_rule
+import send_notification
 import push_sender
 
 
@@ -275,6 +277,14 @@ def test_device_register_move_and_delete(ddb):
     assert resp['statusCode'] == 204
     assert ddb.Table(os.environ['RIDER_PUSH_DEVICE_TABLE']).scan()['Items'] == []
 
+    os.environ['NOTIFICATION_SCOPE'] = 'mgmt'
+    register_device.lambda_handler(_mgmt_event({'token': 'ExponentPushToken[m]', 'platform': 'android'}, groups='ADMINISTRATOR,PS_1_USER', sub='mgmt-1'), None)
+    register_device.lambda_handler(_mgmt_event({'token': 'ExponentPushToken[m]', 'platform': 'android'}, groups='ADMINISTRATOR', sub='mgmt-1'), None)
+    mgmt_rows = ddb.Table(os.environ['MGMT_PUSH_DEVICE_TABLE']).query(
+        KeyConditionExpression=Key('cognitoSub').eq('mgmt-1')
+    )['Items']
+    assert not any(row.get('groupKey') == 'GROUP#PS_1_USER' for row in mgmt_rows)
+
 
 def test_inbox_list_and_mark_read(ddb):
     map_table = ddb.Table(os.environ['RIDER_COGNITO_USER_TABLE'])
@@ -292,19 +302,35 @@ def test_inbox_list_and_mark_read(ddb):
         'createdAt': '2026-02-11T06:00:00Z',
         'push': False,
     })
+    table.put_item(Item={
+        'audience': 'TOUR#TOT-2026#ALL',
+        'sk': '2026-02-11T06:10:00Z#n2',
+        'notificationId': 'n2',
+        'ruleId': 'RIDE_STARTED',
+        'title': 'C',
+        'body': 'D',
+        'createdAt': '2026-02-11T06:10:00Z',
+        'push': False,
+    })
 
     os.environ['NOTIFICATION_SCOPE'] = 'rider'
     list_resp = get_notifications.lambda_handler(_rider_event(), None)
     body = json.loads(list_resp['body'])['data']
-    assert body['unreadCount'] == 1
+    assert body['unreadCount'] == 2
 
     mark_read.lambda_handler(_rider_event({'readAt': '2026-02-11T07:00:00Z'}), None)
     unread_resp = get_unread_count.lambda_handler(_rider_event(), None)
     assert json.loads(unread_resp['body'])['data']['unreadCount'] == 0
 
+    bad_mark = mark_read.lambda_handler(_rider_event({'readAt': 'bad-value'}), None)
+    assert bad_mark['statusCode'] == 400
+
 
 def test_rule_crud_validation_and_version_increment(ddb):
     os.environ['NOTIFICATION_SCOPE'] = 'mgmt'
+
+    unauthorized = create_rule.lambda_handler(_mgmt_event({'ruleId': 'ANNOUNCEMENT'}, groups='SUPER_USER'), None)
+    assert unauthorized['statusCode'] == 403
 
     bad = create_rule.lambda_handler(_mgmt_event({'ruleId': 'X', 'enabled': True, 'category': 'BAD'}), None)
     assert bad['statusCode'] == 400
@@ -313,7 +339,7 @@ def test_rule_crud_validation_and_version_increment(ddb):
         'ruleId': 'ANNOUNCEMENT',
         'enabled': True,
         'category': 'ANNOUNCEMENT',
-        'audiences': ['ALL'],
+        'audiences': ['TOUR#{tourId}#ALL'],
         'titleTemplate': '{title}',
         'bodyTemplate': '{message}',
         'push': True,
@@ -329,6 +355,9 @@ def test_rule_crud_validation_and_version_increment(ddb):
     updated = update_rule.lambda_handler({**_mgmt_event(good_payload), 'pathParameters': {'ruleId': 'ANNOUNCEMENT'}}, None)
     assert updated['statusCode'] == 200
     assert json.loads(updated['body'])['data']['version'] == 2
+
+    invalid_send = send_notification.lambda_handler(_mgmt_event({'ruleId': 'ANNOUNCEMENT', 'audiences': ['INVALID']}), None)
+    assert invalid_send['statusCode'] == 400
 
 
 def test_push_sender_deletes_device_not_registered_token(ddb):
@@ -368,3 +397,41 @@ def test_push_sender_deletes_device_not_registered_token(ddb):
         push_sender.lambda_handler(event, None)
 
     assert ddb.Table(os.environ['RIDER_PUSH_DEVICE_TABLE']).scan()['Items'] == []
+
+
+def test_push_sender_mgmt_user_delivery(ddb):
+    ddb.Table(os.environ['MGMT_PUSH_DEVICE_TABLE']).put_item(Item={'cognitoSub': 'mgmt-1', 'token': 'ExponentPushToken[m1]', 'itemType': 'DEVICE'})
+
+    event = {
+        'Records': [
+            {
+                'eventName': 'INSERT',
+                'dynamodb': {
+                    'NewImage': {
+                        'audience': {'S': 'USER#mgmt-1'},
+                        'sk': {'S': '2026-02-11T06:00:00Z#n3'},
+                        'notificationId': {'S': 'n3'},
+                        'title': {'S': 'A'},
+                        'body': {'S': 'B'},
+                        'push': {'BOOL': True},
+                        'androidChannel': {'S': 'general'},
+                        'priority': {'S': 'NORMAL'},
+                    }
+                }
+            }
+        ]
+    }
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return json.dumps({'data': [{'status': 'ok', 'id': 't1'}]}).encode('utf-8')
+
+    with patch.object(push_sender, '_get_ssm_parameter', return_value='token'), patch('urllib.request.urlopen', return_value=_Resp()) as mocked:
+        push_sender.lambda_handler(event, None)
+        assert mocked.called

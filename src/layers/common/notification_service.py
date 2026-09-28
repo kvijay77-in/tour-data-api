@@ -42,16 +42,21 @@ class _SafeTemplateDict(dict):
         return "{" + key + "}"
 
 
-def validate_audience_expression(value: str) -> bool:
+def _normalize_placeholder_tokens(value: str) -> str:
+    return re.sub(r"\{[a-zA-Z0-9_]+\}", "PLACEHOLDER", value)
+
+
+def validate_audience_expression(value: str, allow_placeholders: bool = False) -> bool:
     if not isinstance(value, str):
         return False
-    return any(pattern.fullmatch(value) for pattern in AUDIENCE_PATTERNS)
+    candidate = _normalize_placeholder_tokens(value) if allow_placeholders else value
+    return any(pattern.fullmatch(candidate) for pattern in AUDIENCE_PATTERNS)
 
 
-def validate_audiences(audiences: Iterable[str]) -> List[str]:
+def validate_audiences(audiences: Iterable[str], allow_placeholders: bool = False) -> List[str]:
     normalized = []
     for audience in audiences or []:
-        if not validate_audience_expression(audience):
+        if not validate_audience_expression(audience, allow_placeholders=allow_placeholders):
             raise ValueError(f"Invalid audience expression: {audience}")
         normalized.append(audience)
     if not normalized:
@@ -91,7 +96,7 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
         raise ValueError(f"category must be one of {sorted(CATEGORY_VALUES)}")
 
     if "audiences" in validated:
-        validated["audiences"] = validate_audiences(validated["audiences"])
+        validated["audiences"] = validate_audiences(validated["audiences"], allow_placeholders=True)
 
     if "priority" in validated and validated["priority"] not in PRIORITY_VALUES:
         raise ValueError(f"priority must be one of {sorted(PRIORITY_VALUES)}")
@@ -292,7 +297,8 @@ def notify(
         if tour_id and "tourId" not in rendered_context:
             rendered_context["tourId"] = tour_id
 
-        validated_audiences = validate_audiences(audiences)
+        rendered_audiences = [_render_template(str(audience), rendered_context) for audience in audiences]
+        validated_audiences = validate_audiences(rendered_audiences)
         notification_id = str(uuid.uuid4())
         created_at = utc_now_iso()
         title = _render_template(rule.get("titleTemplate", ""), rendered_context)

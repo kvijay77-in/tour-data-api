@@ -3,7 +3,7 @@ sys.path.insert(0, '/opt/python')
 
 from common import get_jwt_claim, parse_json_body
 from logger import get_logger, log_event
-from notification_service import notify
+from notification_service import notify, validate_audiences
 from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, success_response
 
@@ -21,12 +21,15 @@ def lambda_handler(event, context):
         rule_id = body.get('ruleId')
         if not isinstance(rule_id, str) or not rule_id:
             return bad_request_response('ruleId is required')
+        audience_override = body.get('audiences')
+        if audience_override is not None:
+            validate_audiences(audience_override)
 
         notification_id = notify(
             rule_id=rule_id,
             tour_id=body.get('tourId'),
             context=body.get('context') or {},
-            audience_override=body.get('audiences'),
+            audience_override=audience_override,
             actor=get_jwt_claim(event, 'sub', 'system'),
         )
         if not notification_id:
