@@ -154,7 +154,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `GET /v1/config` | None | `configType` (optional) | None | `configType` accepts `ALL` (default when omitted), any single config type (e.g. `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`, `HOTEL_UPLOAD`), or a comma-separated list of types; values are normalized to uppercase; returns enabled items only; `ALL` combined with other values returns `400 BAD_REQUEST`; returns `404 INVALID_CONFIG_TYPE` ("Missing or Invalid configType") when no enabled rows exist for the requested type(s); supports `If-None-Match` and `304 Not Modified` |
+| `GET /v1/config` | None | `configType` (optional) | None | `configType` accepts `ALL` (default when omitted), any single config type (e.g. `ID_CODE_FORMAT`, `ID_CODE_TYPE`, `ARTIFACTS`, `HOTEL_UPLOAD`), or a comma-separated list of types; values are normalized to uppercase; returns enabled items only; response `data` includes both `items` and top-level `definitionsVersion`; `ALL` combined with other values returns `400 BAD_REQUEST`; returns `404 INVALID_CONFIG_TYPE` ("Missing or Invalid configType") when no enabled rows exist for the requested type(s); supports `If-None-Match` and `304 Not Modified` |
 
 #### Tours
 
@@ -172,7 +172,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `POST /v1/riders/profile` | None | None | Required: `name, email, phone, emergencyContact, dateOfBirth, gender, address`; Optional: `personalCode, dietaryPreference` | Creates profile with auto-generated `profileId`; missing/invalid fields return `422`; Email format; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD`; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with required string fields `line1, city, country, postalCode` and optional `line2, state`; `dietaryPreference` in `VEG, NON_VEG`; `personalCode` is normalized to uppercase when provided; duplicate email rejected (`EMAIL_ALREADY_EXISTS`); duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
+| `POST /v1/riders/profile` | None | None | Config-driven body. Top-level keys map to CORE attributes (storage-path first, then key), optional `attributes` map for ATTRIBUTES-scope values, optional `definitionsVersion`. | Creates profile with auto-generated `profileId`; validates enabled profile definitions from AppConfig; optional attribute `null` clears value; SELECT accepts LOV value or label (case-insensitive) and stores LOV value; riders cannot write `adminOnly` attributes; duplicate email rejected (`EMAIL_ALREADY_EXISTS`); duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`); stale `definitionsVersion` returns `409 PROFILE_DEFINITIONS_CHANGED`. |
 | `POST /v1/riders/profile/{profileId}` | `profileId` (optional override route) | None | Required: `name, email, phone, emergencyContact, dateOfBirth, gender, address`; Optional: `personalCode, dietaryPreference` | Same validation as profile create; uses provided path `profileId` instead of auto-generating one; conflict on existing `profileId` returns `PROFILE_ALREADY_EXISTS` |
 | `GET /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Returns linked `profileId`; `404` if mapping does not exist |
 | `POST /v1/riders/link/{cognitoUserName}` | `cognitoUserName` (required) | None | None | Creates mapping row with generated `profileId` UUID; duplicate `cognitoUserName` rejected (`COGNITO_USER_ALREADY_LINKED`) |
@@ -180,7 +180,7 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/riders/profile/{profileId}` | `profileId` (required) | None | None | `profileId` must exist |
 | `GET /v1/profile/{profileId}/tours` | `profileId` (required) | None | None | Returns all RiderTours records for the profileId using partition key query (no `tourId` filter) |
 | `GET /v1/profile/{profileId}/tours/{tourId}` | `profileId, tourId` (required) | None | None | `tourId` format: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]`; returns one RiderTours record for the key pair |
-| `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | Required on every request: `name, email, phone, emergencyContact, dateOfBirth, gender, address`; Optional: `photoS3Key, personalCode, dietaryPreference` | Missing mandatory fields return `400`; Email validated; `emergencyContact` is an object with string fields `name, phone, relation`; `dateOfBirth` must be `YYYY-MM-DD`; `gender` in `Male, Female, Other, Prefer not to say`; `address` is an object with required string fields `line1, city, country, postalCode` and optional `line2, state`; `dietaryPreference` in `VEG, NON_VEG`; `personalCode` normalized to uppercase; duplicate personalCode rejected (`PERSONAL_CODE_ALREADY_EXISTS`) |
+| `PUT /v1/riders/profile/{profileId}` | `profileId` (required) | None | Partial config-driven body: submit only changed keys; optional `attributes` map; optional `definitionsVersion`. | Merges submitted values without deleting unsent keys; required checks run against merged result; top-level unknown keys return `422 UNKNOWN_OR_DISABLED_ATTRIBUTE`; `photoS3Key` must be a non-empty S3 key under `riders/{profileId}/photo/` (or legacy `profiles/{profileId}/`); stale `definitionsVersion` returns `409 PROFILE_DEFINITIONS_CHANGED`; ownership violations on RiderApi return `403 PROFILE_ACCESS_DENIED`. |
 | `POST /v1/riders/profile/{profileId}/picture` | `profileId` (required) | None | Optional: `contentType` | `profileId` must exist; `contentType` in `image/jpeg, image/png`; default `image/jpeg` |
 | `GET /v1/riders/profile/{profileId}/picture` | `profileId` (required) | `expiresIn` (optional) | None | `profileId` must exist and have `photoS3Key` set, else `404`; `expiresIn` is an integer between 60 and 3600 seconds, default 300; returns presigned `downloadUrl` |
 | `GET /v1/tours/{tourId}/riders` | `tourId` (required) | None | None | `tourId` format rule |
@@ -2984,16 +2984,142 @@ Not critical for initial implementation given low volume, but consider:
 - Export to Excel
 
 
-## Rider profile attribute APIs
-- `GET /v1/admin/config/{configType}` (ADMINISTRATOR, TourDataApi)
-- `PUT /v1/admin/config/{configType}/{configId}` (ADMINISTRATOR, TourDataApi)
+## Rider profile configuration and write contracts
+
+### `GET /v1/config` (shared config reader)
+This endpoint returns enabled AppConfig entries and the current schema hash used by profile writes.
+
+```json
+{
+  "success": true,
+  "data": {
+    "definitionsVersion": "8d2a2a9f2c2e4b2f...",
+    "items": [
+      {
+        "configType": "RIDER_PROFILE_ATTRIBUTE",
+        "configId": "photo",
+        "enabled": true,
+        "config": {
+          "type": "IMAGE",
+          "storage": { "scope": "CORE", "path": "photoS3Key" }
+        }
+      }
+    ]
+  }
+}
+```
+
+Clients **must use** `data.definitionsVersion` from the server response and **must not compute** their own value.
+
+### Admin profile-config APIs (TourDataApi, `ADMINISTRATOR`)
+
+#### `GET /v1/admin/config/{configType}`
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "configType": "RIDER_PROFILE_ATTRIBUTE",
+        "configId": "name",
+        "enabled": true,
+        "version": 3,
+        "updatedAt": "2026-09-28T10:00:00Z",
+        "config": {
+          "label": "Name",
+          "sectionId": "personal",
+          "type": "TEXT",
+          "storage": { "scope": "CORE", "path": "name" },
+          "required": true
+        }
+      }
+    ]
+  }
+}
+```
+
+#### `PUT /v1/admin/config/{configType}/{configId}`
+```json
+{
+  "version": 3,
+  "enabled": true,
+  "config": {
+    "label": "Photo",
+    "sectionId": "personal",
+    "type": "IMAGE",
+    "storage": { "scope": "CORE", "path": "photoS3Key" },
+    "required": false,
+    "system": true,
+    "handler": "PROFILE_PHOTO"
+  }
+}
+```
+
+### Rider profile write APIs
+
+#### `POST /v1/riders/profile`
+```json
+{
+  "name": "Rider Name",
+  "phone": "+919999999999",
+  "photoS3Key": "riders/P123/photo/profile.jpg",
+  "address": {
+    "line1": "Street 1",
+    "city": "Chennai",
+    "country": "India",
+    "state": "Tamil Nadu",
+    "postalCode": "600001"
+  },
+  "attributes": {
+    "dietaryPreference": "VEG"
+  },
+  "definitionsVersion": "8d2a2a9f2c2e4b2f..."
+}
+```
+
+#### `PUT /v1/riders/profile/{profileId}`
+```json
+{
+  "name": "Updated Name",
+  "photoS3Key": "profiles/P123/legacy-photo.jpg",
+  "attributes": {
+    "bloodGroup": null
+  },
+  "definitionsVersion": "8d2a2a9f2c2e4b2f..."
+}
+```
+
+Notes:
+- Top-level keys resolve by CORE storage path first (for example `photoS3Key`), then by attribute key.
+- `attributes.<key>` resolves by attribute key.
+- Optional attributes accept `null` to clear the stored value.
+- Required attributes are validated on the final merged profile.
+
+### Attribute upload/download APIs
 - `POST /v1/riders/profile/{profileId}/attributes/{key}/upload`
 - `GET /v1/riders/profile/{profileId}/attributes/{key}/download`
 
-### Additional error codes
-`UNKNOWN_OR_DISABLED_ATTRIBUTE`, `ADMIN_ONLY_ATTRIBUTE`, `PROFILE_DEFINITIONS_CHANGED`, `CONFIG_VERSION_CONFLICT`, `SYSTEM_ATTRIBUTE_PROTECTED`, `IMMUTABLE_FIELD`, `PROFILE_ACCESS_DENIED`.
+Example upload response:
+```json
+{
+  "success": true,
+  "data": {
+    "uploadUrl": "https://...",
+    "s3Key": "riders/P123/attributes/insuranceCard/7db8....pdf",
+    "expiresIn": 900
+  }
+}
+```
 
+### Rider profile related error codes
+- `UNKNOWN_OR_DISABLED_ATTRIBUTE`
+- `ADMIN_ONLY_ATTRIBUTE`
+- `PROFILE_DEFINITIONS_CHANGED`
+- `CONFIG_VERSION_CONFLICT`
+- `SYSTEM_ATTRIBUTE_PROTECTED`
+- `IMMUTABLE_FIELD`
+- `PROFILE_ACCESS_DENIED`
 
 Attribute file routes are exposed on both APIs:
 - RiderApi: owner access
-- TourDataApi: management access subject to role/visibility filtering (and ownership when RiderApi context applies).
+- TourDataApi: management access subject to role/visibility filtering (and ownership when RiderApi context applies)

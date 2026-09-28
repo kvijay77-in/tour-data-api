@@ -33,6 +33,7 @@ from response import (
 )
 from dynamodb_utils import scan_items, query_items
 from rbac import Permission, require_permission
+from profile_schema import get_definitions_version
 
 logger = get_logger(__name__)
 
@@ -114,6 +115,7 @@ def lambda_handler(event, context):
 
         payload = {
             'items': items,
+            'definitionsVersion': get_definitions_version(),
         }
 
         payload_json = json.dumps(payload, sort_keys=True, cls=DecimalEncoder)

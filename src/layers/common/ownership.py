@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from typing import Any, Dict, Optional
 
 from dynamodb_utils import get_item
@@ -10,6 +11,7 @@ from response import error_response
 
 
 RIDER_LINK_TABLE_ENV = 'RIDER_COGNITO_USER_TABLE'
+logger = logging.getLogger(__name__)
 
 
 def get_jwt_sub(event: Dict[str, Any]) -> Optional[str]:
@@ -28,10 +30,19 @@ def is_rider_api_request(event: Dict[str, Any]) -> bool:
     if configured_rider_api_id and api_id:
         return api_id == configured_rider_api_id
 
-    # In deployed environments apiId is present; without explicit RIDER_API_ID
-    # configuration we must not guess and accidentally enforce RiderApi ownership
-    # checks on TourDataApi routes.
+    route_key = (event.get('routeKey') or '').upper()
+    raw_path = (event.get('rawPath') or '').lower()
+
+    is_profile_route = (
+        route_key.startswith(('GET /V1/RIDERS/', 'POST /V1/RIDERS/', 'PUT /V1/RIDERS/', 'DELETE /V1/RIDERS/'))
+        or raw_path.startswith('/v1/riders/')
+        or raw_path.startswith('/v1/profile/')
+    )
+
     if api_id and not configured_rider_api_id:
+        if is_profile_route:
+            logger.error('RIDER_API_ID is not configured; applying fail-closed ownership checks for route %s', raw_path or route_key)
+            return True
         return False
 
     if not api_id:
@@ -39,8 +50,7 @@ def is_rider_api_request(event: Dict[str, Any]) -> bool:
         if os.environ.get('FORCE_RIDER_API_OWNERSHIP', '').lower() != 'true':
             return False
 
-    route_key = (event.get('routeKey') or '').upper()
-    return route_key.startswith(('GET /V1/RIDERS/', 'POST /V1/RIDERS/', 'PUT /V1/RIDERS/', 'DELETE /V1/RIDERS/')) or '/v1/profile/' in (event.get('rawPath') or '')
+    return is_profile_route
 
 
 def resolve_profile_id_for_sub(cognito_sub: str) -> Optional[str]:

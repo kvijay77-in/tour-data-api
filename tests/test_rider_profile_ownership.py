@@ -104,6 +104,48 @@ def test_get_rider_profile_denied_for_other_profile(ownership_fixture):
     assert json.loads(response['body'])['error']['code'] == 'PROFILE_ACCESS_DENIED'
 
 
+def test_update_rider_profile_denied_for_other_profile(ownership_fixture):
+    from update_rider_profile import lambda_handler
+
+    response = lambda_handler(
+        _event(
+            '/v1/riders/profile/P999',
+            method='PUT',
+            path_params={'profileId': 'P999'},
+            body={'name': 'Updated'},
+        ),
+        None,
+    )
+    assert response['statusCode'] == 403
+    assert json.loads(response['body'])['error']['code'] == 'PROFILE_ACCESS_DENIED'
+
+
+def test_get_rider_profile_denied_when_rider_api_id_missing(ownership_fixture):
+    from get_rider_profile import lambda_handler
+
+    os.environ.pop('RIDER_API_ID', None)
+    response = lambda_handler(_event('/v1/riders/profile/P999', path_params={'profileId': 'P999'}), None)
+    assert response['statusCode'] == 403
+    assert json.loads(response['body'])['error']['code'] == 'PROFILE_ACCESS_DENIED'
+
+
+def test_update_rider_profile_denied_when_rider_api_id_missing(ownership_fixture):
+    from update_rider_profile import lambda_handler
+
+    os.environ.pop('RIDER_API_ID', None)
+    response = lambda_handler(
+        _event(
+            '/v1/riders/profile/P999',
+            method='PUT',
+            path_params={'profileId': 'P999'},
+            body={'name': 'Updated'},
+        ),
+        None,
+    )
+    assert response['statusCode'] == 403
+    assert json.loads(response['body'])['error']['code'] == 'PROFILE_ACCESS_DENIED'
+
+
 def test_get_rider_tours_denied_for_other_profile(ownership_fixture):
     from get_rider_tours import lambda_handler
 
