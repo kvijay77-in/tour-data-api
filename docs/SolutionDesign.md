@@ -4,6 +4,8 @@ This is an evolving document and hence latest info must be referred to at all ti
 
 The Cycling Tour Events engine (Day 0 Registration, Baggage Loading/Unloading, Hotel logistics) is designed in full in [cycling-tour-events-design.md](cycling-tour-events-design.md) (backend, authoritative for all shared contracts) and [cycling-tour-events-frontend-design.md](cycling-tour-events-frontend-design.md) (`tour-mgmt-app`/`tour-rider-app`), implementing [cycling-tour-events.md](cycling-tour-events.md). The five new tour-specific tables (`Event`, `EventOccurrence`, `EventActivityLogs`, `Hotel`, `RoomAllocation`) and the `EVENT_MANAGE`/`EVENT_OCCURRENCE_MANAGE`/`EVENT_SCAN`/`HOTEL_ALLOC_MANAGE` permissions referenced below are defined in full there.
 
+Notification framework design is defined in [notification-framework-design.md](notification-framework-design.md).
+
 # Design Principles:  
 
 - DynamoDB tables must be used to allow cost saving.
@@ -86,6 +88,11 @@ These tables exist for the lifetime of the deployment and are defined in `templa
 | **RiderCognitoUser** | Mapping between Cognito rider username and generated rider profile ID |
 | **TourMaster** | Tour registry — every tour ever created is listed here |
 | **AppConfig** | Shared platform configuration for app clients |
+| **NotificationRule** | Notification rule/template catalog used by `notify()` |
+| **RiderNotification** | Rider inbox records (audience-based) |
+| **MgmtNotification** | Management inbox records (audience-based) |
+| **RiderPushDevice** | Rider app push device tokens |
+| **MgmtPushDevice** | Management app push device tokens and group fan-out index items |
 
 ### Tour-Specific Tables (Provisioned at Runtime)
 
@@ -97,7 +104,7 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 | **Ride-{tourId}** | Daily ride configurations for the specific tour |
 | **CheckIn-{tourId}** | Check-in records for the specific tour |
 | **User-{tourId}** | Admin/staff user assignments for the specific tour |
-| **Notification-{tourId}** | Notifications for tour riders (announcements, alerts, personal messages) |
+| **Notification-{tourId}** | Tour-scoped inbox records for audience expressions (`TOUR#...`) |
 | **Artifacts-{tourId}** | Metadata registry for the specific tour's S3-backed tour and ride artifacts |
 | **Event-{tourId}** | Event definitions (activities embedded) for non-check-in QR activities |
 | **EventOccurrence-{tourId}** | Dated occurrences of an event definition |
@@ -110,7 +117,7 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables and `{AWS::StackName}-{TableType}-{tourId}` for tour-specific tables.
 
 Examples (stack name: `dev`, tour ID: `TOT-2026`):
-- Shared: `dev-RiderProfile`, `dev-RiderTours`, `dev-RiderCognitoUser`, `dev-TourMaster`, `dev-AppConfig`
+- Shared: `dev-RiderProfile`, `dev-RiderTours`, `dev-RiderCognitoUser`, `dev-TourMaster`, `dev-AppConfig`, `dev-NotificationRule`, `dev-RiderNotification`, `dev-MgmtNotification`, `dev-RiderPushDevice`, `dev-MgmtPushDevice`
 - Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`, `dev-Artifacts-TOT-2026`, `dev-Event-TOT-2026`, `dev-EventOccurrence-TOT-2026`, `dev-EventActivityLogs-TOT-2026`, `dev-Hotel-TOT-2026`, `dev-RoomAllocation-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
@@ -324,10 +331,43 @@ Both endpoints support optional query parameters:
 
 **Indexes:**
 - Primary Key: `profileId` (partition key), `tourId` (sort key)
+- GSI1: `tourId` (partition key), `status` (sort key) — `TourStatusIndex`
 
 **Notes:**
 - Supports one participation record per `profileId + tourId` pair.
 - Additional optional attributes can be added incrementally as roadmap features evolve.
+
+## Shared Table 7: NotificationRule
+
+**Purpose:** Configurable notification templates and routing rules consumed by `notification_service.notify()`.
+
+Primary key: `ruleId`
+
+Key attributes include `enabled`, `category`, `audiences`, `titleTemplate`, `bodyTemplate`, `push`, `priority`, `androidChannel`, `target`, `ttlHours`, `quietHours`, `allowOverride`, `version`, `updatedAt`, and `updatedBy`.
+
+## Shared Table 8: RiderNotification
+
+**Purpose:** Rider inbox records using audience-based fan-out.
+
+Primary key: `audience` + `sk` (`<createdAt>#<notificationId>`). Includes TTL on `expiresAt` and stream `NEW_IMAGE`.
+
+## Shared Table 9: MgmtNotification
+
+**Purpose:** Management inbox records using audience-based fan-out.
+
+Primary key: `audience` + `sk` (`<createdAt>#<notificationId>`). Includes TTL on `expiresAt` and stream `NEW_IMAGE`.
+
+## Shared Table 10: RiderPushDevice
+
+**Purpose:** Rider push device tokens.
+
+Primary key: `profileId` + `token`; includes `platform`, `updatedAt`, and TTL `expiresAt`.
+
+## Shared Table 11: MgmtPushDevice
+
+**Purpose:** Management push device tokens and group fan-out support.
+
+Primary key: `cognitoSub` + `token`; includes `groups`, `platform`, `updatedAt`, `expiresAt`, and `GroupKeyIndex` (`groupKey`, `updatedAt`).
 
 ## Tour-Specific Table 1: TourRider-{tourId}
 
@@ -493,23 +533,37 @@ Notes:
 
 ## Tour-Specific Table 5: Notification-{tourId}
 
-**Purpose:** Notifications sent to tour riders by organizers. Includes announcements, ride updates, safety alerts, and personal messages. One table per tour, created at provisioning time.
+**Purpose:** Tour-scoped inbox records for audience expressions (`TOUR#...`). One table per tour, created at provisioning time.
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| notificationId | String | UUID (partition key) |
-| type | String | TOUR_ANNOUNCEMENT, RIDE_UPDATE, SAFETY_ALERT, PERSONAL_MESSAGE, CHECKIN_REMINDER, REGISTRATION_STATUS |
+| audience | String | Audience expression (partition key) |
+| sk | String | `<createdAt ISO>#<notificationId>` (sort key) |
+| notificationId | String | UUID |
+| ruleId | String | Notification rule ID |
 | title | String | Notification title |
-| message | String | Notification content |
-| createdBy | String | Cognito user sub of creator |
-| targetRiderId | String | Optional: rider ID for personal notifications. Omitted for broadcast notifications |
-| readBy | List | List of profileIds who have read the notification |
+| body | String | Notification content |
+| priority | String | `URGENT` or `NORMAL` |
+| androidChannel | String | `urgent` or `general` |
+| target | Map | Optional navigation target (`screen`, `paramKeys[]`) |
+| tourId | String | Tour identifier |
+| createdBy | String | Cognito user sub of creator/system actor |
+| push | Boolean | Whether push delivery should be attempted |
+| expiresAt | Number | TTL epoch seconds |
 | createdAt | String | ISO 8601 timestamp |
-| expiresAt | String | Optional: ISO 8601 expiry timestamp |
+| quietHours | Map | Optional `{from,to,tz}` quiet-time policy copied from rule |
 
 **Indexes:**
-- Primary Key: `notificationId` (partition key only)
-- GSI1: `type` (partition key) + `createdAt` (sort key) - For type-filtered queries sorted by date
+- Primary Key: `audience` (partition key), `sk` (sort key)
+
+**Read-state item:**
+- PK: `STATE#<profileId|cognitoSub>`
+- SK: `STATE`
+- Attribute: `lastReadAt` (ISO)
+
+**Other table settings:**
+- DynamoDB TTL enabled on `expiresAt`
+- DynamoDB Stream enabled with `NEW_IMAGE` (for push sender trigger path)
 
 # Data Model Details
 
@@ -697,16 +751,18 @@ tour-data-api/
 ## Key Resources
 
 ### Managed by SAM (template.yaml)
-1. **Shared DynamoDB Tables:** RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig (with GSIs where applicable)
+1. **Shared DynamoDB Tables:** RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig, NotificationRule, RiderNotification, MgmtNotification, RiderPushDevice, MgmtPushDevice (with GSIs where applicable)
 2. **Lambda Functions:** One per API endpoint
-3. **Lambda Layer:** Common utilities shared across all functions (`dynamodb_utils`, `logger`, `models`, `rbac`, `response`, `tour_provisioning`, `validation`)
+3. **Lambda Layer:** Common utilities shared across all functions (`dynamodb_utils`, `logger`, `models`, `notification_service`, `rbac`, `response`, `tour_provisioning`, `validation`)
 4. **API Gateway (tour-mgmt-app):** HTTP API (`TourDataApi`) with JWT authorizer for the management User Pool
 5. **API Gateway (tour-rider-app):** HTTP API (`RiderApi`) with JWT authorizer for the rider User Pool — exposes rider-facing endpoints
 6. **Cognito User Pool (tour-mgmt-app):** `{stack}-users` — for tour organizers, pit stop users, hotel staff, guests. Groups: `ADMINISTRATOR`, `SUPER_USER`, `PS_1_USER`, `PS_2_USER`, `PS_3_USER`, `PS_4_USER`, `PS_5_USER`, `HOTEL_STAFF`, `GUEST`
 7. **Cognito User Pool (tour-rider-app):** `{stack}-rider-users` — dedicated pool for riders, isolated from management users. Groups: `RIDER`. A person can exist in both pools with separate identities.
 8. **S3 Bucket:** Rider photos
 9. **IAM Roles:** Lambda execution roles with least privilege
-10. **CloudWatch Logs:** For monitoring and debugging
+10. **Push Sender Lambda + Event Source Mappings:** Stream-driven push fan-out path
+11. **SQS DLQ + CloudWatch Alarm:** Notification sender failure monitoring and retry safety
+12. **CloudWatch Logs:** For monitoring and debugging
 
 ### Managed at Runtime (Tour Provisioning)
 1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId}, Event-{tourId}, EventOccurrence-{tourId}, EventActivityLogs-{tourId}, Hotel-{tourId}, RoomAllocation-{tourId} (with GSIs where required) — eleven tables in total (see [cycling-tour-events-design.md](cycling-tour-events-design.md) §10.1)
@@ -723,7 +779,7 @@ For use during initial setup, CI/CD pipelines, or by operators:
 1. Run `make provision-tour` or `python scripts/provision_tour.py` with tour parameters
 2. Script resolves the TourMaster table name from CloudFormation stack outputs
 3. Creates a Tour record in the shared TourMaster table (status: PROVISIONING)
-4. Creates 11 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`, `{STACK_NAME}-Notification-{tourId}`, `{STACK_NAME}-Artifacts-{tourId}`, `{STACK_NAME}-Event-{tourId}`, `{STACK_NAME}-EventOccurrence-{tourId}`, `{STACK_NAME}-EventActivityLogs-{tourId}`, `{STACK_NAME}-Hotel-{tourId}`, `{STACK_NAME}-RoomAllocation-{tourId}`. In a Dev environment only, the three sample event definitions (`EVT-REG`, `EVT-BAGLOAD`, `EVT-BAGUNLOAD`) are additionally seeded into `Event-{tourId}` by a separate, environment-gated seed script; Production tours are provisioned with an empty `Event-{tourId}` table, and the Administrator creates event definitions from `tour-mgmt-app` (see [cycling-tour-events-design.md](cycling-tour-events-design.md) §10.2).
+4. Creates 11 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`, `{STACK_NAME}-Notification-{tourId}`, `{STACK_NAME}-Artifacts-{tourId}`, `{STACK_NAME}-Event-{tourId}`, `{STACK_NAME}-EventOccurrence-{tourId}`, `{STACK_NAME}-EventActivityLogs-{tourId}`, `{STACK_NAME}-Hotel-{tourId}`, `{STACK_NAME}-RoomAllocation-{tourId}`. In a Dev environment only, the three sample event definitions (`EVT-REG`, `EVT-BAGLOAD`, `EVT-BAGUNLOAD`) are additionally seeded into `Event-{tourId}` by a separate, environment-gated seed script; Production tours are provisioned with an empty `Event-{tourId}` table, and the Administrator creates event definitions from `tour-mgmt-app` (see [cycling-tour-events-design.md](cycling-tour-events-design.md) §10.2). Notification table re-provisioning is safe for existing tours; if an old legacy notification table was already empty it may be recreated with the new schema.
 5. Tables are created with on-demand billing, encryption, and standard tags
 6. Once all tables are active, Tour status is updated to PLANNING
 
@@ -800,13 +856,14 @@ For regular check-ins, pit stop access is stage-aware. A user with `PS_1_USER` m
 | TOUR_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | USER_LIST | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | DASHBOARD | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| NOTIFICATION_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | EVENT_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | EVENT_OCCURRENCE_MANAGE | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | EVENT_SCAN | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | HOTEL_ALLOC_MANAGE | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | USER_MANAGE | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-`EVENT_MANAGE`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_SCAN`, `HOTEL_ALLOC_MANAGE`, and `USER_MANAGE` are added by the Cycling Tour Events engine; no new Cognito groups are introduced. `USER_MANAGE` closes the previous provisioning gap where no API existed to create/update `User-{tourId}` assignment records (distinct from the read-only `USER_LIST`, and from the separate Cognito-identity endpoints under `/v1/admin/usermgmt/users`). Full detail, including the `eventAssignments` + hotel-match second authorisation layer enforced on top of `EVENT_SCAN` and the `User-{tourId}` provisioning API contract, is in [cycling-tour-events-design.md](cycling-tour-events-design.md) §9/§8.23a.
+`EVENT_MANAGE`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_SCAN`, `HOTEL_ALLOC_MANAGE`, and `USER_MANAGE` are added by the Cycling Tour Events engine; no new Cognito groups are introduced. `USER_MANAGE` closes the previous provisioning gap where no API existed to create/update `User-{tourId}` assignment records (distinct from the read-only `USER_LIST`, and from the separate Cognito-identity endpoints under `/v1/admin/usermgmt/users`). Notification APIs add `NOTIFICATION_MANAGE` (default `ADMINISTRATOR` only). Full detail, including the `eventAssignments` + hotel-match second authorisation layer enforced on top of `EVENT_SCAN` and the `User-{tourId}` provisioning API contract, is in [cycling-tour-events-design.md](cycling-tour-events-design.md) §9/§8.23a.
 
 API Gateway HTTP API serialises the `cognito:groups` claim as a comma-separated string when forwarding it to Lambda — this is handled transparently by `rbac.get_user_groups()`.
 
@@ -934,9 +991,8 @@ pytest tests/
 ## Phase 2 Features
 
 1. **Real-time Updates:** WebSockets for live dashboard
-2. **Notifications:** Push notifications for check-in events
-3. **Photo Upload:** Direct upload from Check-In App
-4. **Mobile Offline Sync:** Conflict resolution for offline check-ins
+2. **Photo Upload:** Direct upload from Check-In App
+3. **Mobile Offline Sync:** Conflict resolution for offline check-ins
 
 ## Phase 3 Features
 

@@ -35,6 +35,11 @@ Globals:
         RIDER_COGNITO_USER_TABLE: !Ref RiderCognitoUserTable
         TOUR_MASTER_TABLE: !Ref TourMasterTable
         APP_CONFIG_TABLE: !Ref AppConfigTable
+        NOTIFICATION_RULE_TABLE: !Ref NotificationRuleTable
+        RIDER_NOTIFICATION_TABLE: !Ref RiderNotificationTable
+        MGMT_NOTIFICATION_TABLE: !Ref MgmtNotificationTable
+        RIDER_PUSH_DEVICE_TABLE: !Ref RiderPushDeviceTable
+        MGMT_PUSH_DEVICE_TABLE: !Ref MgmtPushDeviceTable
         # Dynamic table name resolution
         STACK_NAME: !Ref AWS::StackName
         # Metadata
@@ -46,6 +51,8 @@ Globals:
           - CreateCognito
           - !Ref CognitoUserPool
           - !Select [1, !Split ['/', !Select [5, !Split [':', !Ref CognitoUserPoolArn]]]]
+        EXPO_TOKEN_PARAM_RIDER: !Ref ExpoTokenParamRider
+        EXPO_TOKEN_PARAM_MGMT: !Ref ExpoTokenParamMgmt
         LOG_LEVEL: INFO
     Tags:
       Project: tour-data-api
@@ -93,6 +100,16 @@ Parameters:
     Type: String
     Description: Owner tag value for shared resources
     Default: PlatformTeam
+
+  ExpoTokenParamRider:
+    Type: String
+    Description: SSM parameter path for Expo rider app token
+    Default: !Sub '/${AWS::StackName}/push/expo-token/rider'
+
+  ExpoTokenParamMgmt:
+    Type: String
+    Description: SSM parameter path for Expo management app token
+    Default: !Sub '/${AWS::StackName}/push/expo-token/mgmt'
   
 
 
@@ -497,6 +514,9 @@ Resources:
       Timeout: 120
       Layers:
         - !Ref CommonLayer
+      Environment:
+        Variables:
+          PUSH_SENDER_FUNCTION_ARN: !GetAtt PushSenderFunction.Arn
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref TourMasterTable
@@ -506,8 +526,15 @@ Resources:
                 - dynamodb:CreateTable
                 - dynamodb:DescribeTable
                 - dynamodb:TagResource
+               - dynamodb:DeleteTable
+               - dynamodb:UpdateTimeToLive
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+            - Effect: Allow
+              Action:
+               - lambda:ListEventSourceMappings
+               - lambda:CreateEventSourceMapping
+              Resource: '*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -525,6 +552,9 @@ Resources:
       Timeout: 120
       Layers:
         - !Ref CommonLayer
+      Environment:
+        Variables:
+          PUSH_SENDER_FUNCTION_ARN: !GetAtt PushSenderFunction.Arn
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref TourMasterTable
@@ -534,8 +564,15 @@ Resources:
                 - dynamodb:CreateTable
                 - dynamodb:DescribeTable
                 - dynamodb:TagResource
+               - dynamodb:DeleteTable
+               - dynamodb:UpdateTimeToLive
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+            - Effect: Allow
+              Action:
+               - lambda:ListEventSourceMappings
+               - lambda:CreateEventSourceMapping
+              Resource: '*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -553,6 +590,9 @@ Resources:
       Timeout: 120
       Layers:
         - !Ref CommonLayer
+      Environment:
+        Variables:
+          PUSH_SENDER_FUNCTION_ARN: !GetAtt PushSenderFunction.Arn
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref TourMasterTable
@@ -562,8 +602,15 @@ Resources:
                 - dynamodb:CreateTable
                 - dynamodb:DescribeTable
                 - dynamodb:TagResource
+               - dynamodb:DeleteTable
+               - dynamodb:UpdateTimeToLive
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+            - Effect: Allow
+              Action:
+               - lambda:ListEventSourceMappings
+               - lambda:CreateEventSourceMapping
+              Resource: '*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -3138,6 +3185,438 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/notifications/{notificationId}
             Method: PUT
+
+  RegisterMgmtDeviceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: register_device.lambda_handler
+      Description: Register management app push device
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: mgmt
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MgmtPushDeviceTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/notifications/devices
+            Method: POST
+
+  RegisterRiderDeviceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: register_device.lambda_handler
+      Description: Register rider app push device
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: rider
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiderPushDeviceTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/notifications/devices
+            Method: POST
+
+  DeleteMgmtDeviceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: delete_device.lambda_handler
+      Description: Delete management app push device
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: mgmt
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MgmtPushDeviceTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/notifications/devices/{token}
+            Method: DELETE
+
+  DeleteRiderDeviceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: delete_device.lambda_handler
+      Description: Delete rider app push device
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: rider
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiderPushDeviceTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/notifications/devices/{token}
+            Method: DELETE
+
+  ListMgmtNotificationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: get_notifications.lambda_handler
+      Description: List management inbox notifications
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: mgmt
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MgmtNotificationTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourMasterTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/notifications
+            Method: GET
+
+  ListRiderNotificationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: get_notifications.lambda_handler
+      Description: List rider inbox notifications
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: rider
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderNotificationTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderToursTable
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/notifications
+            Method: GET
+
+  MgmtUnreadCountFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: get_unread_count.lambda_handler
+      Description: Get management unread notification count
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: mgmt
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MgmtNotificationTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/notifications/unread-count
+            Method: GET
+
+  RiderUnreadCountFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: get_unread_count.lambda_handler
+      Description: Get rider unread notification count
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: rider
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderNotificationTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/notifications/unread-count
+            Method: GET
+
+  MgmtMarkReadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: mark_read.lambda_handler
+      Description: Mark management notifications as read
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: mgmt
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MgmtNotificationTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/notifications/read
+            Method: PUT
+
+  RiderMarkReadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: mark_read.lambda_handler
+      Description: Mark rider notifications as read
+      Layers:
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NOTIFICATION_SCOPE: rider
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiderNotificationTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/notifications/read
+            Method: PUT
+
+  SendNotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: send_notification.lambda_handler
+      Description: Trigger manual notification via rule
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref NotificationRuleTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiderNotificationTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MgmtNotificationTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/notifications
+            Method: POST
+
+  ListNotificationRulesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: list_rules.lambda_handler
+      Description: List notification rules
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref NotificationRuleTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/admin/notification-rules
+            Method: GET
+
+  GetNotificationRuleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: get_rule.lambda_handler
+      Description: Get notification rule by id
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref NotificationRuleTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/admin/notification-rules/{ruleId}
+            Method: GET
+
+  CreateNotificationRuleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: create_rule.lambda_handler
+      Description: Create notification rule
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NotificationRuleTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/admin/notification-rules
+            Method: POST
+
+  UpdateNotificationRuleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: update_rule.lambda_handler
+      Description: Update notification rule
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NotificationRuleTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/admin/notification-rules/{ruleId}
+            Method: PUT
+
+  DeleteNotificationRuleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: delete_rule.lambda_handler
+      Description: Delete notification rule
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NotificationRuleTable
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/admin/notification-rules/{ruleId}
+            Method: DELETE
+
+  PushSenderDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-push-sender-dlq'
+      MessageRetentionPeriod: 1209600
+
+  PushSenderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: push_sender.lambda_handler
+      Description: Push sender for notification stream inserts
+      Layers:
+        - !Ref CommonLayer
+      Timeout: 60
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderPushDeviceTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiderPushDeviceTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MgmtPushDeviceTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MgmtPushDeviceTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderToursTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource:
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ExpoTokenParamRider}'
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ExpoTokenParamMgmt}'
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+              Resource: '*'
+
+  RiderNotificationStreamMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 100
+      Enabled: true
+      EventSourceArn: !GetAtt RiderNotificationTable.StreamArn
+      FunctionName: !GetAtt PushSenderFunction.Arn
+      StartingPosition: LATEST
+      MaximumRetryAttempts: 3
+      DestinationConfig:
+        OnFailure:
+          Destination: !GetAtt PushSenderDlq.Arn
+
+  MgmtNotificationStreamMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 100
+      Enabled: true
+      EventSourceArn: !GetAtt MgmtNotificationTable.StreamArn
+      FunctionName: !GetAtt PushSenderFunction.Arn
+      StartingPosition: LATEST
+      MaximumRetryAttempts: 3
+      DestinationConfig:
+        OnFailure:
+          Destination: !GetAtt PushSenderDlq.Arn
+
+  PushSenderErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Push sender function error alarm
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PushSenderFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
         RiderHttpApi:
           Type: HttpApi
           Properties:
@@ -3274,11 +3753,22 @@ Resources:
           AttributeType: S
         - AttributeName: tourId
           AttributeType: S
+        - AttributeName: status
+          AttributeType: S
       KeySchema:
         - AttributeName: profileId
           KeyType: HASH
         - AttributeName: tourId
           KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: TourStatusIndex
+          KeySchema:
+            - AttributeName: tourId
+              KeyType: HASH
+            - AttributeName: status
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
       Tags:
         - Key: Name
           Value: !Sub '${AWS::StackName}-RiderTours'
@@ -3388,6 +3878,186 @@ Resources:
           Value: TourManagement
         - Key: ManagedBy
           Value: SAM
+
+  NotificationRuleTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-NotificationRule'
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: ruleId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ruleId
+          KeyType: HASH
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-NotificationRule'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - Key: SubscriptionId
+          Value: !Ref SubscriptionId
+
+  RiderNotificationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-RiderNotification'
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: audience
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: audience
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-RiderNotification'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - Key: SubscriptionId
+          Value: !Ref SubscriptionId
+
+  MgmtNotificationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-MgmtNotification'
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: audience
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: audience
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-MgmtNotification'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - Key: SubscriptionId
+          Value: !Ref SubscriptionId
+
+  RiderPushDeviceTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-RiderPushDevice'
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: profileId
+          AttributeType: S
+        - AttributeName: token
+          AttributeType: S
+      KeySchema:
+        - AttributeName: profileId
+          KeyType: HASH
+        - AttributeName: token
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-RiderPushDevice'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - Key: SubscriptionId
+          Value: !Ref SubscriptionId
+
+  MgmtPushDeviceTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-MgmtPushDevice'
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: cognitoSub
+          AttributeType: S
+        - AttributeName: token
+          AttributeType: S
+        - AttributeName: groupKey
+          AttributeType: S
+        - AttributeName: updatedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: cognitoSub
+          KeyType: HASH
+        - AttributeName: token
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GroupKeyIndex
+          KeySchema:
+            - AttributeName: groupKey
+              KeyType: HASH
+            - AttributeName: updatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-MgmtPushDevice'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: TourManagement
+        - Key: ManagedBy
+          Value: SAM
+        - Key: SubscriptionId
+          Value: !Ref SubscriptionId
 
   # ============================================================================
   # Tour-specific tables (TourRider, Ride, CheckIn, User, Notification, Artifacts, Event,

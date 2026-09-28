@@ -1,4 +1,4 @@
-.PHONY: build deploy clean test validate sync logs install help check-config setup-github-oidc cleanup-tour-tables seed-app-config
+.PHONY: build deploy clean test validate sync logs install help check-config setup-github-oidc cleanup-tour-tables seed-app-config seed-notification-rules
 
 # Auto-detect Python: prefer project venv, then system python3/python
 # Project venv has the required dependencies (boto3, pytest, etc.)
@@ -100,6 +100,11 @@ cleanup-tour-tables: ## Delete tour-specific DynamoDB tables (dry run by default
 seed-app-config: ## Seed AppConfig table defaults (usage: make seed-app-config [STACK_NAME=dev] [REGION=ap-south-1])
 	$(PYTHON) scripts/seed_app_config.py \
 		--table-name $(or $(STACK_NAME),dev)-AppConfig \
+		--region $(or $(REGION),ap-south-1)
+
+seed-notification-rules: ## Seed NotificationRule table defaults
+	$(PYTHON) scripts/seed_notification_rules.py \
+		--table-name $(or $(STACK_NAME),dev)-NotificationRule \
 		--region $(or $(REGION),ap-south-1)
 
 invoke: ## Invoke a function locally (usage: make invoke FUNCTION=GetActiveTourFunction EVENT=events/test.json)

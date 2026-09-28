@@ -132,9 +132,22 @@ tour-data-api/
 │   │       └── usermgmt_common.py     # Shared Cognito admin user management helpers
 │   │   └── notifications/
 │   │       ├── __init__.py
-│   │       ├── create_notification.py # POST /v1/tours/{tourId}/notifications
-│   │       ├── list_notifications.py  # GET /v1/tours/{tourId}/notifications
-│   │       └── update_notification.py # PUT /v1/tours/{tourId}/notifications/{notificationId}
+│   │       ├── common.py
+│   │       ├── register_device.py     # POST /v1/notifications/devices
+│   │       ├── delete_device.py       # DELETE /v1/notifications/devices/{token}
+│   │       ├── get_notifications.py   # GET /v1/notifications
+│   │       ├── get_unread_count.py    # GET /v1/notifications/unread-count
+│   │       ├── mark_read.py           # PUT /v1/notifications/read
+│   │       ├── send_notification.py   # POST /v1/notifications
+│   │       ├── list_rules.py          # GET /v1/admin/notification-rules
+│   │       ├── get_rule.py            # GET /v1/admin/notification-rules/{ruleId}
+│   │       ├── create_rule.py         # POST /v1/admin/notification-rules
+│   │       ├── update_rule.py         # PUT /v1/admin/notification-rules/{ruleId}
+│   │       ├── delete_rule.py         # DELETE /v1/admin/notification-rules/{ruleId}
+│   │       ├── push_sender.py         # Stream-to-Expo sender
+│   │       ├── create_notification.py # Legacy POST /v1/tours/{tourId}/notifications
+│   │       ├── list_notifications.py  # Legacy GET /v1/tours/{tourId}/notifications
+│   │       └── update_notification.py # Legacy PUT /v1/tours/{tourId}/notifications/{notificationId}
 │   └── layers/
 │       └── common/                    # Shared utilities layer
 │           ├── __init__.py
@@ -143,6 +156,7 @@ tour-data-api/
 │           ├── event_engine.py        # Shared events/hotels/tour-user business logic helpers
 │           ├── logger.py              # Logging utilities
 │           ├── models.py              # Data models and enums
+│           ├── notification_service.py # Notification framework service
 │           ├── rbac.py                # RBAC utilities: Permission enum, group→permission mapping, enforcement helpers
 │           ├── response.py            # API response utilities
 │           ├── tour_provisioning.py   # Tour-specific table provisioning logic
@@ -183,7 +197,8 @@ tour-data-api/
     ├── provision_tour.py             # CLI script for tour provisioning (deployment method)
     ├── cleanup_tour_tables.py        # Deletes tour-specific DynamoDB tables not managed by CloudFormation
     ├── load_test_data.py             # Load JSON data into a DynamoDB table
-  ├── seed_app_config.py            # Seed shared AppConfig defaults
+    ├── seed_app_config.py            # Seed shared AppConfig defaults
+    ├── seed_notification_rules.py    # Seed default NotificationRule rows
     └── simulate/                     # Test data simulation utility
         ├── README.md                 # Simulation utility documentation
         ├── generate_data.py          # Main data generation script
@@ -208,6 +223,7 @@ tour-data-api/
 - **`development-guide.md`**: Environment setup, deploy to dev, local testing, troubleshooting
 - **`infrastructure-guide.md`**: Resource tagging, monitoring, cost estimation
 - **`docs-index.md`**: Complete documentation index
+- **`notification-framework-design.md`**: Notification framework architecture and contract
 
 ### Testing (`tests/`)
 - Unit and integration tests using pytest with moto for AWS mocking

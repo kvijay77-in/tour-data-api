@@ -15,6 +15,7 @@ This page provides a guide to all project documentation.
 | [API Guide](api-guide.md) | API endpoints, mandatory attributes, validation rules, request/response examples for every endpoint, status codes, and authorization matrix |
 | [Requirements](Requirements.md) | Detailed functional and non-functional requirements, use cases, and business rules |
 | [Solution Design](SolutionDesign.md) | Architecture documentation, data model specifications, and technical design |
+| [Notification Framework Design](notification-framework-design.md) | Notification architecture, audience routing, APIs, push sender, and rule model |
 | [Tour Artifacts Design](tour-artifacts-handling-design.md) | Tour and ride artifact management design — S3 storage, metadata model, read/write APIs |
 | [Cycling Tour Events – Change Requirement](cycling-tour-events.md) | Frozen change requirement for the generic events engine (Day 0 Registration, baggage handling, hotel logistics) |
 | [Cycling Tour Events – Backend Design](cycling-tour-events-design.md) | Authoritative backend design: data model, API contracts, RBAC, provisioning |

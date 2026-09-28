@@ -27,6 +27,7 @@ from response import (
 from validation import validate_tour_id, validate_rider_id, ValidationError
 from models import BaggageStatus, TourRiderStatus, utc_now_iso
 from dynamodb_utils import get_tour_item, update_tour_item
+from notification_service import notify
 from rbac import Permission, require_permission
 
 logger = get_logger(__name__)
@@ -127,6 +128,20 @@ def lambda_handler(event, context):
 			expression_values=expression_values,
 			expression_names={'#status': 'status'}
 		)
+
+		profile_id = existing.get('profileId')
+		if profile_id:
+			notify(
+				rule_id='RIDER_EXITED',
+				tour_id=tour_id,
+				context={
+					'riderId': rider_id,
+					'profileId': profile_id,
+					'baggageDisposition': baggage_disposition,
+				},
+				audience_override=[f'PROFILE#{profile_id}'],
+				actor=exited_by,
+			)
 
 		return success_response(updated)
 

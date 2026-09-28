@@ -14,6 +14,7 @@ from response import success_response, error_response, bad_request_response, int
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from dynamodb_utils import get_tour_item, put_tour_item
 from models import RideStatus, StageType, PitStopStatus, utc_now_iso
+from notification_service import notify
 from rbac import require_permission, require_pit_stop_stage_access, Permission
 
 logger = get_logger(__name__)
@@ -97,6 +98,12 @@ def lambda_handler(event, context):
         ride['updatedAt'] = now
 
         put_tour_item(table_type='Ride', tour_id=tour_id, item=ride)
+        notify(
+            rule_id='PIT_STOP_OPENED',
+            tour_id=tour_id,
+            context={'rideId': ride_id, 'stageNumber': stage_number},
+            actor=event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {}).get('sub'),
+        )
         return success_response(ride)
 
     except Exception as e:

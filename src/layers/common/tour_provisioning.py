@@ -121,23 +121,21 @@ TOUR_TABLE_DEFINITIONS = {
     },
     'Notification': {
         'AttributeDefinitions': [
-            {'AttributeName': 'notificationId', 'AttributeType': 'S'},
-            {'AttributeName': 'type', 'AttributeType': 'S'},
-            {'AttributeName': 'createdAt', 'AttributeType': 'S'},
+            {'AttributeName': 'audience', 'AttributeType': 'S'},
+            {'AttributeName': 'sk', 'AttributeType': 'S'},
         ],
         'KeySchema': [
-            {'AttributeName': 'notificationId', 'KeyType': 'HASH'},
+            {'AttributeName': 'audience', 'KeyType': 'HASH'},
+            {'AttributeName': 'sk', 'KeyType': 'RANGE'},
         ],
-        'GlobalSecondaryIndexes': [
-            {
-                'IndexName': 'TypeCreatedAtIndex',
-                'KeySchema': [
-                    {'AttributeName': 'type', 'KeyType': 'HASH'},
-                    {'AttributeName': 'createdAt', 'KeyType': 'RANGE'},
-                ],
-                'Projection': {'ProjectionType': 'ALL'},
-            },
-        ],
+        'TimeToLiveSpecification': {
+            'AttributeName': 'expiresAt',
+            'Enabled': True,
+        },
+        'StreamSpecification': {
+            'StreamEnabled': True,
+            'StreamViewType': 'NEW_IMAGE',
+        },
     },
     'Artifacts': {
         'AttributeDefinitions': [
@@ -303,11 +301,42 @@ def create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=Fals
 
     if definition.get('GlobalSecondaryIndexes'):
         create_params['GlobalSecondaryIndexes'] = definition['GlobalSecondaryIndexes']
+    if definition.get('StreamSpecification'):
+        create_params['StreamSpecification'] = definition['StreamSpecification']
+
+    def _is_new_notification_schema(description):
+        key_schema = description.get('Table', {}).get('KeySchema', [])
+        keys = [(k.get('AttributeName'), k.get('KeyType')) for k in key_schema]
+        return keys == [('audience', 'HASH'), ('sk', 'RANGE')]
 
     try:
         dynamodb_client.create_table(**create_params)
     except ClientError as e:
         if ignore_existing and e.response['Error']['Code'] == TABLE_ALREADY_EXISTS_CODE:
+            if table_type != 'Notification':
+                if definition.get('TimeToLiveSpecification'):
+                    try:
+                        dynamodb_client.update_time_to_live(
+                            TableName=table_name,
+                            TimeToLiveSpecification=definition['TimeToLiveSpecification'],
+                        )
+                    except ClientError:
+                        pass
+
+                return table_name
+
+            current = dynamodb_client.describe_table(TableName=table_name)
+            if _is_new_notification_schema(current):
+                return table_name
+
+            scan = dynamodb_client.scan(TableName=table_name, Limit=1)
+            if scan.get('Items'):
+                return table_name
+
+            dynamodb_client.delete_table(TableName=table_name)
+            waiter = dynamodb_client.get_waiter('table_not_exists')
+            waiter.wait(TableName=table_name)
+            dynamodb_client.create_table(**create_params)
             return table_name
         raise
 
@@ -372,4 +401,37 @@ def provision_tour_tables(dynamodb_client, tour_id, ignore_existing=False):
         created_tables.append(table_name)
 
     wait_for_tour_tables(dynamodb_client, created_tables)
+
+    push_sender_arn = os.environ.get('PUSH_SENDER_FUNCTION_ARN')
+    if push_sender_arn:
+        try:
+            notification_table = get_tour_table_name('Notification', tour_id)
+            stream_arn = dynamodb_client.describe_table(TableName=notification_table)['Table'].get('LatestStreamArn')
+            if stream_arn:
+                lambda_client = boto3.client('lambda')
+                existing = lambda_client.list_event_source_mappings(
+                    FunctionName=push_sender_arn,
+                    EventSourceArn=stream_arn,
+                ).get('EventSourceMappings', [])
+                if not existing:
+                    lambda_client.create_event_source_mapping(
+                        EventSourceArn=stream_arn,
+                        FunctionName=push_sender_arn,
+                        StartingPosition='LATEST',
+                        BatchSize=100,
+                        MaximumRetryAttempts=3,
+                        FilterCriteria={
+                            'Filters': [
+                                {
+                                    'Pattern': (
+                                        '{\"eventName\":[\"INSERT\"],'
+                                        '\"dynamodb\":{\"NewImage\":{\"push\":{\"BOOL\":[true]}}}}'
+                                    )
+                                }
+                            ]
+                        },
+                    )
+        except Exception:
+            pass
+
     return created_tables
