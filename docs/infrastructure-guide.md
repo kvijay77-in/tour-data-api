@@ -422,13 +422,8 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 
 ### Lambda Functions
 
-- **Total Functions**: 23
-- **Categories**:
-  - Tours: 5 functions (get_active, get_tour, list_tours, create_tour, archive_tour)
-  - Riders: 5 functions (get_rider_profile, get_rider_tour, update_rider_profile, get_tour_riders, get_tour_rider)
-  - Rides: 8 functions (get_todays_ride, get_ride, list_rides, create_ride, update_ride, open_ride, start_ride, close_ride)
-  - Check-ins: 3 functions (create_checkin, get_ride_checkins, get_dashboard_data)
-  - Users: 2 functions (get_current_user, list_tour_users)
+- **Total Functions**: 99 (from `template.yaml`)
+- **Coverage**: tours, riders/profile, rides/stages, check-ins, users/admin-usermgmt, artifacts, events, notifications, hotels, and helper processors
 
 ### Data Storage
 

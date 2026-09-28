@@ -53,12 +53,17 @@ Seed script provides:
 ## Shared profile schema module
 `src/layers/common/profile_schema.py`:
 - Loads enabled sections/attributes/LOVs with ~60s warm cache
-- Computes `definitionsVersion`
+- Computes `definitionsVersion` and exposes it through `GET /v1/config` (`data.definitionsVersion`)
 - Validates type, LOV membership, dependent LOVs, `visibleWhen`, GROUP/repeatable
-- Merge semantics: update only submitted keys (`CORE` paths + `attributes.<key>`), never remove unsent keys
+- Merge semantics:
+  - top-level payload keys resolve to enabled CORE attributes by **storage path first**, then by attribute key
+  - `attributes.<key>` entries always resolve by attribute key
+  - update only submitted keys; unsent keys are retained
+  - optional attribute `null` clears the value; required checks run on the merged result
 - Unknown/disabled submitted keys -> `422 UNKNOWN_OR_DISABLED_ATTRIBUTE`
 - Required checks run on merged profile on save; rider saves skip `adminOnly` required fields
 - Response filtering by role, excluding disabled/unknown stored attributes
+- SELECT validation accepts LOV `value` or `label` (case-insensitive) and normalizes writes to LOV `value`
 
 ## Ownership security model
 `src/layers/common/ownership.py`:
@@ -68,6 +73,11 @@ Seed script provides:
 - Link routes enforce path `{cognitoUserName} == JWT sub`
 
 ## APIs
+### Definitions version contract
+- `GET /v1/config` returns `data.definitionsVersion` plus `data.items`.
+- Profile create/update responses continue returning `definitionsVersion`.
+- Clients must pass the server value in profile writes and must never compute their own.
+
 ### Admin config (TourDataApi, ADMINISTRATOR only)
 - `GET /v1/admin/config/{configType}`
   - Allowed types: `RIDER_PROFILE_ATTRIBUTE`, `RIDER_PROFILE_SECTION`, `LOV`
@@ -90,7 +100,8 @@ Request additions:
 Rules:
 - `adminOnly` write by rider -> `403 ADMIN_ONLY_ATTRIBUTE`
 - Admin write via TourDataApi allowed
-- Legacy emergency-contact compatibility retained
+- `PROFILE_PHOTO` writes the S3 key string at `photoS3Key`; accepted prefixes: `riders/{profileId}/photo/` and legacy `profiles/{profileId}/`
+- Legacy emergency-contact compatibility retained (`emergencyContact.relation` seeded as `TEXT`)
 
 ### Attribute file routes
 - `POST /v1/riders/profile/{profileId}/attributes/{key}/upload`
@@ -125,3 +136,9 @@ Rules:
 ## Out of scope
 - Migration/cleanup of old profile data
 - Frontend implementation
+
+## Seeding and existing-data compatibility
+- Seeded LOV `COUNTRY` contains ISO 3166 alpha-2 values and `meta.callingCode` (India is first).
+- Seeded LOV `STATE` uses Indian state/UT full-name labels with code values.
+- Existing environments already seeded require a one-time reseed or admin update to pick up revised `RIDER_PROFILE_*` and `LOV` entries.
+- `scripts/seed_app_config.py --force-profile-config` overwrites only `RIDER_PROFILE_SECTION`, `RIDER_PROFILE_ATTRIBUTE`, and `LOV`; other insert-only types remain protected.

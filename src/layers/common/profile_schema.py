@@ -204,10 +204,33 @@ def write_attribute_value(profile: Dict[str, Any], attribute_key: str, attr_def:
     profile['attributes'][attribute_key] = value
 
 
+def clear_attribute_value(profile: Dict[str, Any], attribute_key: str, attr_def: Dict[str, Any]) -> None:
+    storage = _storage_for(attr_def)
+    if storage.get('scope') == 'CORE':
+        profile.pop(storage.get('path'), None)
+        return
+
+    attributes = profile.get('attributes')
+    if isinstance(attributes, dict):
+        attributes.pop(attribute_key, None)
+
+
 def _lov_items(lov: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     config = lov.get('config') or {}
     items = config.get('items') or []
     return {str(item.get('value')): item for item in items if item.get('value') is not None}
+
+
+def _match_lov_item(items: Dict[str, Dict[str, Any]], value: Any) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    value_str = str(value).strip()
+    for item_value, item in items.items():
+        if str(item_value).strip().lower() == value_str.lower():
+            return str(item_value), item
+    for item_value, item in items.items():
+        label = item.get('label')
+        if isinstance(label, str) and label.strip().lower() == value_str.lower():
+            return str(item_value), item
+    return None, None
 
 
 def _parse_relative_date(token: str) -> Optional[date]:
@@ -255,7 +278,7 @@ def _validate_date_bounds(value: str, validation: Dict[str, Any], field_name: st
             raise ValidationError(f'{field_name} must be on/before {bound_date.isoformat()}')
 
 
-def _validate_lov_value(key: str, value: str, attr_cfg: Dict[str, Any], definitions: Definitions, parent_value: Optional[str] = None) -> None:
+def _validate_lov_value(key: str, value: str, attr_cfg: Dict[str, Any], definitions: Definitions, parent_value: Optional[str] = None) -> str:
     lov_id = attr_cfg.get('lovId')
     if not lov_id:
         raise ValidationError(f'{key} requires lovId')
@@ -264,17 +287,26 @@ def _validate_lov_value(key: str, value: str, attr_cfg: Dict[str, Any], definiti
         raise ValidationError(f'LOV {lov_id} not found for {key}')
 
     items = _lov_items(lov)
-    item = items.get(str(value))
-    if not item:
+    normalized_value, item = _match_lov_item(items, value)
+    if not item or normalized_value is None:
         raise ValidationError(f"{key} has unsupported value '{value}'")
     if not item.get('enabled', True):
-        raise ValidationError(f"{key} has disabled value '{value}'")
+        raise ValidationError(f"{key} has disabled value '{normalized_value}'")
 
     depends_on = attr_cfg.get('dependsOn')
     if depends_on and parent_value is not None:
         parent_item = item.get('parent')
-        if parent_item not in (None, parent_value):
+        normalized_parent = parent_value
+        parent_lov_id = (lov.get('config') or {}).get('parentLovId')
+        if parent_lov_id:
+            parent_lov = definitions.lovs.get(parent_lov_id)
+            if parent_lov:
+                parent_normalized, _ = _match_lov_item(_lov_items(parent_lov), parent_value)
+                if parent_normalized is not None:
+                    normalized_parent = parent_normalized
+        if parent_item is not None and str(parent_item).strip().lower() != str(normalized_parent).strip().lower():
             raise ValidationError(f"{key} value '{value}' is not valid for selected parent")
+    return normalized_value
 
 
 def _validate_file_like(value: Any, key: str, attr_cfg: Dict[str, Any], attr_type: str) -> None:
@@ -418,7 +450,7 @@ def _validate_scalar_value(
             else:
                 parent_value = read_attribute_value(profile, depends_on)
         try:
-            _validate_lov_value(key, value, cfg, definitions, parent_value=parent_value)
+            return _validate_lov_value(key, value, cfg, definitions, parent_value=parent_value)
         except ValidationError:
             fallback_enabled = bool(cfg.get('fallbackToText'))
             if not (fallback_enabled and depends_on):
@@ -443,6 +475,10 @@ def _validate_scalar_value(
         return value
 
     if attr_type in {'FILE', 'IMAGE'}:
+        if (cfg.get('handler') or '').upper() == 'PROFILE_PHOTO':
+            if not isinstance(value, str) or not value.strip():
+                raise ValidationError(f'{key} must be a non-empty S3 key string')
+            return value.strip()
         _validate_file_like(value, key, attr_def, attr_type)
         return value
 
@@ -539,6 +575,23 @@ def _apply_handler_normalization(attr_def: Dict[str, Any], value: Any, profile: 
             status_code=403,
         )
 
+    if handler == 'PROFILE_PHOTO' and value is not None:
+        if not isinstance(value, str) or not value.strip():
+            raise ProfileSchemaError(
+                message=f"{key} must be a non-empty S3 key string",
+                code='VALIDATION_ERROR',
+                status_code=422,
+            )
+        profile_id = str(profile.get('profileId') or '').strip()
+        s3_key = value.strip()
+        if not profile_id or not s3_key.startswith((f'riders/{profile_id}/photo/', f'profiles/{profile_id}/')):
+            raise ProfileSchemaError(
+                message=f"{key} must be under riders/{profile_id}/photo/ or profiles/{profile_id}/",
+                code='VALIDATION_ERROR',
+                status_code=422,
+            )
+        return s3_key
+
     return value
 
 
@@ -568,9 +621,35 @@ def merge_profile_values(
     if not isinstance(submitted_attr_keys, dict):
         raise ProfileSchemaError('attributes must be an object', 'VALIDATION_ERROR')
 
+    core_path_to_attribute: Dict[str, str] = {}
+    for attr_key, attr_def in definitions.attributes.items():
+        storage = _storage_for(attr_def)
+        if (storage.get('scope') or '').upper() != 'CORE':
+            continue
+        storage_path = storage.get('path')
+        if storage_path:
+            core_path_to_attribute[storage_path] = attr_key
+
     to_process: Dict[str, Any] = {}
-    to_process.update(submitted_core_keys)
+    for submitted_key, submitted_value in submitted_core_keys.items():
+        resolved_key = core_path_to_attribute.get(submitted_key)
+        if resolved_key is None and submitted_key in definitions.attributes:
+            resolved_key = submitted_key
+        if resolved_key is None:
+            raise ProfileSchemaError(
+                message=f"Attribute '{submitted_key}' is unknown or disabled",
+                code='UNKNOWN_OR_DISABLED_ATTRIBUTE',
+                status_code=422,
+            )
+        to_process[resolved_key] = submitted_value
+
     for attr_key, value in submitted_attr_keys.items():
+        if attr_key not in definitions.attributes:
+            raise ProfileSchemaError(
+                message=f"Attribute '{attr_key}' is unknown or disabled",
+                code='UNKNOWN_OR_DISABLED_ATTRIBUTE',
+                status_code=422,
+            )
         to_process[attr_key] = value
 
     for key, value in to_process.items():
@@ -591,6 +670,9 @@ def merge_profile_values(
             )
 
         normalized = _apply_handler_normalization(attr_def, value, profile, caller_is_admin)
+        if normalized is None:
+            clear_attribute_value(profile, key, attr_def)
+            continue
         validated = _validate_scalar_value(normalized, key, attr_def, definitions, profile)
         write_attribute_value(profile, key, attr_def, validated)
 

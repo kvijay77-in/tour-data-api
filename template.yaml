@@ -42,6 +42,7 @@ Globals:
         ENVIRONMENT: !Ref Environment
         PHOTOS_BUCKET: !Ref PhotosBucket
         ARTIFACTS_BUCKET: !Ref ArtifactsBucket
+        RIDER_API_ID: !Ref RiderApi
         MGMT_USER_POOL_ID: !If
           - CreateCognito
           - !Ref CognitoUserPool
