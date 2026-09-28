@@ -683,6 +683,12 @@ def merge_profile_values(
 
         normalized = _apply_handler_normalization(attr_def, value, profile, caller_is_admin)
         if normalized is None:
+            if flags['required']:
+                raise ProfileSchemaError(
+                    message=f"Attribute '{key}' cannot be null",
+                    code='VALIDATION_ERROR',
+                    status_code=422,
+                )
             clear_attribute_value(profile, key, attr_def)
             continue
         validated = _validate_scalar_value(normalized, key, attr_def, definitions, profile)

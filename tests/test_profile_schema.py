@@ -145,6 +145,16 @@ def test_optional_attribute_null_clears_value(app_config_fixture):
     assert 'bloodGroup' not in merged['attributes']
 
 
+def test_required_attribute_null_is_rejected(app_config_fixture):
+    with pytest.raises(ProfileSchemaError) as exc:
+        merge_profile_values(
+            {'profileId': 'P1', 'name': 'Old', 'gender': 'Male'},
+            {'name': None, 'gender': 'Male'},
+            event=_event(['RIDER']),
+        )
+    assert exc.value.code == 'VALIDATION_ERROR'
+
+
 def test_select_accepts_label_and_normalizes_to_value(app_config_fixture):
     merged, _ = merge_profile_values(
         {'profileId': 'P1', 'name': 'Old', 'gender': 'Male'},
