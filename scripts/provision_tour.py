@@ -22,6 +22,8 @@ Usage:
 Prerequisites:
     - AWS CLI configured with valid credentials
     - Stack must be deployed (shared TourMaster table must exist)
+    - Credentials must allow cloudformation:DescribeStackResource and
+      lambda:ListEventSourceMappings/CreateEventSourceMapping (push sender wiring)
     - Python packages: boto3
 """
 
@@ -69,6 +71,29 @@ def get_tour_table_name_from_stack(stack_name):
 
     # Fallback to naming convention
     return f"{stack_name}-TourMaster"
+
+
+def get_push_sender_function_name(session, stack_name):
+    """
+    Get the deployed PushSenderFunction name from the CloudFormation stack
+
+    Args:
+        session: boto3 Session
+        stack_name: CloudFormation stack name
+
+    Returns:
+        Function name, or None if it cannot be resolved
+    """
+    cf_client = session.client('cloudformation')
+    try:
+        response = cf_client.describe_stack_resource(
+            StackName=stack_name,
+            LogicalResourceId='PushSenderFunction',
+        )
+        return response['StackResourceDetail']['PhysicalResourceId']
+    except ClientError as e:
+        print(f"Warning: Could not resolve PushSenderFunction from stack '{stack_name}': {e}")
+        return None
 
 
 def provision_tour(args):
@@ -124,6 +149,17 @@ def provision_tour(args):
     dynamodb_client = session.client('dynamodb')
     dynamodb_resource = session.resource('dynamodb')
 
+    # Shared provisioning creates its own Lambda client from the default region.
+    if region:
+        os.environ['AWS_DEFAULT_REGION'] = region
+
+    push_sender_function = get_push_sender_function_name(session, stack_name)
+    if push_sender_function:
+        os.environ['PUSH_SENDER_FUNCTION_ARN'] = push_sender_function
+    else:
+        print("Warning: Notification push will not be wired for this tour. "
+              "Run PUT /v1/tours/{tourId}/provision after deployment to fix.")
+
     # Resolve TourMaster table name from stack
     tour_table_name = get_tour_table_name_from_stack(stack_name)
     tour_table = dynamodb_resource.Table(tour_table_name)
@@ -131,6 +167,7 @@ def provision_tour(args):
     print(f"Provisioning tour: {tour_id}")
     print(f"  Stack: {stack_name}")
     print(f"  TourMaster table: {tour_table_name}")
+    print(f"  Push sender: {push_sender_function or 'not resolved'}")
     print(f"  Environment: {environment}")
     print()
 

@@ -249,6 +249,8 @@ make provision-tour \
 
 The script creates the Tour record in the shared TourMaster table and provisions 12 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, NotificationArchive, Artifacts, Event, EventOccurrence, EventActivityLogs, Hotel, RoomAllocation).
 
+It also looks up the stack's `PushSenderFunction` and connects the `Notification-{tourId}` table stream to it so tour notifications are pushed. Your AWS credentials need `cloudformation:DescribeStackResource`, `lambda:ListEventSourceMappings` and `lambda:CreateEventSourceMapping`. If the lookup fails, the script prints a warning; fix it later with `PUT /v1/tours/{tourId}/provision` (see [Notification Push Setup → step 6](#6-connect-existing-tours-to-push-sender)).
+
 ### Method 2: API Endpoint (Runtime Method)
 
 External applications (such as the Check-In App) can create tours programmatically via the API:
@@ -320,9 +322,15 @@ Default parameter paths (when not overridden in SAM parameters):
 - `/${stackName}/push/expo-token/rider`
 - `/${stackName}/push/expo-token/mgmt`
 
-> If you use custom SSM paths in deployment overrides (`ExpoTokenParamRider`, `ExpoTokenParamMgmt`), pass matching `--rider-param-path` and `--mgmt-param-path` during bootstrap.
+> If you use custom SSM paths in deployment overrides (`ExpoTokenParamRider`, `ExpoTokenParamMgmt`), the value must start with `/` (e.g. `/shared/expo/rider`), and you must pass matching `--rider-param-path` and `--mgmt-param-path` during bootstrap.
+
+> All Make targets in this section default to `REGION=ap-south-1`. If your stack is in another region, add `REGION=<your-region>`.
+
+> **Rotating a token:** the push sender caches the token value in memory. After updating SSM with `OVERWRITE=true`, redeploy (or update any `PushSenderFunction` configuration) so warm instances pick up the new value.
 
 ### 2) Seed notification defaults (required for complete framework behavior)
+
+`make deploy` already runs both seed targets automatically after `sam deploy`. Run them manually only when deploying via `make deploy-test`, `make deploy-prod`, plain `sam deploy`, or GitHub Actions (the CI pipeline does not seed). Both seeds are insert-only and safe to re-run; existing rules/config entries are not overwritten.
 
 ```bash
 make seed-app-config STACK_NAME=dev
@@ -339,7 +347,7 @@ make setup-notification-push STACK_NAME=dev SEED_APP_CONFIG=true SEED_RULES=true
 
 In Expo account/projects used by `tour-rider-app` and `tour-mgmt-app`:
 1. Enable Push Notifications for both apps.
-2. Generate project access token(s) for server-side push send.
+2. Create an Expo access token (Account settings → Access tokens; a robot user token is recommended). Access tokens are account-scoped, not project-scoped — if both apps are owned by the same Expo account, the same token can be used for both SSM parameters.
 3. Provide those token values to backend SSM parameters above.
 
 ### 4) Apple setup (APNs for iOS)
@@ -353,12 +361,29 @@ In Apple Developer + Expo/EAS for each iOS app:
 ### 5) Google setup (FCM for Android)
 
 In Firebase/Google Cloud + Expo/EAS for each Android app:
-1. Create/select Firebase project for the app.
-2. Enable Cloud Messaging and obtain FCM credentials.
-3. Configure Expo/EAS with Android push credentials (service account / FCM setup).
+1. Create/select Firebase project for the app and register the Android package name.
+2. Add the generated `google-services.json` to the app project config.
+3. Create an FCM V1 service account key (JSON) and upload it to EAS for the Android app (the legacy FCM server key is deprecated).
 4. Build and install app with updated push config.
 
-### 6) Runtime verification checklist
+### 6) Connect existing tours to push sender
+
+Each `Notification-{tourId}` table needs its own stream connection to `PushSenderFunction`. Tours provisioned through the API or CLI after this setup are connected automatically. Tours provisioned earlier (or where provisioning logged a push sender mapping warning) store notifications in the inbox but do not push. Fix each such tour once:
+
+```bash
+curl -X PUT https://<api-url>/v1/tours/<tourId>/provision \
+  -H "Authorization: Bearer <jwt-token>"
+```
+
+This skips existing tables and creates the missing stream connection. Verify with:
+
+```bash
+aws lambda list-event-source-mappings \
+  --function-name <PushSenderFunction physical name> \
+  --query "EventSourceMappings[].EventSourceArn"
+```
+
+### 7) Runtime verification checklist
 
 1. Register a device token using `POST /v1/notifications/devices`.
 2. Send a test announcement with `POST /v1/notifications`.
@@ -555,6 +580,7 @@ The API is working but requires authentication. Get a JWT token from Cognito and
 2. Confirm stack parameters `ExpoTokenParamRider` and `ExpoTokenParamMgmt` match actual SSM parameter names (if customized).
 3. Check `PushSenderFunction` logs and `PushSenderDlq` for failed stream batches.
 4. Verify Expo project credentials are complete for both iOS (APNs) and Android (FCM) builds.
+5. For tour notifications only: confirm the tour's `Notification-{tourId}` stream is connected to `PushSenderFunction` (see [step 6](#6-connect-existing-tours-to-push-sender)).
 
 ### "Stack already exists" Error
 
