@@ -51,8 +51,14 @@ Globals:
           - CreateCognito
           - !Ref CognitoUserPool
           - !Select [1, !Split ['/', !Select [5, !Split [':', !Ref CognitoUserPoolArn]]]]
-        EXPO_TOKEN_PARAM_RIDER: !Ref ExpoTokenParamRider
-        EXPO_TOKEN_PARAM_MGMT: !Ref ExpoTokenParamMgmt
+        EXPO_TOKEN_PARAM_RIDER: !If
+          - HasExpoTokenParamRider
+          - !Ref ExpoTokenParamRider
+          - !Sub '/${AWS::StackName}/push/expo-token/rider'
+        EXPO_TOKEN_PARAM_MGMT: !If
+          - HasExpoTokenParamMgmt
+          - !Ref ExpoTokenParamMgmt
+          - !Sub '/${AWS::StackName}/push/expo-token/mgmt'
         LOG_LEVEL: INFO
     Tags:
       Project: tour-data-api
@@ -104,18 +110,20 @@ Parameters:
   ExpoTokenParamRider:
     Type: String
     Description: SSM parameter path for Expo rider app token
-    Default: '/dev/push/expo-token/rider'
+    Default: ''
 
   ExpoTokenParamMgmt:
     Type: String
     Description: SSM parameter path for Expo management app token
-    Default: '/dev/push/expo-token/mgmt'
+    Default: ''
   
 
 
 Conditions:
   IsProd: !Equals [!Ref Environment, prod]
   CreateCognito: !Equals [!Ref CognitoUserPoolArn, '']
+  HasExpoTokenParamRider: !Not [!Equals [!Ref ExpoTokenParamRider, '']]
+  HasExpoTokenParamMgmt: !Not [!Equals [!Ref ExpoTokenParamMgmt, '']]
 
 
 Resources:
@@ -3641,8 +3649,14 @@ Resources:
               Action:
                 - ssm:GetParameter
               Resource:
-                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ExpoTokenParamRider}'
-                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ExpoTokenParamMgmt}'
+                - !If
+                  - HasExpoTokenParamRider
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ExpoTokenParamRider}'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/push/expo-token/rider'
+                - !If
+                  - HasExpoTokenParamMgmt
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ExpoTokenParamMgmt}'
+                  - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/push/expo-token/mgmt'
             - Effect: Allow
               Action:
                 - kms:Decrypt
