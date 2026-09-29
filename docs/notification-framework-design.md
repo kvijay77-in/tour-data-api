@@ -301,3 +301,16 @@ Completion means the rider has non-cancelled outcomes for all event activities t
 ## 13) Cost note
 
 Design remains low cost (DynamoDB on-demand + Lambda + API Gateway + Expo push), with expected notification overhead still in the <$1–2 per-tour range for this scale.
+
+## 14) Deployment prerequisites for push delivery
+
+Push delivery requires post-deploy setup beyond table/function creation:
+
+1. Set Expo access tokens into SSM SecureString parameters used by push sender.
+2. Seed `NotificationRule` and `AppConfig` defaults (`NOTIFICATION/LIMITS`).
+3. Ensure client delivery credentials are configured in mobile delivery stack:
+   - Apple APNs for iOS builds,
+   - Google FCM for Android builds,
+   - Expo project configuration for both rider/mgmt apps.
+
+See [`deployment-guide.md` → After Deployment: Notification Push Setup](deployment-guide.md#after-deployment-notification-push-setup) for exact commands and checklist.

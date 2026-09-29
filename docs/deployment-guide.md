@@ -13,6 +13,7 @@ This guide covers automated CI/CD deployment using GitHub Actions and multi-envi
 - [Environments Explained](#environments-explained)
 - [What Happens When You Deploy](#what-happens-when-you-deploy)
 - [After Deployment: Provisioning a Tour](#after-deployment-provisioning-a-tour)
+- [After Deployment: Notification Push Setup](#after-deployment-notification-push-setup)
 - [After Deployment: Getting Your API URL](#after-deployment-getting-your-api-url)
 - [AWS Resources Reference](#aws-resources-reference)
 - [Advanced: Using an Existing Cognito User Pool](#advanced-using-an-existing-cognito-user-pool)
@@ -178,10 +179,11 @@ Creates or updates all required resources in your AWS account.
 | Cognito User Pool + App Client | 1 | User authentication (auto-created) |
 | Lambda Functions | Multiple | Business logic for each API endpoint |
 | Lambda Layer | 1 | Shared utilities across all functions |
-| DynamoDB Tables (shared) | 5 | RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig |
+| DynamoDB Tables (shared) | 10 | RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig, NotificationRule, RiderNotification, MgmtNotification, RiderPushDevice, MgmtPushDevice |
 | S3 Bucket | 1 | Rider photos and archived tour data |
-| IAM Roles | 20 | Security permissions per function |
-| CloudWatch Log Groups | 20 | Monitoring and debugging logs |
+| SQS Queue (DLQ) | 1 | Push sender event-source failure destination |
+| IAM Roles | Multiple | Security permissions per function |
+| CloudWatch Log Groups | Multiple | Monitoring and debugging logs |
 | JWT Authorizer | 1 | Validates user login tokens |
 
 **Tour-specific tables** (created at runtime when a tour is provisioned via the CLI script, `PUT /v1/tours`, or `POST /v1/tours` with `"provisioning": true`):
@@ -190,6 +192,7 @@ Creates or updates all required resources in your AWS account.
 - `CheckIn-{tourId}` — Check-in records
 - `User-{tourId}` — Staff accounts
 - `Notification-{tourId}` — Tour notifications
+- `NotificationArchive-{tourId}` — Archived/read tour notifications
 - `Artifacts-{tourId}` — Tour and ride artifact metadata
 - `Event-{tourId}` — Event definitions
 - `EventOccurrence-{tourId}` — Event occurrences
@@ -244,7 +247,7 @@ make provision-tour \
   ENV=prod
 ```
 
-The script creates the Tour record in the shared TourMaster table and provisions 11 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, Artifacts, Event, EventOccurrence, EventActivityLogs, Hotel, RoomAllocation).
+The script creates the Tour record in the shared TourMaster table and provisions 12 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, NotificationArchive, Artifacts, Event, EventOccurrence, EventActivityLogs, Hotel, RoomAllocation).
 
 ### Method 2: API Endpoint (Runtime Method)
 
@@ -264,7 +267,7 @@ curl -X POST https://<api-url>/v1/tours \
   }'
 ```
 
-By default, `POST /v1/tours` creates only the TourMaster record. To provision the 11 tour-specific DynamoDB tables in the same request, include `"provisioning": true`. The `provisioning` request attribute is not stored in TourMaster.
+By default, `POST /v1/tours` creates only the TourMaster record. To provision the 12 tour-specific DynamoDB tables in the same request, include `"provisioning": true`. The `provisioning` request attribute is not stored in TourMaster.
 
 ```bash
 curl -X POST https://<api-url>/v1/tours \
@@ -286,6 +289,84 @@ When API provisioning is requested, it uses the same shared provisioning logic a
 To update an existing TourMaster item, use `PUT /v1/tours`. By default, `provisioning` is `false`, so only the TourMaster item is updated. Sending `"provisioning": true` provisions tour tables only when `provisionedAt` is absent, then records that timestamp. Repeat provisioning through this endpoint is rejected. To create missing or newly defined table types after the tour has been provisioned, use `PUT /v1/tours/{tourId}/provision`; it reruns provisioning without changing TourMaster or `provisionedAt`.
 
 > **Note**: The API method is designed for use by external apps like the Check-In App. The actual integration from these apps is out of scope for this project — this API capability is provided for their use.
+
+---
+
+## After Deployment: Notification Push Setup
+
+Notification inbox storage works immediately after deployment, but **push delivery** requires extra configuration because Expo access tokens are stored in SSM SecureString parameters.
+
+### 1) Set Expo access tokens in SSM (required for push send)
+
+Use the bootstrap script (or Make target) to create/update both SecureString parameters expected by push sender:
+
+```bash
+# Recommended: provide tokens via env vars to avoid shell history leaks
+export EXPO_RIDER_ACCESS_TOKEN="your-rider-expo-access-token"
+export EXPO_MGMT_ACCESS_TOKEN="your-mgmt-expo-access-token"
+
+make setup-notification-push STACK_NAME=dev OVERWRITE=true
+```
+
+Equivalent direct script usage:
+
+```bash
+python scripts/setup_notification_push.py \
+  --stack-name dev \
+  --overwrite
+```
+
+Default parameter paths (when not overridden in SAM parameters):
+- `/${stackName}/push/expo-token/rider`
+- `/${stackName}/push/expo-token/mgmt`
+
+> If you use custom SSM paths in deployment overrides (`ExpoTokenParamRider`, `ExpoTokenParamMgmt`), pass matching `--rider-param-path` and `--mgmt-param-path` during bootstrap.
+
+### 2) Seed notification defaults (required for complete framework behavior)
+
+```bash
+make seed-app-config STACK_NAME=dev
+make seed-notification-rules STACK_NAME=dev
+```
+
+Or run both through bootstrap:
+
+```bash
+make setup-notification-push STACK_NAME=dev SEED_APP_CONFIG=true SEED_RULES=true
+```
+
+### 3) Expo setup (mobile delivery gateway)
+
+In Expo account/projects used by `tour-rider-app` and `tour-mgmt-app`:
+1. Enable Push Notifications for both apps.
+2. Generate project access token(s) for server-side push send.
+3. Provide those token values to backend SSM parameters above.
+
+### 4) Apple setup (APNs for iOS)
+
+In Apple Developer + Expo/EAS for each iOS app:
+1. Enable Push Notifications capability for app bundle ID.
+2. Create APNs auth key/certificate (recommended: auth key).
+3. Upload/configure credentials in Expo/EAS for the corresponding iOS project.
+4. Build and install app with push entitlements enabled.
+
+### 5) Google setup (FCM for Android)
+
+In Firebase/Google Cloud + Expo/EAS for each Android app:
+1. Create/select Firebase project for the app.
+2. Enable Cloud Messaging and obtain FCM credentials.
+3. Configure Expo/EAS with Android push credentials (service account / FCM setup).
+4. Build and install app with updated push config.
+
+### 6) Runtime verification checklist
+
+1. Register a device token using `POST /v1/notifications/devices`.
+2. Send a test announcement with `POST /v1/notifications`.
+3. Verify:
+   - inbox item in `RiderNotification`/`MgmtNotification`/`Notification-{tourId}`,
+   - push sender Lambda logs,
+   - delivered push on device.
+4. If missing, verify SSM parameter names and values, then check `PushSenderDlq` and associated CloudWatch alarm.
 
 ---
 
@@ -376,6 +457,11 @@ Detailed inventory of everything deployment creates in your AWS account.
 | RiderCognitoUser | `dev-RiderCognitoUser` | Mapping from Cognito username to profileId | Yes |
 | TourMaster | `dev-TourMaster` | Tour details (name, dates, status) | Yes |
 | AppConfig | `dev-AppConfig` | Shared app configuration values | Yes |
+| NotificationRule | `dev-NotificationRule` | Notification rule definitions | Yes |
+| RiderNotification | `dev-RiderNotification` | Rider inbox notifications + read-state | Yes |
+| MgmtNotification | `dev-MgmtNotification` | Management inbox notifications + read-state | Yes |
+| RiderPushDevice | `dev-RiderPushDevice` | Rider device push tokens | Yes |
+| MgmtPushDevice | `dev-MgmtPushDevice` | Management device push tokens (+ group fan-out index items) | Yes |
 
 **Tour-specific tables (created per tour via API):**
 
@@ -385,6 +471,14 @@ Detailed inventory of everything deployment creates in your AWS account.
 | Ride-{tourId} | Ride schedule and routes | `dev-Ride-TOT-2026` |
 | CheckIn-{tourId} | Check-in records | `dev-CheckIn-TOT-2026` |
 | User-{tourId} | Staff accounts | `dev-User-TOT-2026` |
+| Notification-{tourId} | Tour-scope notification inbox | `dev-Notification-TOT-2026` |
+| NotificationArchive-{tourId} | Archived/read tour notifications | `dev-NotificationArchive-TOT-2026` |
+| Artifacts-{tourId} | Artifact metadata | `dev-Artifacts-TOT-2026` |
+| Event-{tourId} | Event definitions | `dev-Event-TOT-2026` |
+| EventOccurrence-{tourId} | Event occurrences | `dev-EventOccurrence-TOT-2026` |
+| EventActivityLogs-{tourId} | Event activity logs | `dev-EventActivityLogs-TOT-2026` |
+| Hotel-{tourId} | Hotel inventory and metadata | `dev-Hotel-TOT-2026` |
+| RoomAllocation-{tourId} | Rider room allocations | `dev-RoomAllocation-TOT-2026` |
 
 ---
 
@@ -454,6 +548,13 @@ AWS couldn't create or update a resource.
 ### "Unauthorized" Error When Calling the API
 
 The API is working but requires authentication. Get a JWT token from Cognito and include it in your request. See [AWS Setup Guide → Get JWT Token](aws-setup-guide.md#3-get-jwt-token-for-testing).
+
+### Notifications Saved but Push Not Delivered
+
+1. Confirm Expo access tokens exist in SSM (`/${stack}/push/expo-token/rider` and `/mgmt`, or your custom paths).
+2. Confirm stack parameters `ExpoTokenParamRider` and `ExpoTokenParamMgmt` match actual SSM parameter names (if customized).
+3. Check `PushSenderFunction` logs and `PushSenderDlq` for failed stream batches.
+4. Verify Expo project credentials are complete for both iOS (APNs) and Android (FCM) builds.
 
 ### "Stack already exists" Error
 

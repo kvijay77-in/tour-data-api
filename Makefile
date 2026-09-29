@@ -1,4 +1,4 @@
-.PHONY: build deploy clean test validate sync logs install help check-config setup-github-oidc cleanup-tour-tables seed-app-config seed-notification-rules
+.PHONY: build deploy clean test validate sync logs install help check-config setup-github-oidc cleanup-tour-tables seed-app-config seed-notification-rules setup-notification-push
 
 # Auto-detect Python: prefer project venv, then system python3/python
 # Project venv has the required dependencies (boto3, pytest, etc.)
@@ -28,7 +28,7 @@ validate: ## Validate SAM template
 	sam validate --lint
 
 deploy: build ## Build and deploy to default environment
-	sam deploy; RC=$$?; if [ $$RC -eq 0 ] || [ $$RC -eq 1 ]; then $(MAKE) seed-app-config; else exit $$RC; fi
+	sam deploy; RC=$$?; if [ $$RC -eq 0 ] || [ $$RC -eq 1 ]; then $(MAKE) seed-app-config; $(MAKE) seed-notification-rules; else exit $$RC; fi
 
 deploy-dev: build ## Deploy to development environment
 	sam deploy --config-env default
@@ -106,6 +106,16 @@ seed-notification-rules: ## Seed NotificationRule table defaults
 	$(PYTHON) scripts/seed_notification_rules.py \
 		--table-name $(or $(STACK_NAME),dev)-NotificationRule \
 		--region $(or $(REGION),ap-south-1)
+
+setup-notification-push: ## Configure SSM Expo tokens and optional notification seeds
+	$(PYTHON) scripts/setup_notification_push.py \
+		--stack-name $(or $(STACK_NAME),dev) \
+		--region $(or $(REGION),ap-south-1) \
+		$(if $(RIDER_TOKEN),--rider-token "$(RIDER_TOKEN)",) \
+		$(if $(MGMT_TOKEN),--mgmt-token "$(MGMT_TOKEN)",) \
+		$(if $(OVERWRITE),--overwrite,) \
+		$(if $(SEED_RULES),--seed-notification-rules,) \
+		$(if $(SEED_APP_CONFIG),--seed-app-config,)
 
 invoke: ## Invoke a function locally (usage: make invoke FUNCTION=GetActiveTourFunction EVENT=events/test.json)
 	sam local invoke $(FUNCTION) -e $(EVENT)

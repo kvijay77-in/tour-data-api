@@ -428,19 +428,30 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 ### Data Storage
 
 - **DynamoDB Tables (Hybrid Strategy)**:
-  - **Shared (SAM-managed, 5 tables)**:
+  - **Shared (SAM-managed, 10 tables)**:
     - RiderProfile (with EmailIndex GSI)
     - RiderTours (composite key: profileId + tourId)
     - RiderCognitoUser
     - TourMaster (with StatusIndex GSI)
     - AppConfig
-  - **Tour-specific (runtime-provisioned per tour, 6 tables each)**:
+    - NotificationRule
+    - RiderNotification
+    - MgmtNotification
+    - RiderPushDevice
+    - MgmtPushDevice (with group fan-out index)
+  - **Tour-specific (runtime-provisioned per tour, 12 tables each)**:
     - TourRider-{tourId}
     - Ride-{tourId} (with DateIndex, StatusIndex GSIs)
     - CheckIn-{tourId} (with RideIndex GSI)
     - User-{tourId}
     - Notification-{tourId}
+    - NotificationArchive-{tourId}
     - Artifacts-{tourId}
+    - Event-{tourId}
+    - EventOccurrence-{tourId}
+    - EventActivityLogs-{tourId}
+    - Hotel-{tourId}
+    - RoomAllocation-{tourId}
 
 ### API Endpoints
 
@@ -471,6 +482,7 @@ For detailed cost tracking using tags, see [Resource Tagging Strategy](#resource
 - **Deployment**: Multi-environment (dev/test/prod)
 - **CI/CD**: GitHub Actions with manual triggers
 - **Monitoring**: CloudWatch Logs and Metrics
+- **Push delivery dependencies**: SSM SecureString Expo access tokens + Expo/APNs/FCM credentials managed in mobile app delivery stack
 - **Asynchronous processing**: `ArtifactsBucket` publishes events to EventBridge (default bus; S3 events on it cost nothing). A rule on `tours/*/uploads/hotel-allocation/*.csv` invokes `ProcessHotelUploadFunction` (retries `0`), whose `OnFailure` destination is `ProcessHotelUploadFailureFunction`. Its limits live in AppConfig `HOTEL_UPLOAD`/`PROCESSING`. Logs: `make logs FUNCTION=ProcessHotelUploadFunction`.
 
 ### Code Quality

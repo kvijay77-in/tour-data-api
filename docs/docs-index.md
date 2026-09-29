@@ -45,6 +45,7 @@ This page provides a guide to all project documentation.
 - **GitHub OIDC setup**: [Deployment Guide → One-Time Setup](deployment-guide.md#one-time-setup-github-oidc)
 - **Deploy via GitHub Actions**: [Deployment Guide → Deploying via GitHub Actions](deployment-guide.md#deploying-via-github-actions)
 - **Deploy test/prod from terminal**: [Deployment Guide → Deploying from Terminal](deployment-guide.md#deploying-from-terminal)
+- **Notification push bootstrap**: [Deployment Guide → After Deployment: Notification Push Setup](deployment-guide.md#after-deployment-notification-push-setup)
 - **Environments**: [Deployment Guide → Environments Explained](deployment-guide.md#environments-explained)
 - **AWS resources inventory**: [Deployment Guide → AWS Resources Reference](deployment-guide.md#aws-resources-reference)
 
