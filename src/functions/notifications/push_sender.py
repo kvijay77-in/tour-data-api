@@ -55,6 +55,36 @@ def _query_mgmt_tokens_for_group(group: str) -> List[str]:
     return [row.get('deviceToken') for row in rows if row.get('deviceToken')]
 
 
+def _query_rider_profile_ids_for_tour(tour_id: str, status: str | None = None) -> List[str]:
+    table = dynamodb.Table(os.environ['RIDER_TOURS_TABLE'])
+    kwargs: Dict[str, Any] = {
+        'IndexName': 'TourStatusIndex',
+        'KeyConditionExpression': Key('tourId').eq(tour_id),
+    }
+    if status:
+        kwargs['KeyConditionExpression'] = kwargs['KeyConditionExpression'] & Key('status').eq(status)
+    rows = table.query(**kwargs).get('Items', [])
+    profile_ids = []
+    for row in rows:
+        profile_id = row.get('profileId')
+        if profile_id:
+            profile_ids.append(profile_id)
+    return profile_ids
+
+
+def _query_tour_staff_groups(tour_id: str) -> List[str]:
+    table = dynamodb.Table(f"{os.environ['STACK_NAME']}-User-{tour_id}")
+    rows = _scan_all_items(table)
+    return sorted({str(row.get('role')).strip() for row in rows if str(row.get('role', '')).strip()})
+
+
+def _query_rider_tokens_for_profiles(profile_ids: List[str]) -> List[str]:
+    tokens: List[str] = []
+    for profile_id in profile_ids:
+        tokens.extend(_query_rider_tokens_for_profile(profile_id))
+    return tokens
+
+
 def _scan_all_items(table) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     kwargs: Dict[str, Any] = {}
@@ -91,6 +121,36 @@ def _resolve_tokens(item: Dict[str, Any]) -> List[str]:
         rider = dynamodb.Table(f"{os.environ['STACK_NAME']}-TourRider-{tour_id}").get_item(Key={'riderId': rider_id}).get('Item')
         if rider and rider.get('profileId'):
             return _query_rider_tokens_for_profile(rider['profileId'])
+
+    if audience.startswith('TOUR#') and '#STATUS#' in audience:
+        parts = audience.split('#')
+        tour_id = parts[1]
+        status = parts[3]
+        return _query_rider_tokens_for_profiles(_query_rider_profile_ids_for_tour(tour_id, status=status))
+
+    if audience.startswith('TOUR#') and audience.endswith('#APPLICANTS'):
+        tour_id = audience.split('#')[1]
+        return _query_rider_tokens_for_profiles(_query_rider_profile_ids_for_tour(tour_id))
+
+    if audience.startswith('TOUR#') and audience.endswith('#APP#RIDER'):
+        tour_id = audience.split('#')[1]
+        return _query_rider_tokens_for_profiles(_query_rider_profile_ids_for_tour(tour_id))
+
+    if audience.startswith('TOUR#') and audience.endswith('#APP#MGMT'):
+        tour_id = audience.split('#')[1]
+        groups = _query_tour_staff_groups(tour_id)
+        tokens: List[str] = []
+        for group in groups:
+            tokens.extend(_query_mgmt_tokens_for_group(group))
+        return tokens
+
+    if audience.startswith('TOUR#') and audience.endswith('#ALL'):
+        tour_id = audience.split('#')[1]
+        rider_tokens = _query_rider_tokens_for_profiles(_query_rider_profile_ids_for_tour(tour_id))
+        mgmt_tokens: List[str] = []
+        for group in _query_tour_staff_groups(tour_id):
+            mgmt_tokens.extend(_query_mgmt_tokens_for_group(group))
+        return rider_tokens + mgmt_tokens
 
     if audience.startswith('TOUR#') and '#GROUP#' in audience:
         group = audience.split('#')[-1]

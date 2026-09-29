@@ -25,6 +25,7 @@ import mark_read
 import create_rule
 import update_rule
 import send_notification
+import send_reminder
 import push_sender
 
 
@@ -44,6 +45,7 @@ def notification_env():
         'RIDER_COGNITO_USER_TABLE': 'test-stack-RiderCognitoUser',
         'RIDER_TOURS_TABLE': 'test-stack-RiderTours',
         'TOUR_MASTER_TABLE': 'test-stack-TourMaster',
+        'APP_CONFIG_TABLE': 'test-stack-AppConfig',
         'EXPO_TOKEN_PARAM_RIDER': '/test/push/rider',
         'EXPO_TOKEN_PARAM_MGMT': '/test/push/mgmt',
     }
@@ -151,6 +153,19 @@ def ddb(notification_env):
         )
 
         ddb.create_table(
+            TableName=os.environ['APP_CONFIG_TABLE'],
+            KeySchema=[{'AttributeName': 'configType', 'KeyType': 'HASH'}, {'AttributeName': 'configId', 'KeyType': 'RANGE'}],
+            AttributeDefinitions=[{'AttributeName': 'configType', 'AttributeType': 'S'}, {'AttributeName': 'configId', 'AttributeType': 'S'}],
+            BillingMode='PAY_PER_REQUEST',
+        )
+        ddb.Table(os.environ['APP_CONFIG_TABLE']).put_item(Item={
+            'configType': 'NOTIFICATION',
+            'configId': 'LIMITS',
+            'enabled': True,
+            'config': {'maxTitleLength': 120, 'maxMessageLength': 500, 'archiveAfterReadHours': 48},
+        })
+
+        ddb.create_table(
             TableName='test-stack-TourRider-TOT-2026',
             KeySchema=[{'AttributeName': 'riderId', 'KeyType': 'HASH'}],
             AttributeDefinitions=[{'AttributeName': 'riderId', 'AttributeType': 'S'}, {'AttributeName': 'profileId', 'AttributeType': 'S'}],
@@ -164,9 +179,33 @@ def ddb(notification_env):
             ],
             BillingMode='PAY_PER_REQUEST',
         )
+        ddb.create_table(
+            TableName='test-stack-CheckIn-TOT-2026',
+            KeySchema=[{'AttributeName': 'rideId', 'KeyType': 'HASH'}, {'AttributeName': 'checkInId', 'KeyType': 'RANGE'}],
+            AttributeDefinitions=[{'AttributeName': 'rideId', 'AttributeType': 'S'}, {'AttributeName': 'checkInId', 'AttributeType': 'S'}],
+            BillingMode='PAY_PER_REQUEST',
+        )
+        ddb.create_table(
+            TableName='test-stack-Event-TOT-2026',
+            KeySchema=[{'AttributeName': 'eventId', 'KeyType': 'HASH'}],
+            AttributeDefinitions=[{'AttributeName': 'eventId', 'AttributeType': 'S'}],
+            BillingMode='PAY_PER_REQUEST',
+        )
+        ddb.create_table(
+            TableName='test-stack-EventActivityLogs-TOT-2026',
+            KeySchema=[{'AttributeName': 'occurrenceId', 'KeyType': 'HASH'}, {'AttributeName': 'recordId', 'KeyType': 'RANGE'}],
+            AttributeDefinitions=[{'AttributeName': 'occurrenceId', 'AttributeType': 'S'}, {'AttributeName': 'recordId', 'AttributeType': 'S'}],
+            BillingMode='PAY_PER_REQUEST',
+        )
 
         ddb.create_table(
             TableName='test-stack-Notification-TOT-2026',
+            KeySchema=[{'AttributeName': 'audience', 'KeyType': 'HASH'}, {'AttributeName': 'sk', 'KeyType': 'RANGE'}],
+            AttributeDefinitions=[{'AttributeName': 'audience', 'AttributeType': 'S'}, {'AttributeName': 'sk', 'AttributeType': 'S'}],
+            BillingMode='PAY_PER_REQUEST',
+        )
+        ddb.create_table(
+            TableName='test-stack-NotificationArchive-TOT-2026',
             KeySchema=[{'AttributeName': 'audience', 'KeyType': 'HASH'}, {'AttributeName': 'sk', 'KeyType': 'RANGE'}],
             AttributeDefinitions=[{'AttributeName': 'audience', 'AttributeType': 'S'}, {'AttributeName': 'sk', 'AttributeType': 'S'}],
             BillingMode='PAY_PER_REQUEST',
@@ -219,7 +258,7 @@ def test_notify_routes_and_converts_tour_rider(ddb):
         'category': 'ANNOUNCEMENT',
         'audiences': ['ALL', 'TOUR#TOT-2026#RIDER#R1'],
         'titleTemplate': '{title}',
-        'bodyTemplate': '{message}',
+        'messageTemplate': '{message}',
         'push': True,
         'priority': 'NORMAL',
         'androidChannel': 'general',
@@ -236,7 +275,8 @@ def test_notify_routes_and_converts_tour_rider(ddb):
     mgmt_rows = ddb.Table(os.environ['MGMT_NOTIFICATION_TABLE']).scan()['Items']
     audiences = {row['audience'] for row in rider_rows}
     assert 'APP#RIDER' in audiences
-    assert 'PROFILE#P001' in audiences
+    tour_rows = ddb.Table('test-stack-Notification-TOT-2026').scan()['Items']
+    assert any(row['audience'] == 'TOUR#TOT-2026#RIDER#R1' for row in tour_rows)
     assert any(row['audience'] == 'APP#MGMT' for row in mgmt_rows)
 
 
@@ -247,7 +287,7 @@ def test_notify_never_raises_for_invalid_rule(ddb):
         'category': 'SYSTEM',
         'audiences': ['NOT_VALID'],
         'titleTemplate': 'x',
-        'bodyTemplate': 'y',
+        'messageTemplate': 'y',
         'push': False,
         'priority': 'NORMAL',
         'androidChannel': 'general',
@@ -302,7 +342,7 @@ def test_inbox_list_and_mark_read(ddb):
         'createdAt': '2026-02-11T06:00:00Z',
         'push': False,
     })
-    table.put_item(Item={
+    ddb.Table('test-stack-Notification-TOT-2026').put_item(Item={
         'audience': 'TOUR#TOT-2026#ALL',
         'sk': '2026-02-11T06:10:00Z#n2',
         'notificationId': 'n2',
@@ -341,7 +381,7 @@ def test_rule_crud_validation_and_version_increment(ddb):
         'category': 'ANNOUNCEMENT',
         'audiences': ['TOUR#{tourId}#ALL'],
         'titleTemplate': '{title}',
-        'bodyTemplate': '{message}',
+        'messageTemplate': '{message}',
         'push': True,
         'priority': 'NORMAL',
         'androidChannel': 'general',
@@ -358,6 +398,61 @@ def test_rule_crud_validation_and_version_increment(ddb):
 
     invalid_send = send_notification.lambda_handler(_mgmt_event({'ruleId': 'ANNOUNCEMENT', 'audiences': ['INVALID']}), None)
     assert invalid_send['statusCode'] == 400
+
+
+def test_rule_payload_enforces_message_template_limit(ddb):
+    too_long = 'x' * 501
+    payload = {
+        'ruleId': 'ANNOUNCEMENT',
+        'enabled': True,
+        'category': 'ANNOUNCEMENT',
+        'audiences': ['APP#RIDER'],
+        'titleTemplate': 'title',
+        'messageTemplate': too_long,
+        'push': True,
+        'priority': 'NORMAL',
+        'androidChannel': 'general',
+        'target': {'screen': 'Notifications', 'paramKeys': []},
+        'ttlHours': 24,
+        'allowOverride': True,
+    }
+    response = create_rule.lambda_handler(_mgmt_event(payload), None)
+    assert response['statusCode'] == 400
+
+
+def test_send_ride_checkin_reminder_not_started(ddb):
+    ddb.Table(os.environ['NOTIFICATION_RULE_TABLE']).put_item(Item={
+        'ruleId': 'RIDE_CHECKIN_REMINDER',
+        'enabled': True,
+        'category': 'ALERT',
+        'audiences': ['APP#RIDER'],
+        'titleTemplate': 'Reminder',
+        'messageTemplate': 'Please start check-in',
+        'push': False,
+        'priority': 'NORMAL',
+        'androidChannel': 'general',
+        'target': {'screen': 'Notifications', 'paramKeys': []},
+        'ttlHours': 24,
+        'allowOverride': True,
+    })
+    ddb.Table('test-stack-TourRider-TOT-2026').put_item(Item={'riderId': 'R1', 'profileId': 'P001', 'status': 'REGISTERED'})
+    ddb.Table('test-stack-TourRider-TOT-2026').put_item(Item={'riderId': 'R2', 'profileId': 'P002', 'status': 'REGISTERED'})
+    ddb.Table('test-stack-CheckIn-TOT-2026').put_item(Item={
+        'rideId': 'RIDE-1',
+        'checkInId': 'R1#000#2026-02-11T06:00:00Z',
+        'riderId': 'R1',
+        'stageNumber': 0,
+        'status': 'CHECKED_IN',
+    })
+    response = send_reminder.lambda_handler(_mgmt_event({
+        'reminderType': 'RIDE_CHECKIN_NOT_STARTED',
+        'tourId': 'TOT-2026',
+        'rideId': 'RIDE-1',
+    }), None)
+    assert response['statusCode'] == 200
+    data = json.loads(response['body'])['data']
+    assert data['targetCount'] == 1
+    assert data['riderIds'] == ['R2']
 
 
 def test_push_sender_deletes_device_not_registered_token(ddb):

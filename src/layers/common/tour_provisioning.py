@@ -11,6 +11,7 @@ Tour-specific tables:
 - CheckIn-{tourId}: Check-in records
 - User-{tourId}: Staff/crew user assignments
 - Notification-{tourId}: Tour rider notifications
+- NotificationArchive-{tourId}: Archived tour rider notifications
 - Artifacts-{tourId}: Tour and ride artifact metadata
 - Event-{tourId}: Event definitions
 - EventOccurrence-{tourId}: Event occurrences
@@ -137,6 +138,20 @@ TOUR_TABLE_DEFINITIONS = {
         'StreamSpecification': {
             'StreamEnabled': True,
             'StreamViewType': 'NEW_IMAGE',
+        },
+    },
+    'NotificationArchive': {
+        'AttributeDefinitions': [
+            {'AttributeName': 'audience', 'AttributeType': 'S'},
+            {'AttributeName': 'sk', 'AttributeType': 'S'},
+        ],
+        'KeySchema': [
+            {'AttributeName': 'audience', 'KeyType': 'HASH'},
+            {'AttributeName': 'sk', 'KeyType': 'RANGE'},
+        ],
+        'TimeToLiveSpecification': {
+            'AttributeName': 'expiresAt',
+            'Enabled': True,
         },
     },
     'Artifacts': {

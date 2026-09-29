@@ -139,6 +139,7 @@ tour-data-api/
 │   │       ├── get_unread_count.py    # GET /v1/notifications/unread-count
 │   │       ├── mark_read.py           # PUT /v1/notifications/read
 │   │       ├── send_notification.py   # POST /v1/notifications
+│   │       ├── send_reminder.py       # POST /v1/notifications/reminders
 │   │       ├── list_rules.py          # GET /v1/admin/notification-rules
 │   │       ├── get_rule.py            # GET /v1/admin/notification-rules/{ruleId}
 │   │       ├── create_rule.py         # POST /v1/admin/notification-rules
@@ -224,6 +225,7 @@ tour-data-api/
 - **`infrastructure-guide.md`**: Resource tagging, monitoring, cost estimation
 - **`docs-index.md`**: Complete documentation index
 - **`notification-framework-design.md`**: Notification framework architecture and contract
+- **`notification-framework-mgmt-app-handoff.md`**: Backend delivery summary and mgmt-app integration expectations
 
 ### Testing (`tests/`)
 - Unit and integration tests using pytest with moto for AWS mocking

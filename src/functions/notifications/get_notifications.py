@@ -4,7 +4,9 @@ sys.path.insert(0, '/opt/python')
 import os
 
 from common import (
+    archive_read_items_for_audience,
     dedupe_notifications,
+    get_archive_after_read_hours,
     get_jwt_claim,
     get_profile_id_for_rider,
     get_rider_tour_rows,
@@ -16,6 +18,7 @@ from common import (
     own_table_for_scope,
     parse_limit,
     query_audience_items,
+    query_audience_items_from_archive,
 )
 from logger import get_logger, log_event
 from response import bad_request_response, internal_error_response, success_response
@@ -24,17 +27,7 @@ logger = get_logger(__name__)
 
 
 def _build_rider_audiences(profile_id, tour_rows):
-    audiences = {'APP#RIDER', f'PROFILE#{profile_id}'}
-    for row in tour_rows:
-        tour_id = row.get('tourId')
-        if not tour_id:
-            continue
-        audiences.add(f'TOUR#{tour_id}#ALL')
-        audiences.add(f'TOUR#{tour_id}#APPLICANTS')
-        status = row.get('status')
-        if status:
-            audiences.add(f'TOUR#{tour_id}#STATUS#{status}')
-    return sorted(audiences)
+    return sorted({'APP#RIDER', f'PROFILE#{profile_id}'})
 
 
 def _fetch_tour_items_for_rider(tour_rows, since, limit):
@@ -47,11 +40,16 @@ def _fetch_tour_items_for_rider(tour_rows, since, limit):
             continue
         table_name = f'{stack_name}-Notification-{tour_id}'
         audiences = [f'TOUR#{tour_id}#ALL', f'TOUR#{tour_id}#APP#RIDER']
+        audiences.append(f'TOUR#{tour_id}#APPLICANTS')
+        status = row.get('status')
+        if status:
+            audiences.append(f'TOUR#{tour_id}#STATUS#{status}')
         if rider_id:
             audiences.append(f'TOUR#{tour_id}#RIDER#{rider_id}')
         for audience in audiences:
             try:
                 items.extend(query_audience_items(table_name, audience, since, limit))
+                items.extend(query_audience_items_from_archive(table_name, audience, since, limit))
             except Exception as exc:
                 logger.warning('Failed to query rider tour notification table %s audience=%s: %s', table_name, audience, str(exc))
                 continue
@@ -69,6 +67,7 @@ def _fetch_tour_items_for_mgmt(groups, since, limit):
         for audience in audiences:
             try:
                 items.extend(query_audience_items(table_name, audience, since, limit))
+                items.extend(query_audience_items_from_archive(table_name, audience, since, limit))
             except Exception as exc:
                 logger.warning('Failed to query mgmt tour notification table %s audience=%s: %s', table_name, audience, str(exc))
                 continue
@@ -110,6 +109,30 @@ def lambda_handler(event, context):
 
         state = get_state_row(own_table, state_key)
         last_read_at = state.get('lastReadAt') if state else None
+        if last_read_at:
+            archive_after_hours = get_archive_after_read_hours()
+            if scope == 'rider':
+                for row in tour_rows:
+                    tour_id = row.get('tourId')
+                    rider_id = row.get('riderId')
+                    if not tour_id:
+                        continue
+                    table_name = f'{os.environ.get("STACK_NAME")}-Notification-{tour_id}'
+                    archive_read_items_for_audience(table_name, f'TOUR#{tour_id}#ALL', last_read_at, archive_after_hours)
+                    archive_read_items_for_audience(table_name, f'TOUR#{tour_id}#APP#RIDER', last_read_at, archive_after_hours)
+                    archive_read_items_for_audience(table_name, f'TOUR#{tour_id}#APPLICANTS', last_read_at, archive_after_hours)
+                    status = row.get('status')
+                    if status:
+                        archive_read_items_for_audience(table_name, f'TOUR#{tour_id}#STATUS#{status}', last_read_at, archive_after_hours)
+                    if rider_id:
+                        archive_read_items_for_audience(table_name, f'TOUR#{tour_id}#RIDER#{rider_id}', last_read_at, archive_after_hours)
+            else:
+                for tour_id in list_active_tours():
+                    table_name = f'{os.environ.get("STACK_NAME")}-Notification-{tour_id}'
+                    archive_read_items_for_audience(table_name, f'TOUR#{tour_id}#ALL', last_read_at, archive_after_hours)
+                    archive_read_items_for_audience(table_name, f'TOUR#{tour_id}#APP#MGMT', last_read_at, archive_after_hours)
+                    for group in groups:
+                        archive_read_items_for_audience(table_name, f'TOUR#{tour_id}#GROUP#{group}', last_read_at, archive_after_hours)
 
         normalized = [normalize_notification_item(row, last_read_at) for row in items]
         deduped = dedupe_notifications(normalized)

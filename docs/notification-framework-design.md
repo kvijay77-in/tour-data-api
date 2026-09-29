@@ -117,6 +117,7 @@ sequenceDiagram
 3. **MgmtNotification** (`{Stack}-MgmtNotification`) PK `audience`, SK `sk=<createdAt>#<notificationId>`
 4. **RiderPushDevice** (`{Stack}-RiderPushDevice`) PK `profileId`, SK `token`
 5. **MgmtPushDevice** (`{Stack}-MgmtPushDevice`) PK `cognitoSub`, SK `token`, with GSI `GroupKeyIndex(groupKey, updatedAt)` using one lightweight per-group index item approach.
+6. **AppConfig** entry `NOTIFICATION/LIMITS` stores runtime-editable limits (`maxTitleLength`, `maxMessageLength`, `archiveAfterReadHours`).
 
 All tables use PAY_PER_REQUEST, SSE enabled, and standard deployment tags including `SubscriptionId`.
 
@@ -127,6 +128,8 @@ All tables use PAY_PER_REQUEST, SSE enabled, and standard deployment tags includ
 - SK: `sk`
 - TTL attribute: `expiresAt` (epoch seconds)
 - Stream: `NEW_IMAGE`
+
+`NotificationArchive-{tourId}` is added with the same PK/SK schema for age + read-state aware archival from the active tour notification table.
 
 Legacy `readBy` and old `TypeCreatedAtIndex` are removed.
 
@@ -148,12 +151,12 @@ Used for status/applicant audience fan-out.
 | `PROFILE#<profileId>` | one rider | RiderNotification |
 | `USER#<cognitoSub>` | one staff user | MgmtNotification |
 | `GROUP#<group>` | staff Cognito group | MgmtNotification |
-| `TOUR#<t>#STATUS#<s>` | riders with RiderTours status s | RiderNotification |
-| `TOUR#<t>#APPLICANTS` | any RiderTours record for t | RiderNotification |
+| `TOUR#<t>#STATUS#<s>` | riders with RiderTours status s | Notification-{t} |
+| `TOUR#<t>#APPLICANTS` | any RiderTours record for t | Notification-{t} |
 | `TOUR#<t>#ALL` | registered riders + staff of tour | Notification-{t} |
 | `TOUR#<t>#APP#RIDER` / `TOUR#<t>#APP#MGMT` | registered riders / staff of tour | Notification-{t} |
 | `TOUR#<t>#GROUP#<g>` | staff group within tour | Notification-{t} |
-| `TOUR#<t>#RIDER#<riderId>` | one registered rider | converted to `PROFILE#<profileId>` and stored in RiderNotification |
+| `TOUR#<t>#RIDER#<riderId>` | one registered rider | Notification-{t} |
 
 Unknown forms are rejected by strict regex validation.
 
@@ -171,10 +174,23 @@ Unknown forms are rejected by strict regex validation.
 ### 5.3 Announce API (management)
 - `POST /v1/notifications` with `NOTIFICATION_MANAGE`
 
-### 5.4 Admin rule CRUD
+### 5.4 Reminder API (management)
+- `POST /v1/notifications/reminders` with `NOTIFICATION_MANAGE`
+- `reminderType`:
+  - `RIDE_CHECKIN_NOT_STARTED` (uses stage-0 active check-in semantics; cancelled stage-0 means not-started again)
+  - `EVENT_CHECKIN_NOT_STARTED` (only when event definition `notificationConfig.reminderEnabled=true`)
+
+### 5.5 Admin rule CRUD
 - `GET/POST/PUT/DELETE /v1/admin/notification-rules[/{ruleId}]` with `NOTIFICATION_MANAGE`
 
-## 6) Common layer service
+## 6) Category semantics
+
+- `ANNOUNCEMENT`: broad informational communication to wide audiences.
+- `ALERT`: high-signal notification for urgent/time-sensitive actions.
+- `PERSONAL`: recipient-specific lifecycle/status communication.
+- `SYSTEM`: backend-generated operational updates.
+
+## 7) Common layer service
 
 `notification_service.notify(rule_id, tour_id=None, context=None, audience_override=None, actor=None) -> str | None`
 
@@ -183,10 +199,14 @@ Behavior:
 2. Respect `enabled`; return `None` if missing/disabled.
 3. Allow overrides only when `allowOverride=true`.
 4. Render templates safely; missing keys do not raise.
-5. Route/write inbox records with TTL from `ttlHours`.
-6. Never raise to caller; log structured error and return `None`.
+5. Rule payload supports `messageTemplate` (primary) with backward-compatible `bodyTemplate` alias.
+6. Enforce title/message limits from AppConfig (`NOTIFICATION/LIMITS`) at rule validation and at render time.
+7. Route all `TOUR#...` audiences to `Notification-{tourId}`.
+8. Inbox archiving uses age + read-state policy (`archiveAfterReadHours`) into `NotificationArchive-{tourId}`.
+9. Route/write inbox records with TTL from `ttlHours`.
+10. Never raise to caller; log structured error and return `None`.
 
-## 7) Push sender
+## 8) Push sender
 
 - Stream trigger from RiderNotification, MgmtNotification, and tour notification tables.
 - Filters INSERT + `push=true`, skips `STATE` items.
@@ -198,7 +218,7 @@ Behavior:
 - Retry strategy: stream retries + SQS DLQ + CloudWatch alarm.
 - Receipt polling is deferred to a future scheduled enhancement.
 
-## 8) Trigger points
+## 9) Trigger points
 
 Business handlers should call `notify()` non-blocking for:
 - `RIDE_OPENED`
@@ -207,12 +227,36 @@ Business handlers should call `notify()` non-blocking for:
 - `PIT_STOP_OPENED`
 - `PIT_STOP_CLOSED`
 - `RIDER_EXITED` (personal)
+- `CHECKIN_CREATED`
+- `CHECKIN_CANCELLED`
+- `EVENT_COMPLETED_BY_RIDER` (when event definition enables completion notification)
 - `REGISTRATION_STATUS_CHANGED` (personal)
 - `HOTEL_ALLOCATION_PUBLISHED` (when applicable)
+- `RIDE_CHECKIN_REMINDER` (admin reminder)
+- `EVENT_CHECKIN_REMINDER` (admin reminder + event-level allow switch)
 
 Rules not seeded are no-op.
 
-## 9) Default seed rule
+## 10) Event definition notification controls
+
+Each event definition can include:
+
+```json
+{
+  "notificationConfig": {
+    "completionNotifyEnabled": true,
+    "completionRuleId": "EVENT_COMPLETED_BY_RIDER",
+    "reminderEnabled": true,
+    "reminderRuleId": "EVENT_CHECKIN_REMINDER"
+  }
+}
+```
+
+Completion means the rider has non-cancelled outcomes for all event activities that are:
+- enabled for the occurrence, and
+- not marked `skipped=true` in activity overrides by organizers.
+
+## 11) Default seed rule
 
 `ANNOUNCEMENT` rule (seeded):
 
@@ -223,7 +267,7 @@ Rules not seeded are no-op.
   "category": "ANNOUNCEMENT",
   "audiences": ["ALL"],
   "titleTemplate": "{title}",
-  "bodyTemplate": "{message}",
+  "messageTemplate": "{message}",
   "push": true,
   "priority": "NORMAL",
   "androidChannel": "general",
@@ -234,21 +278,26 @@ Rules not seeded are no-op.
 }
 ```
 
-## 10) Sample rule IDs for backend trigger hooks
+## 12) Sample rule IDs for backend trigger hooks
 
 ```json
 [
   {"ruleId":"RIDE_OPENED","category":"SYSTEM","audiences":["TOUR#{tourId}#ALL"]},
   {"ruleId":"RIDE_STARTED","category":"ALERT","audiences":["TOUR#{tourId}#ALL"],"priority":"URGENT","androidChannel":"urgent"},
   {"ruleId":"RIDE_CLOSED","category":"SYSTEM","audiences":["TOUR#{tourId}#ALL"]},
+  {"ruleId":"CHECKIN_CREATED","category":"PERSONAL","audiences":["TOUR#{tourId}#RIDER#{riderId}"]},
+  {"ruleId":"CHECKIN_CANCELLED","category":"PERSONAL","audiences":["TOUR#{tourId}#RIDER#{riderId}"]},
   {"ruleId":"PIT_STOP_OPENED","category":"SYSTEM","audiences":["TOUR#{tourId}#ALL"]},
   {"ruleId":"PIT_STOP_CLOSED","category":"SYSTEM","audiences":["TOUR#{tourId}#ALL"]},
+  {"ruleId":"EVENT_COMPLETED_BY_RIDER","category":"PERSONAL","audiences":["TOUR#{tourId}#RIDER#{riderId}"]},
+  {"ruleId":"RIDE_CHECKIN_REMINDER","category":"ALERT","audiences":["TOUR#{tourId}#RIDER#{riderId}"]},
+  {"ruleId":"EVENT_CHECKIN_REMINDER","category":"ALERT","audiences":["TOUR#{tourId}#RIDER#{riderId}"]},
   {"ruleId":"RIDER_EXITED","category":"PERSONAL","audiences":["PROFILE#{profileId}"]},
   {"ruleId":"REGISTRATION_STATUS_CHANGED","category":"PERSONAL","audiences":["PROFILE#{profileId}"]},
   {"ruleId":"HOTEL_ALLOCATION_PUBLISHED","category":"SYSTEM","audiences":["TOUR#{tourId}#APP#RIDER"]}
 ]
 ```
 
-## 11) Cost note
+## 13) Cost note
 
 Design remains low cost (DynamoDB on-demand + Lambda + API Gateway + Expo push), with expected notification overhead still in the <$1–2 per-tour range for this scale.

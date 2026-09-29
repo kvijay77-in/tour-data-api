@@ -17,10 +17,15 @@ logger = get_logger(__name__)
 
 RULE_CACHE_TTL_SECONDS = 300
 _RULE_CACHE: Dict[str, Tuple[float, Optional[Dict[str, Any]]]] = {}
+_NOTIFICATION_LIMITS_CACHE: Tuple[float, Dict[str, int]] | None = None
 
 CATEGORY_VALUES = {"ANNOUNCEMENT", "ALERT", "PERSONAL", "SYSTEM"}
 PRIORITY_VALUES = {"URGENT", "NORMAL"}
 ANDROID_CHANNEL_VALUES = {"urgent", "general"}
+DEFAULT_MAX_TITLE_LENGTH = 120
+DEFAULT_MAX_MESSAGE_LENGTH = 500
+LIMITS_CONFIG_TYPE = "NOTIFICATION"
+LIMITS_CONFIG_ID = "LIMITS"
 
 AUDIENCE_PATTERNS: Sequence[re.Pattern[str]] = (
     re.compile(r"^ALL$"),
@@ -33,7 +38,7 @@ AUDIENCE_PATTERNS: Sequence[re.Pattern[str]] = (
     re.compile(r"^TOUR#[A-Za-z0-9_.\-]{3,50}#ALL$"),
     re.compile(r"^TOUR#[A-Za-z0-9_.\-]{3,50}#APP#(RIDER|MGMT)$"),
     re.compile(r"^TOUR#[A-Za-z0-9_.\-]{3,50}#GROUP#[A-Za-z0-9_\-]{1,80}$"),
-    re.compile(r"^TOUR#[A-Za-z0-9_.\-]{3,50}#RIDER#R[1-9]\d{0,2}$"),
+    re.compile(r"^TOUR#[A-Za-z0-9_.\-]{3,50}#RIDER#(?:R[1-9]\d{0,2}|PLACEHOLDER)$"),
 )
 
 
@@ -71,7 +76,7 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
         "category",
         "audiences",
         "titleTemplate",
-        "bodyTemplate",
+        "messageTemplate",
         "push",
         "priority",
         "androidChannel",
@@ -82,6 +87,8 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
 
     if not partial:
         missing = [field for field in required if field not in payload]
+        if "messageTemplate" in missing and "bodyTemplate" in payload:
+            missing.remove("messageTemplate")
         if missing:
             raise ValueError(f"Missing required fields: {', '.join(missing)}")
 
@@ -97,6 +104,19 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
 
     if "audiences" in validated:
         validated["audiences"] = validate_audiences(validated["audiences"], allow_placeholders=True)
+
+    message_template = validated.get("messageTemplate")
+    legacy_body_template = validated.get("bodyTemplate")
+    if message_template is None and legacy_body_template is not None:
+        message_template = legacy_body_template
+    if "messageTemplate" in validated or "bodyTemplate" in validated:
+        if not isinstance(message_template, str) or not message_template:
+            raise ValueError("messageTemplate is required")
+        validated["messageTemplate"] = message_template
+        validated["bodyTemplate"] = message_template
+
+    if "titleTemplate" in validated and (not isinstance(validated["titleTemplate"], str) or not validated["titleTemplate"]):
+        raise ValueError("titleTemplate is required")
 
     if "priority" in validated and validated["priority"] not in PRIORITY_VALUES:
         raise ValueError(f"priority must be one of {sorted(PRIORITY_VALUES)}")
@@ -131,6 +151,14 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
         if bool_field in validated and not isinstance(validated[bool_field], bool):
             raise ValueError(f"{bool_field} must be boolean")
 
+    limits = _get_notification_limits()
+    max_title = limits["maxTitleLength"]
+    max_message = limits["maxMessageLength"]
+    if "titleTemplate" in validated and len(validated["titleTemplate"]) > max_title:
+        raise ValueError(f"titleTemplate length must be <= {max_title}")
+    if "messageTemplate" in validated and len(validated["messageTemplate"]) > max_message:
+        raise ValueError(f"messageTemplate length must be <= {max_message}")
+
     return validated
 
 
@@ -155,6 +183,33 @@ def _load_rule(rule_id: str) -> Optional[Dict[str, Any]]:
 
     _RULE_CACHE[rule_id] = (now, rule)
     return rule
+
+
+def _get_notification_limits() -> Dict[str, int]:
+    global _NOTIFICATION_LIMITS_CACHE
+    now = time.time()
+    if _NOTIFICATION_LIMITS_CACHE and now - _NOTIFICATION_LIMITS_CACHE[0] < RULE_CACHE_TTL_SECONDS:
+        return _NOTIFICATION_LIMITS_CACHE[1]
+
+    limits = {
+        "maxTitleLength": DEFAULT_MAX_TITLE_LENGTH,
+        "maxMessageLength": DEFAULT_MAX_MESSAGE_LENGTH,
+    }
+    try:
+        config_item = get_item("APP_CONFIG_TABLE", {"configType": LIMITS_CONFIG_TYPE, "configId": LIMITS_CONFIG_ID})
+        if config_item and bool(config_item.get("enabled", True)):
+            config = config_item.get("config") or {}
+            title_length = int(config.get("maxTitleLength", DEFAULT_MAX_TITLE_LENGTH))
+            message_length = int(config.get("maxMessageLength", DEFAULT_MAX_MESSAGE_LENGTH))
+            if title_length > 0:
+                limits["maxTitleLength"] = title_length
+            if message_length > 0:
+                limits["maxMessageLength"] = message_length
+    except Exception as exc:  # pragma: no cover - permission/availability fallback
+        logger.warning("notification limits lookup failed; using defaults error=%s", str(exc))
+
+    _NOTIFICATION_LIMITS_CACHE = (now, limits)
+    return limits
 
 
 def _render_template(template: str, context: Optional[Dict[str, Any]]) -> str:
@@ -205,24 +260,18 @@ def _route_audience(audience: str) -> List[Tuple[str, str]]:
             routes.append((mgmt_table, "APP#MGMT"))
         return routes
 
-    if audience.startswith("APP#RIDER") or audience.startswith("PROFILE#") or "#STATUS#" in audience or audience.endswith("#APPLICANTS"):
-        return [(rider_table, audience)] if rider_table else []
-
-    if audience.startswith("APP#MGMT") or audience.startswith("USER#") or audience.startswith("GROUP#"):
-        return [(mgmt_table, audience)] if mgmt_table else []
-
-    if "#RIDER#" in audience:
-        profile_id = _resolve_tour_rider_to_profile(audience)
-        if profile_id and rider_table:
-            return [(rider_table, f"PROFILE#{profile_id}")]
-        return []
-
     if audience.startswith("TOUR#"):
         tour_id = _extract_tour_id(audience)
         if not tour_id:
             return []
         table_name = f"{os.environ.get('STACK_NAME')}-Notification-{tour_id}"
         return [(table_name, audience)]
+
+    if audience.startswith("APP#RIDER") or audience.startswith("PROFILE#"):
+        return [(rider_table, audience)] if rider_table else []
+
+    if audience.startswith("APP#MGMT") or audience.startswith("USER#") or audience.startswith("GROUP#"):
+        return [(mgmt_table, audience)] if mgmt_table else []
 
     return []
 
@@ -302,7 +351,11 @@ def notify(
         notification_id = str(uuid.uuid4())
         created_at = utc_now_iso()
         title = _render_template(rule.get("titleTemplate", ""), rendered_context)
-        body = _render_template(rule.get("bodyTemplate", ""), rendered_context)
+        message_template = rule.get("messageTemplate", rule.get("bodyTemplate", ""))
+        body = _render_template(message_template, rendered_context)
+        limits = _get_notification_limits()
+        title = title[: limits["maxTitleLength"]]
+        body = body[: limits["maxMessageLength"]]
 
         items_by_table: Dict[str, List[Dict[str, Any]]] = {}
         for audience in validated_audiences:

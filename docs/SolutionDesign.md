@@ -96,7 +96,7 @@ These tables exist for the lifetime of the deployment and are defined in `templa
 
 ### Tour-Specific Tables (Provisioned at Runtime)
 
-These tables are created dynamically when a tour admin provisions a new tour, and can be archived/deleted when a tour is completed. The table set is no longer six; event support adds five new tour-specific table types (`Event`, `EventOccurrence`, `EventActivityLogs`, `Hotel`, `RoomAllocation` — the event definition and its occurrences are split into two tables, see [cycling-tour-events-design.md](cycling-tour-events-design.md) §2/§4/§5) and the full runtime provisioned set is now eleven tables.
+These tables are created dynamically when a tour admin provisions a new tour, and can be archived/deleted when a tour is completed. The table set is no longer six; event support adds five tour-specific table types (`Event`, `EventOccurrence`, `EventActivityLogs`, `Hotel`, `RoomAllocation` — the event definition and its occurrences are split into two tables, see [cycling-tour-events-design.md](cycling-tour-events-design.md) §2/§4/§5), and notification archival adds `NotificationArchive`. The full runtime provisioned set is now twelve tables.
 
 | Table | Purpose |
 |---|---|
@@ -105,6 +105,7 @@ These tables are created dynamically when a tour admin provisions a new tour, an
 | **CheckIn-{tourId}** | Check-in records for the specific tour |
 | **User-{tourId}** | Admin/staff user assignments for the specific tour |
 | **Notification-{tourId}** | Tour-scoped inbox records for audience expressions (`TOUR#...`) |
+| **NotificationArchive-{tourId}** | Archived tour-scoped inbox records (age + read-state aware move policy) |
 | **Artifacts-{tourId}** | Metadata registry for the specific tour's S3-backed tour and ride artifacts |
 | **Event-{tourId}** | Event definitions (activities embedded) for non-check-in QR activities |
 | **EventOccurrence-{tourId}** | Dated occurrences of an event definition |
@@ -118,7 +119,7 @@ All tables follow the pattern: `{AWS::StackName}-{TableType}` for shared tables 
 
 Examples (stack name: `dev`, tour ID: `TOT-2026`):
 - Shared: `dev-RiderProfile`, `dev-RiderTours`, `dev-RiderCognitoUser`, `dev-TourMaster`, `dev-AppConfig`, `dev-NotificationRule`, `dev-RiderNotification`, `dev-MgmtNotification`, `dev-RiderPushDevice`, `dev-MgmtPushDevice`
-- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`, `dev-Artifacts-TOT-2026`, `dev-Event-TOT-2026`, `dev-EventOccurrence-TOT-2026`, `dev-EventActivityLogs-TOT-2026`, `dev-Hotel-TOT-2026`, `dev-RoomAllocation-TOT-2026`
+- Tour-specific: `dev-TourRider-TOT-2026`, `dev-Ride-TOT-2026`, `dev-CheckIn-TOT-2026`, `dev-User-TOT-2026`, `dev-Notification-TOT-2026`, `dev-NotificationArchive-TOT-2026`, `dev-Artifacts-TOT-2026`, `dev-Event-TOT-2026`, `dev-EventOccurrence-TOT-2026`, `dev-EventActivityLogs-TOT-2026`, `dev-Hotel-TOT-2026`, `dev-RoomAllocation-TOT-2026`
 
 Lambda functions resolve shared table names via environment variables (set by SAM) and tour-specific table names at runtime using a naming convention. The stack name is available to Lambda via the `STACK_NAME` environment variable.
 
@@ -248,10 +249,12 @@ Provisioning methods create the same tour-specific DynamoDB tables (TourRider, R
   - `ID_CODE_TYPE`: code-to-type mappings (RIDER/BAGGAGE/etc.)
   - `ARTIFACTS`: allowed artifact IDs and categories (tour/ride)
   - `HOTEL_UPLOAD`: hotel CSV processing limits
+  - `NOTIFICATION`: notification limits and archival policy controls
   - `RIDER_PROFILE_SECTION`: profile form section definitions
   - `RIDER_PROFILE_ATTRIBUTE`: profile attribute definitions (type, storage, visibility, validation)
   - `LOV`: reusable list-of-values catalogs used by profile attributes
 - `HOTEL_UPLOAD` / `PROCESSING` holds limits for the hotel allocation CSV processor: `maxFileSizeBytes` (1048576), `maxDataRows` (500), `maxStayDates` (31), `maxStoredErrors` (200), and `timeReserveSeconds` (20; the processor stops, rolls back and records `PROCESSING_TIMEOUT` when less time than this is left). If the item is missing or disabled, or a value is invalid, the defaults shown are used. `seed_app_config.py` only inserts this item when it doesn't exist, so values tuned at runtime survive deploys. Clients are not expected to use it, but it is readable via `GET /v1/config`.
+- `NOTIFICATION` / `LIMITS` holds notification controls: `maxTitleLength` (120), `maxMessageLength` (500), and `archiveAfterReadHours` (48). Notification rule validation and rendered message enforcement read these values dynamically.
 
 ## Tour-Specific Table 6: Artifacts-{tourId}
 
@@ -765,7 +768,7 @@ tour-data-api/
 12. **CloudWatch Logs:** For monitoring and debugging
 
 ### Managed at Runtime (Tour Provisioning)
-1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId}, Event-{tourId}, EventOccurrence-{tourId}, EventActivityLogs-{tourId}, Hotel-{tourId}, RoomAllocation-{tourId} (with GSIs where required) — eleven tables in total (see [cycling-tour-events-design.md](cycling-tour-events-design.md) §10.1)
+1. **Tour-Specific DynamoDB Tables:** TourRider-{tourId}, Ride-{tourId}, CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, NotificationArchive-{tourId}, Artifacts-{tourId}, Event-{tourId}, EventOccurrence-{tourId}, EventActivityLogs-{tourId}, Hotel-{tourId}, RoomAllocation-{tourId} (with GSIs where required) — twelve tables in total (see [cycling-tour-events-design.md](cycling-tour-events-design.md) §10.1)
 2. Created by the shared tour provisioning utility (`src/layers/common/tour_provisioning.py`) via boto3
 3. Follow the same naming convention, tagging, and billing mode as SAM-managed tables
 
@@ -779,7 +782,7 @@ For use during initial setup, CI/CD pipelines, or by operators:
 1. Run `make provision-tour` or `python scripts/provision_tour.py` with tour parameters
 2. Script resolves the TourMaster table name from CloudFormation stack outputs
 3. Creates a Tour record in the shared TourMaster table (status: PROVISIONING)
-4. Creates 11 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`, `{STACK_NAME}-Notification-{tourId}`, `{STACK_NAME}-Artifacts-{tourId}`, `{STACK_NAME}-Event-{tourId}`, `{STACK_NAME}-EventOccurrence-{tourId}`, `{STACK_NAME}-EventActivityLogs-{tourId}`, `{STACK_NAME}-Hotel-{tourId}`, `{STACK_NAME}-RoomAllocation-{tourId}`. In a Dev environment only, the three sample event definitions (`EVT-REG`, `EVT-BAGLOAD`, `EVT-BAGUNLOAD`) are additionally seeded into `Event-{tourId}` by a separate, environment-gated seed script; Production tours are provisioned with an empty `Event-{tourId}` table, and the Administrator creates event definitions from `tour-mgmt-app` (see [cycling-tour-events-design.md](cycling-tour-events-design.md) §10.2). Notification table re-provisioning is safe for existing tours; if an old legacy notification table was already empty it may be recreated with the new schema.
+4. Creates 12 DynamoDB tables: `{STACK_NAME}-TourRider-{tourId}`, `{STACK_NAME}-Ride-{tourId}`, `{STACK_NAME}-CheckIn-{tourId}`, `{STACK_NAME}-User-{tourId}`, `{STACK_NAME}-Notification-{tourId}`, `{STACK_NAME}-NotificationArchive-{tourId}`, `{STACK_NAME}-Artifacts-{tourId}`, `{STACK_NAME}-Event-{tourId}`, `{STACK_NAME}-EventOccurrence-{tourId}`, `{STACK_NAME}-EventActivityLogs-{tourId}`, `{STACK_NAME}-Hotel-{tourId}`, `{STACK_NAME}-RoomAllocation-{tourId}`. In a Dev environment only, the three sample event definitions (`EVT-REG`, `EVT-BAGLOAD`, `EVT-BAGUNLOAD`) are additionally seeded into `Event-{tourId}` by a separate, environment-gated seed script; Production tours are provisioned with an empty `Event-{tourId}` table, and the Administrator creates event definitions from `tour-mgmt-app` (see [cycling-tour-events-design.md](cycling-tour-events-design.md) §10.2). Notification table re-provisioning is safe for existing tours; if an old legacy notification table was already empty it may be recreated with the new schema.
 5. Tables are created with on-demand billing, encryption, and standard tags
 6. Once all tables are active, Tour status is updated to PLANNING
 
@@ -1023,3 +1026,8 @@ If volume increases significantly (1000+ riders or many concurrent tours):
 | Not Riding (NR) | Rider not participating in a specific ride |
 | Quit Riding (QR) | Rider stopping mid-ride |
 | QR Code | Quick Response code for rider identification |
+## Tour-Specific Table 6: NotificationArchive-{tourId}
+
+**Purpose:** Archive table for delivered/read tour notifications moved from `Notification-{tourId}` to keep active-stream table volume lower.
+
+Primary key and item schema match `Notification-{tourId}` (`audience`, `sk`, plus full notification payload).

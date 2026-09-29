@@ -1828,6 +1828,7 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:UpdateItem
+                - dynamodb:PutItem
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
@@ -2251,6 +2252,8 @@ Resources:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-User-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*'
+                - !Sub '${NotificationRuleTable.Arn}'
                 - !Sub '${AppConfigTable.Arn}'
       Events:
         HttpApi:
@@ -3297,6 +3300,17 @@ Resources:
             TableName: !Ref MgmtNotificationTable
         - DynamoDBReadPolicy:
             TableName: !Ref TourMasterTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:Scan
+                - dynamodb:DeleteItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-NotificationArchive-*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -3323,6 +3337,17 @@ Resources:
             TableName: !Ref RiderCognitoUserTable
         - DynamoDBReadPolicy:
             TableName: !Ref RiderToursTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:Scan
+                - dynamodb:DeleteItem
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-NotificationArchive-*'
       Events:
         RiderHttpApi:
           Type: HttpApi
@@ -3434,16 +3459,54 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref NotificationRuleTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
         - DynamoDBCrudPolicy:
             TableName: !Ref RiderNotificationTable
         - DynamoDBCrudPolicy:
             TableName: !Ref MgmtNotificationTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*'
       Events:
         HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
             Path: /v1/notifications
+            Method: POST
+
+  SendNotificationReminderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/notifications/
+      Handler: send_reminder.lambda_handler
+      Description: Trigger not-started rider reminders for ride/event check-ins
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref NotificationRuleTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:PutItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/notifications/reminders
             Method: POST
 
   ListNotificationRulesFunction:
@@ -3495,6 +3558,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref NotificationRuleTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
       Events:
         HttpApi:
           Type: HttpApi
@@ -3514,6 +3579,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref NotificationRuleTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
       Events:
         HttpApi:
           Type: HttpApi

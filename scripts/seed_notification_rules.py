@@ -32,7 +32,7 @@ def main():
         'category': 'ANNOUNCEMENT',
         'audiences': ['ALL'],
         'titleTemplate': '{title}',
-        'bodyTemplate': '{message}',
+        'messageTemplate': '{message}',
         'push': True,
         'priority': 'NORMAL',
         'androidChannel': 'general',

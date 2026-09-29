@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
@@ -16,6 +17,8 @@ from models import utc_now_iso
 from response import bad_request_response
 
 logger = get_logger(__name__)
+_NOTIFICATION_ARCHIVE_CFG_CACHE: tuple[float, int] | None = None
+DEFAULT_ARCHIVE_AFTER_READ_HOURS = 48
 
 
 def get_jwt_claim(event: Dict[str, Any], claim: str, default: str = "") -> str:
@@ -108,6 +111,16 @@ def query_audience_items(table_name: str, audience: str, since: Optional[str], l
     return resp.get("Items", [])
 
 
+def query_audience_items_from_archive(table_name: str, audience: str, since: Optional[str], limit: int) -> List[Dict[str, Any]]:
+    archive_table_name = to_archive_table_name(table_name)
+    if not archive_table_name:
+        return []
+    try:
+        return query_audience_items(archive_table_name, audience, since, limit)
+    except Exception:
+        return []
+
+
 def list_active_tours() -> List[str]:
     table = get_table("TOUR_MASTER_TABLE")
     response = table.query(
@@ -125,6 +138,67 @@ def get_rider_tour_rows(profile_id: str) -> List[Dict[str, Any]]:
 
 def get_state_key(scope: str, identity: str) -> str:
     return f"STATE#{identity}" if not identity.startswith("STATE#") else identity
+
+
+def to_archive_table_name(table_name: str) -> Optional[str]:
+    marker = "-Notification-"
+    if marker not in table_name:
+        return None
+    return table_name.replace(marker, "-NotificationArchive-")
+
+
+def get_archive_after_read_hours() -> int:
+    global _NOTIFICATION_ARCHIVE_CFG_CACHE
+    now = time.time()
+    if _NOTIFICATION_ARCHIVE_CFG_CACHE and now - _NOTIFICATION_ARCHIVE_CFG_CACHE[0] < 300:
+        return _NOTIFICATION_ARCHIVE_CFG_CACHE[1]
+    value = DEFAULT_ARCHIVE_AFTER_READ_HOURS
+    try:
+        config = get_item("APP_CONFIG_TABLE", {"configType": "NOTIFICATION", "configId": "LIMITS"}) or {}
+        cfg = config.get("config") or {}
+        parsed = int(cfg.get("archiveAfterReadHours", DEFAULT_ARCHIVE_AFTER_READ_HOURS))
+        if parsed > 0:
+            value = parsed
+    except Exception:
+        value = DEFAULT_ARCHIVE_AFTER_READ_HOURS
+    _NOTIFICATION_ARCHIVE_CFG_CACHE = (now, value)
+    return value
+
+
+def archive_read_items_for_audience(
+    table_name: str,
+    audience: str,
+    last_read_at: Optional[str],
+    archive_after_hours: int,
+    limit: int = 50,
+) -> int:
+    archive_table_name = to_archive_table_name(table_name)
+    if not archive_table_name or not last_read_at:
+        return 0
+    table = boto3.resource("dynamodb").Table(table_name)
+    archive_table = boto3.resource("dynamodb").Table(archive_table_name)
+    key_expr = Key("audience").eq(audience)
+    rows = table.query(
+        KeyConditionExpression=key_expr,
+        ScanIndexForward=True,
+        Limit=max(1, limit),
+    ).get("Items", [])
+    moved = 0
+    cutoff = datetime.now(timezone.utc).timestamp() - max(1, archive_after_hours) * 3600
+    for row in rows:
+        created_at = row.get("createdAt") or str(row.get("sk", "")).split("#", 1)[0]
+        if not created_at or created_at > last_read_at:
+            continue
+        try:
+            created_ts = parse_iso_datetime(created_at, "createdAt").timestamp()
+        except ValueError:
+            continue
+        if created_ts > cutoff:
+            continue
+        archive_table.put_item(Item=row)
+        table.delete_item(Key={"audience": row["audience"], "sk": row["sk"]})
+        moved += 1
+    return moved
 
 
 def normalize_notification_item(item: Dict[str, Any], last_read_at: Optional[str]) -> Dict[str, Any]:

@@ -138,13 +138,13 @@ class TestProvisionTourTables:
     """Test end-to-end tour table provisioning"""
 
     def test_provision_creates_all_tour_tables(self, dynamodb_client_mock):
-        """Provisioning creates all eleven tour-specific tables."""
+        """Provisioning creates all tour-specific tables."""
         created = provision_tour_tables(
             dynamodb_client_mock,
             MOCK_TOUR_ID,
             ignore_existing=True,
         )
-        assert len(created) == 11
+        assert len(created) == 12
 
         # Verify table names
         expected_prefix = f"{MOCK_STACK_NAME}-"
@@ -165,6 +165,7 @@ class TestProvisionTourTables:
             f"{MOCK_STACK_NAME}-CheckIn-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-User-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-Notification-{MOCK_TOUR_ID}",
+            f"{MOCK_STACK_NAME}-NotificationArchive-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-Artifacts-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-Event-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-EventOccurrence-{MOCK_TOUR_ID}",
@@ -232,7 +233,7 @@ class TestProvisionTourTables:
             ignore_existing=True,
         )
 
-        assert len(created) == 11
+        assert len(created) == 12
         for table_type in TOUR_TABLE_TYPES:
             resp = dynamodb_client_mock.describe_table(
                 TableName=f"{MOCK_STACK_NAME}-{table_type}-{MOCK_TOUR_ID}"
