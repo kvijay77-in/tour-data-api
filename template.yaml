@@ -527,14 +527,14 @@ Resources:
                 - dynamodb:CreateTable
                 - dynamodb:DescribeTable
                 - dynamodb:TagResource
-               - dynamodb:DeleteTable
-               - dynamodb:UpdateTimeToLive
+                - dynamodb:DeleteTable
+                - dynamodb:UpdateTimeToLive
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
             - Effect: Allow
               Action:
-               - lambda:ListEventSourceMappings
-               - lambda:CreateEventSourceMapping
+                - lambda:ListEventSourceMappings
+                - lambda:CreateEventSourceMapping
               Resource: !GetAtt PushSenderFunction.Arn
       Events:
         HttpApi:
@@ -566,14 +566,14 @@ Resources:
                 - dynamodb:CreateTable
                 - dynamodb:DescribeTable
                 - dynamodb:TagResource
-               - dynamodb:DeleteTable
-               - dynamodb:UpdateTimeToLive
+                - dynamodb:DeleteTable
+                - dynamodb:UpdateTimeToLive
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
             - Effect: Allow
               Action:
-               - lambda:ListEventSourceMappings
-               - lambda:CreateEventSourceMapping
+                - lambda:ListEventSourceMappings
+                - lambda:CreateEventSourceMapping
               Resource: !GetAtt PushSenderFunction.Arn
       Events:
         HttpApi:
@@ -605,14 +605,14 @@ Resources:
                 - dynamodb:CreateTable
                 - dynamodb:DescribeTable
                 - dynamodb:TagResource
-               - dynamodb:DeleteTable
-               - dynamodb:UpdateTimeToLive
+                - dynamodb:DeleteTable
+                - dynamodb:UpdateTimeToLive
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
             - Effect: Allow
               Action:
-               - lambda:ListEventSourceMappings
-               - lambda:CreateEventSourceMapping
+                - lambda:ListEventSourceMappings
+                - lambda:CreateEventSourceMapping
               Resource: !GetAtt PushSenderFunction.Arn
       Events:
         HttpApi:
@@ -3634,6 +3634,8 @@ Resources:
             TableName: !Ref MgmtPushDeviceTable
         - DynamoDBReadPolicy:
             TableName: !Ref RiderToursTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt PushSenderDlq.QueueName
         - Statement:
             - Effect: Allow
               Action:
@@ -3690,12 +3692,6 @@ Resources:
       Threshold: 1
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-        RiderHttpApi:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref RiderApi
-            Path: /v1/tours/{tourId}/notifications/{notificationId}
-            Method: PUT
 
   # ============================================================================
   # LAMBDA FUNCTIONS - CONFIG
