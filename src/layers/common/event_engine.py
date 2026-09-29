@@ -77,6 +77,7 @@ from validation import (
     validate_variant_options,
 )
 from logger import get_logger
+from notification_service import notify
 
 
 logger = get_logger(__name__)
@@ -236,6 +237,31 @@ def _effective_activity_enabled(occurrence: Dict[str, Any], activity: Dict[str, 
     return enabled
 
 
+def _is_activity_skipped_by_organizer(occurrence: Dict[str, Any], activity_id: str) -> bool:
+    for override in occurrence.get("activityOverrides", []) or []:
+        if override.get("activityId") == activity_id and override.get("skipped") is True:
+            return True
+    return False
+
+
+def _validate_notification_config(config: Dict[str, Any] | None) -> Dict[str, Any]:
+    if config is None:
+        return {}
+    if not isinstance(config, dict):
+        raise ValidationError("notificationConfig must be an object", {"field": "notificationConfig"})
+    validated = dict(config)
+    bool_fields = ("completionNotifyEnabled", "reminderEnabled")
+    for field in bool_fields:
+        if field in validated and not isinstance(validated[field], bool):
+            raise ValidationError(f"{field} must be boolean", {"field": f"notificationConfig.{field}"})
+    for field in ("completionRuleId", "reminderRuleId"):
+        if field in validated and validated[field] is not None and (
+            not isinstance(validated[field], str) or not validated[field].strip()
+        ):
+            raise ValidationError(f"{field} must be a non-empty string", {"field": f"notificationConfig.{field}"})
+    return validated
+
+
 def _load_user_assignment(tour_id: str, user_id: str) -> Optional[Dict[str, Any]]:
     return get_tour_item("User", tour_id, {"userId": user_id})
 
@@ -353,6 +379,7 @@ def create_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
         validate_allowed_type_codes(body.get("defaultAllowedTypeCodes"))
         _validate_allowed_type_codes_exist(body.get("defaultAllowedTypeCodes") or [])
         activities = _validate_activities(body["activities"])
+        notification_config = _validate_notification_config(body.get("notificationConfig"))
         for activity in activities:
             _validate_allowed_type_codes_exist(activity.allowedTypeCodes)
     except ValidationError as exc:
@@ -366,6 +393,7 @@ def create_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
         sequenceEnforced=bool(body["sequenceEnforced"]),
         defaultAllowedTypeCodes=body.get("defaultAllowedTypeCodes") or [],
         allowSelfService=bool(body.get("allowSelfService", False)),
+        notificationConfig=notification_config or None,
         activities=activities,
         updatedBy=get_claim(event, "sub"),
     ).to_dict()
@@ -418,6 +446,8 @@ def update_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
             for activity in activities:
                 _validate_allowed_type_codes_exist(activity.allowedTypeCodes)
             updated["activities"] = [activity.to_dict() for activity in activities]
+        if "notificationConfig" in body:
+            updated["notificationConfig"] = _validate_notification_config(body.get("notificationConfig")) or None
         for field in ("eventName", "location", "sequenceEnforced", "allowSelfService"):
             if field in body:
                 updated[field] = body[field]
@@ -597,6 +627,8 @@ def update_activity_override(event: Dict[str, Any]) -> Dict[str, Any]:
     try:
         validate_activity_id(activity_id)
         validate_allowed_type_codes(body.get("allowedTypeCodes"), "allowedTypeCodes")
+        if "skipped" in body and not isinstance(body.get("skipped"), bool):
+            raise ValidationError("skipped must be boolean", {"field": "skipped"})
         if body.get("allowedTypeCodes") is not None:
             _validate_allowed_type_codes_exist(body.get("allowedTypeCodes") or [])
     except ValidationError as exc:
@@ -615,13 +647,18 @@ def update_activity_override(event: Dict[str, Any]) -> Dict[str, Any]:
         matched = {"activityId": activity_id}
         overrides.append(matched)
 
-    for field in ("enabled", "selfServiceEnabled", "allowedTypeCodes", "note"):
+    for field in ("enabled", "selfServiceEnabled", "allowedTypeCodes", "note", "skipped"):
         if field in body:
             matched[field] = body.get(field)
     matched["updatedAt"] = utc_now_iso()
     matched["updatedBy"] = get_claim(event, "sub")
 
-    if matched.get("enabled") is None and matched.get("selfServiceEnabled") is None and matched.get("allowedTypeCodes") is None:
+    if (
+        matched.get("enabled") is None
+        and matched.get("selfServiceEnabled") is None
+        and matched.get("allowedTypeCodes") is None
+        and matched.get("skipped") is None
+    ):
         overrides = [override for override in overrides if override.get("activityId") != activity_id]
 
     occurrence["activityOverrides"] = overrides
@@ -717,6 +754,38 @@ def _count_outstanding_mandatory(tour_id: str, event_id: str, occurrence: Dict[s
     return outstanding
 
 
+def _completion_activity_ids(event_definition: Dict[str, Any], occurrence: Dict[str, Any]) -> List[str]:
+    required: List[str] = []
+    for activity in event_definition.get("activities", []) or []:
+        activity_id = activity.get("activityId")
+        if not activity_id:
+            continue
+        if not _effective_activity_enabled(occurrence, activity):
+            continue
+        if _is_activity_skipped_by_organizer(occurrence, activity_id):
+            continue
+        required.append(activity_id)
+    return required
+
+
+def _rider_event_completion_reached(
+    rider_id: str,
+    event_definition: Dict[str, Any],
+    occurrence: Dict[str, Any],
+    records: List[Dict[str, Any]],
+) -> bool:
+    required_ids = _completion_activity_ids(event_definition, occurrence)
+    if not required_ids:
+        return False
+    rider_completed = {
+        record.get("activityId")
+        for record in records
+        if record.get("riderId") == rider_id
+        and record.get("outcome") in {EventRecordOutcome.COMPLETED.value, EventRecordOutcome.OPTED_OUT.value}
+    }
+    return all(activity_id in rider_completed for activity_id in required_ids)
+
+
 def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     params = event.get("pathParameters") or {}
     tour_id = params.get("tourId")
@@ -795,6 +864,7 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         return error_response("VALIDATION_ERROR", "variantSelected is required and must match variantOptions.", status_code=400)
 
     records = _non_cancelled_records(_scan_records_for_occurrence(tour_id, occurrence_id))
+    completion_before = _rider_event_completion_reached(body["riderId"], event_definition, occurrence, records)
     for record in records:
         if record.get("riderId") == body["riderId"] and record.get("activityId") == body["activityId"]:
             return error_response("DUPLICATE_ACTIVITY_RECORD", "Activity already recorded for this rider.", status_code=409)
@@ -858,6 +928,28 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         )
     except ClientError:
         return internal_error_response("Failed to create activity record")
+
+    notification_config = event_definition.get("notificationConfig") or {}
+    completion_after = _rider_event_completion_reached(body["riderId"], event_definition, occurrence, records + [item])
+    if notification_config.get("completionNotifyEnabled") and not completion_before and completion_after:
+        try:
+            notify(
+                rule_id=notification_config.get("completionRuleId") or "EVENT_COMPLETED_BY_RIDER",
+                tour_id=tour_id,
+                context={
+                    "tourId": tour_id,
+                    "eventId": event_id,
+                    "eventName": event_definition.get("eventName"),
+                    "occurrenceId": occurrence_id,
+                    "riderId": body["riderId"],
+                    "activityId": body["activityId"],
+                    "timestamp": body["timestamp"],
+                },
+                audience_override=[f"TOUR#{tour_id}#RIDER#{body['riderId']}"],
+                actor=scanned_by,
+            )
+        except Exception as notify_exc:  # pragma: no cover - safeguard only
+            logger.warning("event completion notify trigger failed: %s", str(notify_exc))
     return success_response(item, status_code=201)
 
 

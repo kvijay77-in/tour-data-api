@@ -14,6 +14,7 @@ from response import success_response, not_found_response, bad_request_response,
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from dynamodb_utils import get_tour_item, put_tour_item
 from models import RideStatus, utc_now_iso
+from notification_service import notify
 from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
@@ -79,6 +80,12 @@ def lambda_handler(event, context):
         put_tour_item(table_type='Ride', tour_id=tour_id, item=ride)
         
         logger.info(f"Successfully closed ride: {ride_id}")
+        notify(
+            rule_id='RIDE_CLOSED',
+            tour_id=tour_id,
+            context={'rideId': ride_id, 'rideName': ride.get('name', '')},
+            actor=event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {}).get('sub'),
+        )
         return success_response(ride)
         
     except Exception as e:

@@ -43,6 +43,7 @@ from models import (
     is_cancelled_checkin_item,
     utc_now_iso,
 )
+from notification_service import notify
 from rbac import (
     Permission,
     get_user_pit_stop_stage_numbers,
@@ -462,6 +463,24 @@ def lambda_handler(event, context):
             tour_id=tour_id,
             item=checkin_item
         )
+
+        try:
+            notify(
+                rule_id='CHECKIN_CREATED',
+                tour_id=tour_id,
+                context={
+                    'tourId': tour_id,
+                    'riderId': rider_id,
+                    'rideId': ride_id,
+                    'stageNumber': stage_number,
+                    'checkInId': check_in_id,
+                    'status': checkin_response.get('status'),
+                    'timestamp': timestamp,
+                },
+                actor=checked_in_by,
+            )
+        except Exception as notify_exc:  # pragma: no cover - safeguard only
+            logger.warning('check-in notification trigger failed: %s', str(notify_exc))
         
         logger.info(f"Check-in created successfully: {check_in_id}")
         return success_response(checkin_response, status_code=201)

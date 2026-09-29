@@ -140,7 +140,6 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.PIT_STOP_MANAGE,
         Permission.USER_LIST,
         Permission.DASHBOARD,
-        Permission.NOTIFICATION_MANAGE,
         Permission.RIDER_EXIT,
         Permission.EVENT_OCCURRENCE_MANAGE,
         Permission.EVENT_SCAN,

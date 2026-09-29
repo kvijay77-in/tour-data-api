@@ -144,9 +144,18 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/disable` | Disable Cognito user | [Admin User Management](#admin-user-management) | [Example](#disable-managed-user) | ✅ | ❌ |
 | Admin UserMgmt | DELETE | `/v1/admin/usermgmt/users/{cognitoUserId}` | Delete Cognito user | [Admin User Management](#admin-user-management) | [Example](#delete-managed-user) | ✅ | ❌ |
 | Admin UserMgmt | PUT | `/v1/admin/usermgmt/users/{cognitoUserId}` | Update Cognito profile and roles | [Admin User Management](#admin-user-management) | [Example](#update-managed-user) | ✅ | ❌ |
-| Notifications | GET | `/v1/tours/{tourId}/notifications` | List notifications | [Notifications](#notifications) | [Example](#list-notifications) | ✅ | ✅ |
-| Notifications | POST | `/v1/tours/{tourId}/notifications` | Create notification | [Notifications](#notifications) | [Example](#create-notification) | ✅ | ✅ |
-| Notifications | PUT | `/v1/tours/{tourId}/notifications/{notificationId}` | Mark notification as read | [Notifications](#notifications) | [Example](#mark-notification-read) | ✅ | ✅ |
+| Notifications | POST | `/v1/notifications/devices` | Register/refresh current user device token | [Notifications](#notifications) | [Example](#register-device) | ✅ | ✅ |
+| Notifications | DELETE | `/v1/notifications/devices/{token}` | Delete current user device token | [Notifications](#notifications) | [Example](#delete-device) | ✅ | ✅ |
+| Notifications | GET | `/v1/notifications` | List inbox notifications | [Notifications](#notifications) | [Example](#list-notifications) | ✅ | ✅ |
+| Notifications | GET | `/v1/notifications/unread-count` | Get unread count | [Notifications](#notifications) | [Example](#get-unread-count) | ✅ | ✅ |
+| Notifications | PUT | `/v1/notifications/read` | Mark inbox as read up to timestamp | [Notifications](#notifications) | [Example](#mark-notifications-read) | ✅ | ✅ |
+| Notifications | POST | `/v1/notifications` | Trigger manual announcement via rule | [Notifications](#notifications) | [Example](#create-notification) | ✅ | ❌ |
+| Notifications | POST | `/v1/notifications/reminders` | Trigger reminder to riders who have not started ride/event check-in | [Notifications](#notifications) | [Example](#send-check-in-reminder) | ✅ | ❌ |
+| Notifications | GET | `/v1/admin/notification-rules` | List notification rules | [Notifications](#notifications) | [Example](#list-notification-rules) | ✅ | ❌ |
+| Notifications | GET | `/v1/admin/notification-rules/{ruleId}` | Get notification rule | [Notifications](#notifications) | [Example](#get-notification-rule) | ✅ | ❌ |
+| Notifications | POST | `/v1/admin/notification-rules` | Create notification rule | [Notifications](#notifications) | [Example](#create-notification-rule) | ✅ | ❌ |
+| Notifications | PUT | `/v1/admin/notification-rules/{ruleId}` | Update notification rule | [Notifications](#notifications) | [Example](#update-notification-rule) | ✅ | ❌ |
+| Notifications | DELETE | `/v1/admin/notification-rules/{ruleId}` | Delete notification rule | [Notifications](#notifications) | [Example](#delete-notification-rule) | ✅ | ❌ |
 
 ### Request Contract Tables
 
@@ -198,13 +207,13 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 |---|---|---|---|---|
 | `GET /v1/tours/{tourId}/events` | `tourId` (required) | None | None | Requires `READ`; returns all event definitions for the tour |
 | `GET /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | None | Requires `READ`; `eventId` format `EVT-...`; returns `404 EVENT_NOT_FOUND` when absent |
-| `POST /v1/tours/{tourId}/events` | `tourId` (required) | None | Required: `eventId, eventName, eventType, location, sequenceEnforced, defaultAllowedTypeCodes, activities`; Optional: `allowSelfService` (default `false`) | Requires `EVENT_MANAGE`; `eventType` in `SINGLE, REPEATING`; each activity requires `activityId, name, sequenceNo` (optional `enabled, mandatory, allowedTypeCodes, allowOptOut, prerequisiteActivityIds, restrictToAssignedUsers, variantOptions, notes`); validates event/activity IDs, allowed type codes (must be enabled `ID_CODE_TYPE` config), and ascending `sequenceNo`; duplicate event IDs rejected |
+| `POST /v1/tours/{tourId}/events` | `tourId` (required) | None | Required: `eventId, eventName, eventType, location, sequenceEnforced, defaultAllowedTypeCodes, activities`; Optional: `allowSelfService` (default `false`), `notificationConfig` | Requires `EVENT_MANAGE`; `eventType` in `SINGLE, REPEATING`; each activity requires `activityId, name, sequenceNo` (optional `enabled, mandatory, allowedTypeCodes, allowOptOut, prerequisiteActivityIds, restrictToAssignedUsers, variantOptions, notes`); validates event/activity IDs, allowed type codes (must be enabled `ID_CODE_TYPE` config), and ascending `sequenceNo`; duplicate event IDs rejected |
 | `PUT /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | Optional: `eventName, eventType, location, sequenceEnforced, allowSelfService, defaultAllowedTypeCodes, activities` | Requires `EVENT_MANAGE`; same event/activity validations as create for supplied fields |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | `date` (optional), `status` (optional) | None | Requires `READ`; lists occurrences for the event, filterable by date and status |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; `occurrenceId` format `EVT-...#YYYY-MM-DD#seq` |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | None | Required: `date, seq`; Optional: `selfServiceEnabled, linkedOccurrenceRef` | Requires `EVENT_OCCURRENCE_MANAGE`; duplicate occurrence rejected; `activityOverrides` cannot be set on create — use the activity-overrides endpoint below after the occurrence exists |
 | `PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | Optional: `selfServiceEnabled, linkedOccurrenceRef` only | Requires `EVENT_OCCURRENCE_MANAGE`; rejects with `409 OCCURRENCE_CLOSED` when the occurrence is `COMPLETED`/`CANCELLED`; does not accept `date`, `seq`, or `activityOverrides` |
-| `GET/PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | `tourId, eventId, occurrenceId` (required) | None | For PUT: `activityId` (required); Optional: `enabled, selfServiceEnabled, allowedTypeCodes, note` | GET requires `READ`; PUT is a single-activity upsert (not a full-list replace) requiring `EVENT_OCCURRENCE_MANAGE`; omitting all optional fields removes the override entry |
+| `GET/PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | `tourId, eventId, occurrenceId` (required) | None | For PUT: `activityId` (required); Optional: `enabled, selfServiceEnabled, skipped, allowedTypeCodes, note` | GET requires `READ`; PUT is a single-activity upsert (not a full-list replace) requiring `EVENT_OCCURRENCE_MANAGE`; omitting all optional fields removes the override entry |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `ACTIVE`; `startedAt` is always server-set, no client override |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `COMPLETED`; `completedAt` is always server-set, no client override |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` | `tourId, eventId, occurrenceId` (required) | None | Optional: `cancelReason` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `CANCELLED`; `cancelledAt` is always server-set, no client override |
@@ -298,9 +307,18 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `GET /v1/tours/{tourId}/notifications` | `tourId` (required) | `type` (optional), `riderId` (optional) | None | `tourId` format; `type` in `TOUR_ANNOUNCEMENT, RIDE_UPDATE, SAFETY_ALERT, PERSONAL_MESSAGE, CHECKIN_REMINDER, REGISTRATION_STATUS`; without `riderId` returns broadcast only |
-| `POST /v1/tours/{tourId}/notifications` | `tourId` (required) | None | Required: `type, title, message`; Optional: `targetRiderId, expiresAt` | `type` enum validation; requires `NOTIFICATION_MANAGE` |
-| `PUT /v1/tours/{tourId}/notifications/{notificationId}` | `tourId, notificationId` (required) | None | Required: `profileId` | `notificationId` must exist in tour notification table; idempotent read-marking |
+| `POST /v1/notifications/devices` | None | None | Required: `token, platform` | `platform` in `ios,android`; identity from JWT claims only; idempotent upsert; if token exists under a different user it is moved |
+| `DELETE /v1/notifications/devices/{token}` | `token` (required) | None | None | Deletes only current user's token; always returns `204` |
+| `GET /v1/notifications` | None | `since` (optional ISO), `limit` (optional) | None | Merges audiences derived from JWT identity and tour context; returns `{items, unreadCount}` with `isRead` from per-user state row |
+| `GET /v1/notifications/unread-count` | None | None | None | Returns current unread count based on `lastReadAt` state |
+| `PUT /v1/notifications/read` | None | None | Optional: `readAt` | Upserts `STATE#<profileId|sub>/STATE` item; defaults `readAt` to now |
+| `POST /v1/notifications` | None | None | Required: `ruleId`; Optional: `tourId, context, audiences` | TourDataApi only, requires `NOTIFICATION_MANAGE`; invokes notification framework |
+| `POST /v1/notifications/reminders` | None | None | Required: `reminderType, tourId`; For ride reminder: `rideId`; For event reminder: `eventId, occurrenceId`; Optional: `ruleId` | TourDataApi only, requires `NOTIFICATION_MANAGE`; event reminders execute only when event definition allows reminders |
+| `GET /v1/admin/notification-rules` | None | None | None | TourDataApi only, requires `NOTIFICATION_MANAGE` |
+| `GET /v1/admin/notification-rules/{ruleId}` | `ruleId` (required) | None | None | TourDataApi only, requires `NOTIFICATION_MANAGE` |
+| `POST /v1/admin/notification-rules` | None | None | Rule object | TourDataApi only, requires `NOTIFICATION_MANAGE`; validates enums/audiences/templates and sets `version=1` by default |
+| `PUT /v1/admin/notification-rules/{ruleId}` | `ruleId` (required) | None | Rule object | TourDataApi only, requires `NOTIFICATION_MANAGE`; strict validation; increments `version` |
+| `DELETE /v1/admin/notification-rules/{ruleId}` | `ruleId` (required) | None | None | TourDataApi only, requires `NOTIFICATION_MANAGE` |
 
 ### API Examples
 
@@ -2736,84 +2754,196 @@ Response `200 OK`:
 
 #### Notifications Examples
 
-##### List Notifications
+##### Register Device
 
 ```http
-GET /v1/tours/TOT-2026/notifications?riderId=R57
-```
+POST /v1/notifications/devices
+Content-Type: application/json
 
-Response `200 OK` (newest first). With `riderId`, the list has broadcasts plus that rider's personal notifications; without it, only broadcasts:
-```json
 {
-  "notifications": [
-    {
-      "notificationId": "b3e1c2d4-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
-      "type": "TOUR_ANNOUNCEMENT",
-      "title": "Route Change",
-      "message": "Tomorrow's ride route has been updated due to road construction.",
-      "createdBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-      "readBy": ["3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f"],
-      "createdAt": "2026-02-10T16:00:00Z",
-      "targetRiderId": "R57",
-      "expiresAt": "2026-02-20T00:00:00Z"
-    },
-    {
-      "notificationId": "e7a9c1b3-2d4f-4e6a-8b0c-1d2e3f4a5b6c",
-      "type": "TOUR_ANNOUNCEMENT",
-      "title": "Welcome to Tour of Tamilnadu 2026",
-      "message": "Rider briefing at 18:00 in the hotel lobby.",
-      "createdBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-      "readBy": [],
-      "createdAt": "2026-02-09T18:30:00Z"
-    }
-  ],
-  "count": 2,
-  "tourId": "TOT-2026"
-}
-```
-
-##### Create Notification
-
-```http
-POST /v1/tours/TOT-2026/notifications
-```
-```json
-{
-  "type": "TOUR_ANNOUNCEMENT",
-  "title": "Route Change",
-  "message": "Tomorrow's ride route has been updated due to road construction.",
-  "targetRiderId": "R57",
-  "expiresAt": "2026-02-20T00:00:00Z"
+  "token": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  "platform": "android"
 }
 ```
 
 Response `201 Created`:
 ```json
 {
-  "notificationId": "b3e1c2d4-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
-  "type": "TOUR_ANNOUNCEMENT",
-  "title": "Route Change",
-  "message": "Tomorrow's ride route has been updated due to road construction.",
-  "createdBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-  "readBy": [],
-  "createdAt": "2026-02-10T16:00:00Z",
-  "targetRiderId": "R57",
-  "expiresAt": "2026-02-20T00:00:00Z"
+  "registered": true
 }
 ```
 
-##### Mark Notification Read
+##### Delete Device
 
 ```http
-PUT /v1/tours/TOT-2026/notifications/b3e1c2d4-5f6a-4b7c-8d9e-0f1a2b3c4d5e
+DELETE /v1/notifications/devices/ExponentPushToken%5Bxxxxxxxxxxxxxxxxxxxxxx%5D
 ```
+
+Response `204 No Content`.
+
+##### List Notifications
+
+```http
+GET /v1/notifications?since=2026-02-11T00:00:00Z&limit=20
+```
+
+Response `200 OK`:
 ```json
 {
-  "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f"
+  "items": [
+    {
+      "notificationId": "b3e1c2d4-5f6a-4b7c-8d9e-0f1a2b3c4d5e",
+      "ruleId": "RIDE_STARTED",
+      "title": "Ride has started",
+      "body": "Please proceed to stage 1",
+      "priority": "URGENT",
+      "target": {"screen": "RideStatus", "paramKeys": ["tourId", "rideId"]},
+      "tourId": "TOT-2026",
+      "createdAt": "2026-02-11T05:10:00Z",
+      "isRead": false
+    }
+  ],
+  "unreadCount": 3
 }
 ```
 
-Response `200 OK`: the notification with `profileId` added to `readBy` (idempotent), the same as the first item in [List Notifications](#list-notifications).
+##### Get Unread Count
+
+```http
+GET /v1/notifications/unread-count
+```
+
+Response `200 OK`:
+```json
+{
+  "unreadCount": 3
+}
+```
+
+##### Mark Notifications Read
+
+```http
+PUT /v1/notifications/read
+Content-Type: application/json
+
+{
+  "readAt": "2026-02-11T06:00:00Z"
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "readAt": "2026-02-11T06:00:00Z"
+}
+```
+
+##### Create Notification (Manual announce)
+
+```http
+POST /v1/notifications
+Content-Type: application/json
+
+{
+  "ruleId": "ANNOUNCEMENT",
+  "tourId": "TOT-2026",
+  "context": {
+    "title": "Dinner update",
+    "message": "Dinner timing changed to 8:00 PM"
+  },
+  "audiences": ["TOUR#TOT-2026#ALL"]
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "notificationId": "4a89d8f1-42d8-4db1-b5e1-e1c28630a011"
+}
+```
+
+##### Send Check-in Reminder
+
+```http
+POST /v1/notifications/reminders
+Content-Type: application/json
+
+{
+  "reminderType": "RIDE_CHECKIN_NOT_STARTED",
+  "tourId": "TOT-2026",
+  "rideId": "RIDE-001"
+}
+```
+
+Response `200 OK`:
+```json
+{
+  "notificationId": "4a89d8f1-42d8-4db1-b5e1-e1c28630a011",
+  "targetCount": 12,
+  "riderIds": ["R2", "R4"]
+}
+```
+
+##### List Notification Rules
+
+```http
+GET /v1/admin/notification-rules
+```
+
+##### Get Notification Rule
+
+```http
+GET /v1/admin/notification-rules/ANNOUNCEMENT
+```
+
+##### Create Notification Rule
+
+```http
+POST /v1/admin/notification-rules
+Content-Type: application/json
+
+{
+  "ruleId": "PIT_STOP_OPENED",
+  "enabled": true,
+  "category": "SYSTEM",
+  "audiences": ["TOUR#{tourId}#ALL"],
+  "titleTemplate": "Pit stop {stageLabel} is open",
+  "messageTemplate": "Proceed to {location}",
+  "push": true,
+  "priority": "NORMAL",
+  "androidChannel": "general",
+  "target": {"screen": "RideStatus", "paramKeys": ["tourId", "rideId", "stageNumber"]},
+  "ttlHours": 48,
+  "allowOverride": false
+}
+```
+
+##### Update Notification Rule
+
+```http
+PUT /v1/admin/notification-rules/PIT_STOP_OPENED
+Content-Type: application/json
+
+{
+  "enabled": true,
+  "category": "SYSTEM",
+  "audiences": ["TOUR#{tourId}#ALL"],
+  "titleTemplate": "Pit stop {stageLabel} is now open",
+  "messageTemplate": "Proceed to {location}",
+  "push": true,
+  "priority": "NORMAL",
+  "androidChannel": "general",
+  "target": {"screen": "RideStatus", "paramKeys": ["tourId", "rideId", "stageNumber"]},
+  "ttlHours": 48,
+  "allowOverride": false
+}
+```
+
+##### Delete Notification Rule
+
+```http
+DELETE /v1/admin/notification-rules/PIT_STOP_OPENED
+```
 
 ## Event Engine & Hotel Error Codes
 
@@ -2887,13 +3017,16 @@ In addition to the standard `400`/`401`/`403`/`404`/`409`/`500` statuses above, 
 | POST/PUT hotels and hotel stays | ✅ | ✅ | ❌ | ❌ | ❌ |
 | POST/PUT tour users | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Manual check-in | ✅ | ✅ | ❌ | ❌ | ❌ |
-| POST notification (create) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| POST /v1/notifications (announce) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| POST /v1/notifications/reminders | ✅ | ❌ | ❌ | ❌ | ❌ |
 | POST riders/profile (create) | Any authenticated user | | | | |
 | POST tours/{tourId}/riders (register) | Any authenticated user | | | | |
 | GET rider statistics | Any authenticated user | | | | |
 | POST profile picture | Any authenticated user | | | | |
-| GET notifications | Any authenticated user | | | | |
-| PUT notification (mark read) | Any authenticated user | | | | |
+| GET /v1/notifications + unread-count | Any authenticated user | | | | |
+| PUT /v1/notifications/read | Any authenticated user | | | | |
+| Device register/delete | Any authenticated user | | | | |
+| /v1/admin/notification-rules CRUD | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ## Request Validation
 
@@ -2915,6 +3048,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
   - `EVENT_SCAN`: create/cancel event activity records
   - `HOTEL_ALLOC_MANAGE`: manage hotels and room allocations
   - `USER_MANAGE`: create/update tour-scoped user assignments
+  - `NOTIFICATION_MANAGE`: create announcements and manage notification rules
 
 ### Pit Stop Role Rules
 

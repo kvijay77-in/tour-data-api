@@ -26,6 +26,7 @@ from response import (
 )
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from models import CheckInStatus, utc_now_iso
+from notification_service import notify
 from dynamodb_utils import get_tour_item, update_tour_item
 from rbac import Permission, require_permission
 
@@ -102,6 +103,24 @@ def lambda_handler(event, context):
             ,
             expression_names={'#status': 'status'}
         )
+
+        try:
+            notify(
+                rule_id='CHECKIN_CANCELLED',
+                tour_id=tour_id,
+                context={
+                    'tourId': tour_id,
+                    'riderId': existing.get('riderId'),
+                    'rideId': ride_id,
+                    'stageNumber': existing.get('stageNumber'),
+                    'checkInId': checkin_id,
+                    'status': CheckInStatus.CANCELLED.value,
+                    'cancelledAt': cancelled_at,
+                },
+                actor=cancelled_by,
+            )
+        except Exception as notify_exc:  # pragma: no cover - safeguard only
+            logger.warning('cancel check-in notification trigger failed: %s', str(notify_exc))
 
         return success_response(updated)
 

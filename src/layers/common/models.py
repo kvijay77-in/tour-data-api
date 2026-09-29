@@ -187,6 +187,7 @@ TOUR_TABLE_TYPES = [
     'CheckIn',
     'User',
     'Notification',
+    'NotificationArchive',
     'Artifacts',
     'Event',
     'EventOccurrence',
@@ -562,6 +563,7 @@ class EventDefinition:
     sequenceEnforced: bool
     defaultAllowedTypeCodes: List[str]
     allowSelfService: bool = False
+    notificationConfig: Optional[Dict[str, Any]] = None
     activities: List[ActivityDefinition] = field(default_factory=list)
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)
@@ -580,6 +582,7 @@ class ActivityOverride:
     activityId: str
     enabled: Optional[bool] = None
     selfServiceEnabled: Optional[bool] = None
+    skipped: Optional[bool] = None
     allowedTypeCodes: Optional[List[str]] = None
     note: Optional[str] = None
     updatedAt: Optional[str] = None

@@ -344,7 +344,6 @@ def test_event_read_endpoints_require_read_permission(event_engine_setup):
         ),
         None,
     )
-
     for response in (
         list_events_handler(_event([], {'tourId': MOCK_TOUR_ID}), None),
         get_event_handler(_event([], {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-READ'}), None),

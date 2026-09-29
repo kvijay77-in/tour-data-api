@@ -8,7 +8,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 # Runtime-tunable config: seeded once, never overwritten by later deploys.
-INSERT_ONLY_CONFIG_TYPES = {'HOTEL_UPLOAD', 'RIDER_PROFILE_SECTION', 'RIDER_PROFILE_ATTRIBUTE', 'LOV'}
+INSERT_ONLY_CONFIG_TYPES = {'HOTEL_UPLOAD', 'NOTIFICATION', 'RIDER_PROFILE_SECTION', 'RIDER_PROFILE_ATTRIBUTE', 'LOV'}
 FORCE_OVERWRITE_PROFILE_CONFIG_TYPES = {'RIDER_PROFILE_SECTION', 'RIDER_PROFILE_ATTRIBUTE', 'LOV'}
 
 
@@ -306,6 +306,20 @@ def build_seed_items(updated_by):
         items.append({'configType': 'ARTIFACTS', 'configId': artifact_id, 'enabled': True, 'description': description, 'version': 1, 'updatedAt': now, 'updatedBy': updated_by, 'config': {'category': category}})
 
     items.append({'configType': 'HOTEL_UPLOAD', 'configId': 'PROCESSING', 'enabled': True, 'description': 'Hotel allocation CSV processing limits', 'version': 1, 'updatedAt': now, 'updatedBy': updated_by, 'config': {'maxFileSizeBytes': 1048576, 'maxDataRows': 500, 'maxStayDates': 31, 'maxStoredErrors': 200, 'timeReserveSeconds': 20}})
+    items.append({
+        'configType': 'NOTIFICATION',
+        'configId': 'LIMITS',
+        'enabled': True,
+        'description': 'Notification template and archival limits',
+        'version': 1,
+        'updatedAt': now,
+        'updatedBy': updated_by,
+        'config': {
+            'maxTitleLength': 120,
+            'maxMessageLength': 500,
+            'archiveAfterReadHours': 48,
+        },
+    })
 
     country_items = [
         {'value': 'IN', 'label': 'India', 'order': 1, 'enabled': True, 'meta': {'callingCode': '91'}},

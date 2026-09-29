@@ -15,6 +15,8 @@ This page provides a guide to all project documentation.
 | [API Guide](api-guide.md) | API endpoints, mandatory attributes, validation rules, request/response examples for every endpoint, status codes, and authorization matrix |
 | [Requirements](Requirements.md) | Detailed functional and non-functional requirements, use cases, and business rules |
 | [Solution Design](SolutionDesign.md) | Architecture documentation, data model specifications, and technical design |
+| [Notification Framework Design](notification-framework-design.md) | Notification architecture, audience routing, APIs, push sender, and rule model |
+| [Notification Framework Handoff (Mgmt App)](notification-framework-mgmt-app-handoff.md) | Implemented backend changes and required `tour-mgmt-app` follow-up work |
 | [Tour Artifacts Design](tour-artifacts-handling-design.md) | Tour and ride artifact management design — S3 storage, metadata model, read/write APIs |
 | [Cycling Tour Events – Change Requirement](cycling-tour-events.md) | Frozen change requirement for the generic events engine (Day 0 Registration, baggage handling, hotel logistics) |
 | [Cycling Tour Events – Backend Design](cycling-tour-events-design.md) | Authoritative backend design: data model, API contracts, RBAC, provisioning |
@@ -43,6 +45,7 @@ This page provides a guide to all project documentation.
 - **GitHub OIDC setup**: [Deployment Guide → One-Time Setup](deployment-guide.md#one-time-setup-github-oidc)
 - **Deploy via GitHub Actions**: [Deployment Guide → Deploying via GitHub Actions](deployment-guide.md#deploying-via-github-actions)
 - **Deploy test/prod from terminal**: [Deployment Guide → Deploying from Terminal](deployment-guide.md#deploying-from-terminal)
+- **Notification push bootstrap**: [Deployment Guide → After Deployment: Notification Push Setup](deployment-guide.md#after-deployment-notification-push-setup)
 - **Environments**: [Deployment Guide → Environments Explained](deployment-guide.md#environments-explained)
 - **AWS resources inventory**: [Deployment Guide → AWS Resources Reference](deployment-guide.md#aws-resources-reference)
 
