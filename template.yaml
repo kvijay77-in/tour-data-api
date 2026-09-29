@@ -104,12 +104,12 @@ Parameters:
   ExpoTokenParamRider:
     Type: String
     Description: SSM parameter path for Expo rider app token
-    Default: !Sub '/${AWS::StackName}/push/expo-token/rider'
+    Default: '/dev/push/expo-token/rider'
 
   ExpoTokenParamMgmt:
     Type: String
     Description: SSM parameter path for Expo management app token
-    Default: !Sub '/${AWS::StackName}/push/expo-token/mgmt'
+    Default: '/dev/push/expo-token/mgmt'
   
 
 
