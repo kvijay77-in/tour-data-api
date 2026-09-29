@@ -134,6 +134,8 @@ All tables use PAY_PER_REQUEST, SSE enabled, and standard deployment tags includ
 
 Legacy `readBy` and old `TypeCreatedAtIndex` are removed.
 
+The API Gateway still declares the previous `/v1/tours/{tourId}/notifications` handlers. Those handlers depend on the removed `notificationId` key, `readBy` field, and `TypeCreatedAtIndex`; they are incompatible with the current provisioned table and are not supported for client integrations. Use the notification-framework endpoints in the [API reference](api-reference.md#notifications).
+
 ### 3.3 RiderTours index
 
 `RiderTours` adds GSI `TourStatusIndex`:

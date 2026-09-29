@@ -1,6 +1,7 @@
 # Dashboard API Optimization Proposal
+_Last updated: 2026-09-29_
 
-[← Back to README](../README.md)
+> Historical / Implemented – kept for reference. Current source of truth: [Dashboard API design](../design/dashboard-api.md) and the [API reference](../design/api-reference.md#check-ins).
 
 ## Purpose
 This document requests backend API optimization for Dashboard workflows only. The goal is to reduce payload size, improve refresh latency, and remove unnecessary coupling between Dashboard refresh and full ride/rider datasets.
@@ -16,7 +17,7 @@ In scope:
 Out of scope:
 - Non-dashboard modules
 - Backend data model redesign beyond Dashboard endpoints
-- Persistent offline rider-profile cache (future enhancement only)
+- Persistent local caching of rider profile details is out of scope.
 
 ## Current Problem Summary
 Observed inefficiencies in current Dashboard flow:

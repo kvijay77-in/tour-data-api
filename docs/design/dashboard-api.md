@@ -13,6 +13,8 @@ All three endpoints require the `DASHBOARD` permission. Their response fields, a
 
 The progress endpoint is deliberately separate from full dashboard loading to reduce repeated payload transfer and avoid coupling each refresh to rider profile data. Rider details are fetched only when a user requests them. The backend does not require or define persistent client-side caching of rider details.
 
+All three ride-dashboard GET endpoints return an `ETag` and accept `If-None-Match`; a matching tag returns `304 Not Modified` with an empty body. Clients can use this conditional-request behavior to reduce repeated response transfer without treating cached data as authoritative.
+
 ## Event dashboard
 
 Event occurrence dashboards have their own full and progress endpoints. They use the same separation between initial data and lightweight progress refresh. Their contracts are documented under [Events in the API reference](api-reference.md#events).

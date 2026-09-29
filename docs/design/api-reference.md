@@ -81,6 +81,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/exit/cancel` | Cancel rider exit and restore previous status | [Riders](#riders) | [Example](#cancel-rider-exit) | ✅ | ❌ |
 | Riders | POST | `/v1/tours/{tourId}/riders/{riderId}/baggage/release` | Mark retained baggage as released back to the rider | [Riders](#riders) | [Example](#release-rider-baggage) | ✅ | ❌ |
 | Riders | GET | `/v1/tours/{tourId}/riders/{riderId}/statistics` | Get rider statistics | [Riders](#riders) | [Example](#get-rider-statistics) | ✅ | ❌ |
+| Rider profile files | POST | `/v1/riders/profile/{profileId}/attributes/{key}/upload` | Generate a configured profile-attribute upload URL | [Attribute upload/download](#attribute-uploaddownload-apis) | — | ✅ | ✅ |
+| Rider profile files | GET | `/v1/riders/profile/{profileId}/attributes/{key}/download` | Generate a configured profile-attribute download URL | [Attribute upload/download](#attribute-uploaddownload-apis) | — | ✅ | ✅ |
 | Artifacts | POST | `/v1/artifacts/tour/presign-upload` | Generate presigned upload URL for a tour artifact | [Artifacts](#artifacts) | [Example](#presign-tour-artifact-upload) | ✅ | ❌ |
 | Artifacts | POST | `/v1/artifacts/ride/presign-upload` | Generate presigned upload URL for a ride artifact | [Artifacts](#artifacts) | [Example](#presign-ride-artifact-upload) | ✅ | ❌ |
 | Artifacts | DELETE | `/v1/artifacts/tour/{tourId}/{artifactId}` | Delete a tour artifact | [Artifacts](#artifacts) | [Example](#delete-tour-artifact) | ✅ | ❌ |
@@ -147,18 +149,23 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Admin UserMgmt | POST | `/v1/admin/usermgmt/users/{cognitoUserId}/disable` | Disable Cognito user | [Admin User Management](#admin-user-management) | [Example](#disable-managed-user) | ✅ | ❌ |
 | Admin UserMgmt | DELETE | `/v1/admin/usermgmt/users/{cognitoUserId}` | Delete Cognito user | [Admin User Management](#admin-user-management) | [Example](#delete-managed-user) | ✅ | ❌ |
 | Admin UserMgmt | PUT | `/v1/admin/usermgmt/users/{cognitoUserId}` | Update Cognito profile and roles | [Admin User Management](#admin-user-management) | [Example](#update-managed-user) | ✅ | ❌ |
+| Admin Profile Config | GET | `/v1/admin/config/{configType}` | List rider profile configuration entries | [Admin profile-config APIs](#admin-profile-config-apis-tourdataapi-administrator) | — | ✅ | ❌ |
+| Admin Profile Config | PUT | `/v1/admin/config/{configType}/{configId}` | Create or update a rider profile configuration entry | [Admin profile-config APIs](#admin-profile-config-apis-tourdataapi-administrator) | — | ✅ | ❌ |
 | Notifications | POST | `/v1/notifications/devices` | Register/refresh current user device token | [Notifications](#notifications) | [Example](#register-device) | ✅ | ✅ |
 | Notifications | DELETE | `/v1/notifications/devices/{token}` | Delete current user device token | [Notifications](#notifications) | [Example](#delete-device) | ✅ | ✅ |
 | Notifications | GET | `/v1/notifications` | List inbox notifications | [Notifications](#notifications) | [Example](#list-notifications) | ✅ | ✅ |
 | Notifications | GET | `/v1/notifications/unread-count` | Get unread count | [Notifications](#notifications) | [Example](#get-unread-count) | ✅ | ✅ |
 | Notifications | PUT | `/v1/notifications/read` | Mark inbox as read up to timestamp | [Notifications](#notifications) | [Example](#mark-notifications-read) | ✅ | ✅ |
-| Notifications | POST | `/v1/notifications` | Trigger manual announcement via rule | [Notifications](#notifications) | [Example](#create-notification) | ✅ | ❌ |
+| Notifications | POST | `/v1/notifications` | Trigger manual announcement via rule | [Notifications](#notifications) | [Example](#create-notification-manual-announce) | ✅ | ❌ |
 | Notifications | POST | `/v1/notifications/reminders` | Trigger reminder to riders who have not started ride/event check-in | [Notifications](#notifications) | [Example](#send-check-in-reminder) | ✅ | ❌ |
 | Notifications | GET | `/v1/admin/notification-rules` | List notification rules | [Notifications](#notifications) | [Example](#list-notification-rules) | ✅ | ❌ |
 | Notifications | GET | `/v1/admin/notification-rules/{ruleId}` | Get notification rule | [Notifications](#notifications) | [Example](#get-notification-rule) | ✅ | ❌ |
 | Notifications | POST | `/v1/admin/notification-rules` | Create notification rule | [Notifications](#notifications) | [Example](#create-notification-rule) | ✅ | ❌ |
 | Notifications | PUT | `/v1/admin/notification-rules/{ruleId}` | Update notification rule | [Notifications](#notifications) | [Example](#update-notification-rule) | ✅ | ❌ |
 | Notifications | DELETE | `/v1/admin/notification-rules/{ruleId}` | Delete notification rule | [Notifications](#notifications) | [Example](#delete-notification-rule) | ✅ | ❌ |
+| Notifications (legacy) | GET | `/v1/tours/{tourId}/notifications` | Legacy per-tour notification list; unsupported by the current table schema | [Notifications](#notifications) | — | ✅ | ✅ |
+| Notifications (legacy) | POST | `/v1/tours/{tourId}/notifications` | Legacy per-tour notification creation; unsupported by the current table schema | [Notifications](#notifications) | — | ✅ | ✅ |
+| Notifications (legacy) | PUT | `/v1/tours/{tourId}/notifications/{notificationId}` | Legacy per-tour read-state update; unsupported by the current table schema | [Notifications](#notifications) | — | ✅ | ❌ |
 
 ### Request Contract Tables
 
@@ -322,6 +329,9 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 | `POST /v1/admin/notification-rules` | None | None | Rule object | TourDataApi only, requires `NOTIFICATION_MANAGE`; validates enums/audiences/templates and sets `version=1` by default |
 | `PUT /v1/admin/notification-rules/{ruleId}` | `ruleId` (required) | None | Rule object | TourDataApi only, requires `NOTIFICATION_MANAGE`; strict validation; increments `version` |
 | `DELETE /v1/admin/notification-rules/{ruleId}` | `ruleId` (required) | None | None | TourDataApi only, requires `NOTIFICATION_MANAGE` |
+| `GET /v1/tours/{tourId}/notifications` (legacy; unsupported) | `tourId` (required) | `type` (optional), `riderId` (optional) | None | Present on TourDataApi and RiderApi; handler accepts the `NotificationType` enum and would list broadcast notifications unless a rider is specified. It queries the retired `TypeCreatedAtIndex` when `type` is supplied; see the schema warning below. |
+| `POST /v1/tours/{tourId}/notifications` (legacy; unsupported) | `tourId` (required) | None | Required: `type, title, message`; Optional: `targetRiderId, expiresAt` | Present on TourDataApi and RiderApi; requires `NOTIFICATION_MANAGE`; handler writes the legacy `notificationId/readBy` record shape, which is not supported by the current table schema. |
+| `PUT /v1/tours/{tourId}/notifications/{notificationId}` (legacy; unsupported) | `tourId, notificationId` (required) | None | Required: `profileId` | TourDataApi only; handler marks `profileId` in legacy `readBy` state. The current table key does not match this handler's lookup. |
 
 ### API Examples
 
@@ -3113,7 +3123,12 @@ Clients **must use** `data.definitionsVersion` from the server response and **mu
 
 ### Admin profile-config APIs (TourDataApi, `ADMINISTRATOR`)
 
+Both routes require the `ADMINISTRATOR` group. `configType` is case-insensitive and must be `RIDER_PROFILE_ATTRIBUTE`, `RIDER_PROFILE_SECTION`, or `LOV`.
+
 #### `GET /v1/admin/config/{configType}`
+
+Returns the entries for that type, sorted by `configId`, with `items`, `count`, and normalized `configType`.
+
 ```json
 {
   "success": true,
@@ -3139,6 +3154,9 @@ Clients **must use** `data.definitionsVersion` from the server response and **mu
 ```
 
 #### `PUT /v1/admin/config/{configType}/{configId}`
+
+The JSON object requires `version`; `enabled` (default `true`), `description` (default empty), and `config` are optional. New entries start at version 1. Updates must submit the currently stored version; stale versions return `409 CONFIG_VERSION_CONFLICT`. Entry validation depends on the configuration type.
+
 ```json
 {
   "version": 3,
@@ -3196,17 +3214,35 @@ Notes:
 - Required attributes are validated on the final merged profile.
 
 ### Attribute upload/download APIs
-- `POST /v1/riders/profile/{profileId}/attributes/{key}/upload`
-- `GET /v1/riders/profile/{profileId}/attributes/{key}/download`
 
-Example upload response:
+Both routes require an existing profile and an enabled profile attribute configured as `FILE` or `IMAGE` with `storage.scope=ATTRIBUTES`. The upload request body requires `contentType` and integer `sizeBytes`; configured `allowedMimeTypes` and `maxFileSizeBytes` are enforced. The upload handler enforces profile ownership for RiderApi calls; TourDataApi calls require authentication but have no additional role check in this handler.
+
+The upload URL is valid for 300 seconds and requires the uploaded object to use the requested `Content-Type`:
+
 ```json
 {
   "success": true,
   "data": {
     "uploadUrl": "https://...",
     "s3Key": "riders/P123/attributes/insuranceCard/7db8....pdf",
-    "expiresIn": 900
+    "expiresIn": 300,
+    "profileId": "P123",
+    "attributeKey": "insuranceCard"
+  }
+}
+```
+
+The download route takes no query parameters or request body. RiderApi requests are restricted to the profile owner (or an administrator); TourDataApi requests are subject to management visibility checks: sensitive attributes require `ADMINISTRATOR` or `SUPER_USER`, and attributes not visible to all management users are restricted to those elevated roles. Its presigned URL also expires after 300 seconds:
+
+```json
+{
+  "success": true,
+  "data": {
+    "downloadUrl": "https://...",
+    "s3Key": "riders/P123/attributes/insuranceCard/7db8....pdf",
+    "expiresIn": 300,
+    "profileId": "P123",
+    "attributeKey": "insuranceCard"
   }
 }
 ```
@@ -3221,5 +3257,5 @@ Example upload response:
 - `PROFILE_ACCESS_DENIED`
 
 Attribute file routes are exposed on both APIs:
-- RiderApi: owner access
-- TourDataApi: management access subject to role/visibility filtering (and ownership when RiderApi context applies)
+- RiderApi: profile-owner access, with administrator override
+- TourDataApi: upload requires authentication; download is subject to role/visibility filtering

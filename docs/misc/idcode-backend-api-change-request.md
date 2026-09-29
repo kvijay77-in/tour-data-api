@@ -1,6 +1,7 @@
 # ID Code Configuration and Rider Personal Code Backend Change Request
+_Last updated: 2026-09-29_
 
-Date: 2026-08-01
+> Historical / Implemented – kept for reference. Current source of truth: [Rider profile schema](../design/rider-profile-schema.md), [Data model](../design/data-model.md), and the [API reference](../design/api-reference.md#config).
 
 ## Summary
 
@@ -23,8 +24,7 @@ To support this flow, backend changes requested are:
 Current development QR flow can extract tour Rider ID directly from scanned text.
 Production flow cannot rely on direct Rider ID in the QR and must parse an ID Code structure.
 
-The app must remain offline capable, so config and rider code mappings are loaded after sign-in and persisted locally (SQLite).
-The app should not require a new per-scan backend lookup. This keeps scan latency low and supports offline use.
+The client loads config and rider code mappings after sign-in. It should not require a new per-scan backend lookup, keeping scan latency low. The rider app does not support offline operation.
 
 The configuration source must be shared across applications and app-agnostic.
 No app secrets or credentials may be stored in configuration data.

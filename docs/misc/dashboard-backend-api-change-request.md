@@ -1,6 +1,7 @@
 # Dashboard Backend API Change Request
+_Last updated: 2026-09-29_
 
-Date: 2026-07-28
+> Historical / Implemented – kept for reference. Current source of truth: [Dashboard API design](../design/dashboard-api.md) and the [API reference](../design/api-reference.md#check-ins).
 
 ## Status
 
