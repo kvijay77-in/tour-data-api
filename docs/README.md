@@ -1,69 +1,52 @@
-# Documentation Index
+# Documentation index
+_Last updated: 2026-09-29_
 
-[← Back to README](../README.md)
+This index links to the current backend requirements, designs, and operating guides.
 
-This page provides a guide to all project documentation.
+## Requirements
 
-## Documentation Files
+| Document | Scope |
+|---|---|
+| [Core](requirements/core.md) | Tour, ride, check-in, isolation, and operating requirements |
+| [Events and hotel logistics](requirements/events.md) | Event activities, baggage custody, and room allocations |
+| [User management](requirements/user-management.md) | Cognito users and tour-scoped staff assignments |
+| [Rider profile](requirements/rider-profile.md) | Profile definitions, ownership, and participation |
+| [Notifications](requirements/notifications.md) | Inbox, announcements, reminders, and push |
+| [Tour artifacts](requirements/artifacts.md) | Configurable tour- and ride-level files |
+| [Dashboard API](requirements/dashboard.md) | Initial dashboard load, progress refresh, and rider details |
 
-| Document | Description |
-|----------|-------------|
-| [AWS Setup Guide](aws-setup-guide.md) | AWS CLI credentials configuration, Cognito user setup, JWT token generation |
-| [Development Guide](development-guide.md) | Environment setup, deploy to dev, local testing, unit tests, code quality, troubleshooting |
-| [Deployment Guide](deployment-guide.md) | CI/CD via GitHub Actions, multi-environment deployment (dev/test/prod), AWS resources reference |
-| [Infrastructure Guide](infrastructure-guide.md) | Resource tagging strategy, CloudWatch monitoring, cost estimation, project statistics |
-| [API Guide](api-guide.md) | API endpoints, mandatory attributes, validation rules, request/response examples for every endpoint, status codes, and authorization matrix |
-| [Requirements](Requirements.md) | Detailed functional and non-functional requirements, use cases, and business rules |
-| [Solution Design](SolutionDesign.md) | Architecture documentation, data model specifications, and technical design |
-| [Notification Framework Design](notification-framework-design.md) | Notification architecture, audience routing, APIs, push sender, and rule model |
-| [Notification Framework Handoff (Mgmt App)](notification-framework-mgmt-app-handoff.md) | Implemented backend changes and required `tour-mgmt-app` follow-up work |
-| [Tour Artifacts Design](tour-artifacts-handling-design.md) | Tour and ride artifact management design — S3 storage, metadata model, read/write APIs |
-| [Cycling Tour Events – Change Requirement](cycling-tour-events.md) | Frozen change requirement for the generic events engine (Day 0 Registration, baggage handling, hotel logistics) |
-| [Cycling Tour Events – Backend Design](cycling-tour-events-design.md) | Authoritative backend design: data model, API contracts, RBAC, provisioning |
-| [Cycling Tour Events – Frontend Design](cycling-tour-events-frontend-design.md) | `tour-mgmt-app` / `tour-rider-app` screens, navigation, offline design |
-| [Project Structure](project-structure.md) | Project folder organization, file structure, and code organization |
+Requirements are maintained only in `docs/requirements/`. Their implementation contracts are linked from the relevant design documents.
 
-## Quick Navigation
+## Design
 
-### Getting Started (New Developer)
-1. Read the [README](../README.md) for a project overview
-2. Review [Requirements](Requirements.md) to understand the system
-3. Check [Solution Design](SolutionDesign.md) for architecture and technical decisions
-4. Follow [Development Guide](development-guide.md) to set up your environment and deploy to dev
+| Document | Scope |
+|---|---|
+| [Architecture](design/architecture.md) | System boundaries, data flow, and AWS service roles |
+| [Data model](design/data-model.md) | Shared and tour-specific DynamoDB tables |
+| [API reference](design/api-reference.md) | Single source of truth for backend API contracts |
+| [RBAC](design/rbac.md) | Permission names, Cognito groups, and authorization rules |
+| [Events and hotel logistics](design/events.md) | Event, baggage, hotel, and allocation design |
+| [Notifications](design/notifications.md) | Inbox routing, notification persistence, and push delivery |
+| [Tour artifacts](design/artifacts.md) | Private S3 storage and metadata design |
+| [Rider profile schema](design/rider-profile-schema.md) | Configurable profile attributes and access control |
+| [Dashboard API](design/dashboard-api.md) | Dashboard endpoint responsibilities and refresh design |
 
-### For Developers
-- **Environment setup**: [Development Guide → Initial Setup](development-guide.md#initial-setup)
-- **API contracts and validations**: [API Guide](api-guide.md)
-- **Deploy to dev**: [Development Guide → Deploy to Dev Environment](development-guide.md#deploy-to-dev-environment)
-- **Local API testing**: [Development Guide → Local Development](development-guide.md#local-development)
-- **Unit tests**: [Development Guide → Unit Testing](development-guide.md#unit-testing)
-- **Code quality**: [Development Guide → Code Quality](development-guide.md#code-quality)
-- **All commands**: [Development Guide → Useful Commands](development-guide.md#useful-commands)
-- **Troubleshooting**: [Development Guide → Troubleshooting](development-guide.md#troubleshooting)
+Frontend screen designs are maintained in the management and rider app repositories. The platform glossary is maintained in the [platform repository](https://github.com/kvijay77-in/cycling-tour-platform/blob/main/docs/glossary.md).
 
-### For DevOps / CI/CD
-- **GitHub OIDC setup**: [Deployment Guide → One-Time Setup](deployment-guide.md#one-time-setup-github-oidc)
-- **Deploy via GitHub Actions**: [Deployment Guide → Deploying via GitHub Actions](deployment-guide.md#deploying-via-github-actions)
-- **Deploy test/prod from terminal**: [Deployment Guide → Deploying from Terminal](deployment-guide.md#deploying-from-terminal)
-- **Notification push bootstrap**: [Deployment Guide → After Deployment: Notification Push Setup](deployment-guide.md#after-deployment-notification-push-setup)
-- **Environments**: [Deployment Guide → Environments Explained](deployment-guide.md#environments-explained)
-- **AWS resources inventory**: [Deployment Guide → AWS Resources Reference](deployment-guide.md#aws-resources-reference)
+## Guides
 
-### For Infrastructure
-- **AWS credentials**: [AWS Setup Guide](aws-setup-guide.md)
-- **Cognito & JWT tokens**: [AWS Setup Guide → Setting up Cognito](aws-setup-guide.md#setting-up-cognito)
-- **RBAC group assignment**: [AWS Setup Guide → Assign Users to Cognito Groups](aws-setup-guide.md#3-assign-users-to-cognito-groups)
-- **Resource tagging**: [Infrastructure Guide → Resource Tagging Strategy](infrastructure-guide.md#resource-tagging-strategy)
-- **Monitoring**: [Infrastructure Guide → Monitoring](infrastructure-guide.md#monitoring)
-- **Cost tracking**: [Infrastructure Guide → Cost Estimation](infrastructure-guide.md#cost-estimation)
+| Document | Scope |
+|---|---|
+| [Development](guides/development.md) | Environment setup, local development, tests, and commands |
+| [Deployment](guides/deployment.md) | AWS setup, Cognito, GitHub OIDC, environments, and deployment |
+| [Infrastructure](guides/infrastructure.md) | AWS ownership, tags, monitoring, and cost management |
+| [Project structure](guides/project-structure.md) | Current repository folders and code organization |
 
-## External Resources
+## Historical references
 
-- [AWS SAM Documentation](https://docs.aws.amazon.com/serverless-application-model/)
-- [AWS Lambda Documentation](https://docs.aws.amazon.com/lambda/)
-- [Amazon DynamoDB Documentation](https://docs.aws.amazon.com/dynamodb/)
-- [AWS Cognito Documentation](https://docs.aws.amazon.com/cognito/)
+Archived handoffs, proposals, change requests, and the prior TODO log are in [misc](misc/). For current behavior, use the requirements, design, and guide pages above.
 
----
+## Application testing references
 
-[← Back to README](../README.md)
+- [Simulation scripts](../scripts/simulate/README.md)
+- [Test suite](../tests/README.md)

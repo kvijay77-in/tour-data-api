@@ -1,14 +1,15 @@
 # Instructions for GitHub Copilot for the Project
+_Last updated: 2026-09-29_
 
 ## Primary Instructions
 These instructions are general for our interaction and MUST BE STRICTLY FOLLOWED.
-- /docs/Requirements.md must be read and understood before any development work is taken up.
-- /docs/SolutionDesign.md must be referred to for design principles and architecture.
-- Follow the project folder structure as described in /docs/project-structure.md for placing files and organizing code. Any changes to the structure must be flagged for review and once approved should be updated in that document.
-- Always refer to /docs/Requirements.md for any clarifications on features, functions, and requirements.
+- Read the applicable requirements in `docs/requirements/` before development work.
+- Refer to `docs/design/architecture.md` and the relevant document in `docs/design/` for design principles and technical contracts.
+- Follow `docs/guides/project-structure.md` for file placement and code organization. Update it when approved structural changes are made.
+- Use `docs/README.md` to locate current requirements, designs, and guides; do not rely on historical documents in `docs/misc/` as current specifications.
 - If any inputs during our interaction contradict the requirement, flag it and ask for clarifications.
-- Understand the overall project requirements, features, and constraints as described in /docs/Requirements.md.
-- Ensure all code suggestions and implementations strictly adhere to the requirements specified in /docs/Requirements.md. 
+- Understand the overall project requirements and constraints as described in `docs/requirements/`.
+- Ensure all code suggestions and implementations adhere to the applicable requirements and the backend contracts in `docs/design/`.
 - Review and update related documents for any Design and/or code changes to keep them in sync with the implementation. 
 - Always follow what was asked, do not code extra features or changes unless explicitly requested.
 - Follow instructions and do not deviate from the task at hand.

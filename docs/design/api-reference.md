@@ -1,8 +1,11 @@
-# API Guide
+# API reference
+_Last updated: 2026-09-29_
 
-[← Back to Solution Design](SolutionDesign.md)
+[← Architecture](architecture.md)
 
 This document contains detailed API design, endpoint contracts, validations, and authorization rules for the Tour Data API.
+
+This is the single source of truth for backend HTTP paths and request/response contracts. The backend permission-to-Cognito-group mapping is maintained in [RBAC](rbac.md).
 
 ## API Structure
 
@@ -172,8 +175,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `GET /v1/tours/active` | None | None | None | No body required |
 | `GET /v1/tours/{tourId}` | `tourId` (required) | None | None | `tourId`: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]` |
 | `GET /v1/tours` | None | `status` (optional) | None | `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED` |
-| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate, rideCount`; Optional: `description, provisioning` | `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer (total rides planned for the tour, may exceed the number of tour days); `provisioning` is boolean, defaults to `false`, is not stored in TourMaster, and provisions 11 tour tables only when `true`; successful provisioning sets `provisionedAt` |
-| `PUT /v1/tours` | None | None | Required: `tourId`; Optional: `name, startDate, endDate, description, rideCount, status, provisioning` | Tour must exist; `tourId` format; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer; `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; `provisioning` is boolean and defaults to `false`; when `provisioning=false`, only TourMaster is updated; when `provisioning=true`, provisioning is allowed only when `provisionedAt` is absent, then it creates 11 tables and sets `provisionedAt`; repeat provisioning is rejected |
+| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate, rideCount`; Optional: `description, provisioning` | `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer (total rides planned for the tour, may exceed the number of tour days); `provisioning` is boolean, defaults to `false`, is not stored in TourMaster, and provisions 12 tour tables only when `true`; successful provisioning sets `provisionedAt` |
+| `PUT /v1/tours` | None | None | Required: `tourId`; Optional: `name, startDate, endDate, description, rideCount, status, provisioning` | Tour must exist; `tourId` format; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer; `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; `provisioning` is boolean and defaults to `false`; when `provisioning=false`, only TourMaster is updated; when `provisioning=true`, provisioning is allowed only when `provisionedAt` is absent, then it creates 12 tables and sets `provisionedAt`; repeat provisioning is rejected |
 | `PUT /v1/tours/{tourId}/provision` | `tourId` (required) | None | None | Tour must exist and have `provisionedAt`; reruns idempotent provisioning to create only missing or newly defined table types; does not modify TourMaster, including `provisionedAt` |
 | `POST /v1/tours/{tourId}/archive` | `tourId` (required) | `exportToS3` (optional, default true), `deleteTables` (optional, default true) | None | Tour exists; status must be `ACTIVE` or `COMPLETED`; ARCHIVED cannot be archived again |
 
@@ -801,7 +804,7 @@ Response `200 OK`:
 GET /v1/profile/3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f/tours
 ```
 
-Response `200 OK` (items are `RiderTours` records as stored; see [SolutionDesign.md](SolutionDesign.md)):
+Response `200 OK` (items are `RiderTours` records as stored; see [Data model](data-model.md)):
 ```json
 {
   "profileId": "3f6c2a8e-5b1d-4c7a-9e2f-1a2b3c4d5e6f",
@@ -2947,11 +2950,11 @@ DELETE /v1/admin/notification-rules/PIT_STOP_OPENED
 
 ## Event Engine & Hotel Error Codes
 
-Request and response examples for the event engine and hotel endpoints (introduced alongside `docs/cycling-tour-events-design.md`) are in [Events Examples](#events-examples) and [Hotels Examples](#hotels-examples).
+Request and response examples for event and hotel endpoints are in [Events Examples](#events-examples) and [Hotels Examples](#hotels-examples).
 
 #### New error codes
 
-In addition to the standard `400`/`401`/`403`/`404`/`409`/`500` statuses above, the event engine and hotel endpoints introduce the codes below. See `docs/cycling-tour-events-design.md` §8.25 for the complete reference table.
+In addition to the standard `400`/`401`/`403`/`404`/`409`/`500` statuses above, event and hotel endpoints introduce the codes below. The handler implementations and this API reference define the current behavior.
 
 | Code | HTTP | Meaning |
 |---|---|---|
@@ -2987,46 +2990,9 @@ In addition to the standard `400`/`401`/`403`/`404`/`409`/`500` statuses above, 
 | 409 | Conflict (duplicate check-in) |
 | 500 | Internal Server Error |
 
-## Authorization Matrix
+## Authorization
 
-| Endpoint | Administrator | Super User | PS_<n>_User | Hotel Staff | Guest |
-|----------|--------------|------------|-------------|-------------|-------|
-| GET config | ✅ | ✅ | ✅ | ✅ | ✅ |
-| GET tours | ✅ | ✅ | ✅ | ✅ | ✅ |
-| GET riders | ✅ | ✅ | ✅ | ✅ | ✅ |
-| POST rider exit | ✅ | ✅ | ❌ | ❌ | ❌ |
-| POST rider exit cancel | ✅ | ✅ | ❌ | ❌ | ❌ |
-| POST rider baggage release | ✅ | ✅ | ❌ | ❌ | ❌ |
-| GET rides | ✅ | ✅ | ✅ | ✅ | ✅ |
-| GET dashboard | ✅ | ✅ | ✅ | ❌ | ✅ |
-| GET dashboard progress | ✅ | ✅ | ✅ | ❌ | ✅ |
-| GET rider details popup | ✅ | ✅ | ✅ | ❌ | ✅ |
-| GET Cognito users (`/v1/users/cognito`) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| POST check-in | ✅ | ✅ | Stage-bound regular PIT_STOP check-ins plus any Quit Riding check-in | ✅ | ❌ |
-| POST tours (create/provision) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| POST archive tour | ✅ | ❌ | ❌ | ❌ | ❌ |
-| POST/PUT rides | ✅ | ❌ | ❌ | ❌ | ❌ |
-| POST open/close pit stop | ✅ | ✅ | Assigned stage only | ❌ | ❌ |
-| POST open ride | ✅ | ❌ | ❌ | ❌ | ❌ |
-| POST start ride | ✅ | ❌ | ❌ | ❌ | ❌ |
-| POST close ride | ✅ | ❌ | ❌ | ❌ | ❌ |
-| GET event/hotel read APIs | ✅ | ✅ | ✅ | ✅ | ✅ |
-| POST/PUT event definitions | ✅ | ❌ | ❌ | ❌ | ❌ |
-| POST/PUT/start/complete/cancel occurrences | ✅ | ✅ | ❌ | ❌ | ❌ |
-| POST event activity record / cancel event record | ✅ | ✅ | ✅ | ✅ | ❌ |
-| POST/PUT hotels and hotel stays | ✅ | ✅ | ❌ | ❌ | ❌ |
-| POST/PUT tour users | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Manual check-in | ✅ | ✅ | ❌ | ❌ | ❌ |
-| POST /v1/notifications (announce) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| POST /v1/notifications/reminders | ✅ | ❌ | ❌ | ❌ | ❌ |
-| POST riders/profile (create) | Any authenticated user | | | | |
-| POST tours/{tourId}/riders (register) | Any authenticated user | | | | |
-| GET rider statistics | Any authenticated user | | | | |
-| POST profile picture | Any authenticated user | | | | |
-| GET /v1/notifications + unread-count | Any authenticated user | | | | |
-| PUT /v1/notifications/read | Any authenticated user | | | | |
-| Device register/delete | Any authenticated user | | | | |
-| /v1/admin/notification-rules CRUD | ✅ | ❌ | ❌ | ❌ | ❌ |
+Endpoint-specific authorization requirements appear in the contract tables below. Exact permission names and the current Cognito group mapping are maintained in [RBAC](rbac.md) and `src/layers/common/rbac.py`. Some operations, including pit-stop actions and event scans, also enforce stage or tour-assignment constraints in the handler.
 
 ## Request Validation
 
@@ -3041,7 +3007,7 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
    - `TOUR_MANAGE`: create/archive tours
   - `RIDE_MANAGE`: create/update/open/start/close rides
   - `PIT_STOP_MANAGE`: open/close pit-stop stages
-  - `RIDER_EXIT`: mark rider as `EXITED`, release retained baggage, and cancel rider exit (ADMINISTRATOR and SUPER_USER only)
+   - `RIDER_EXIT`: mark rider as `EXITED`, release retained baggage, and cancel rider exit
   - `CHECKIN`: create check-ins, with additional stage-aware enforcement for `PS_<n>_USER` roles on regular pit-stop check-ins
   - `EVENT_MANAGE`: create/update event definitions
   - `EVENT_OCCURRENCE_MANAGE`: create/update/start/complete/cancel event occurrences
@@ -3080,8 +3046,8 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 3. Duplicate normal check-in at same stage is rejected (`DUPLICATE_CHECKIN`).
 4. Duplicate Not Riding is rejected (`DUPLICATE_NOT_RIDING`).
 5. Rider marked Not Riding cannot create normal check-in (`RIDER_NOT_RIDING`).
-6. Rider with previous Quit Riding cannot check in again (`RIDER_QUIT_RIDING`), except offline timestamp pre-dating quit timestamp.
-7. Ride in CLOSED status rejects check-ins (`RIDE_CLOSED`), except offline timestamp pre-dating `closedAt`.
+6. Rider with previous Quit Riding cannot check in again (`RIDER_QUIT_RIDING`), except a request timestamp that predates the quit timestamp.
+7. Ride in CLOSED status rejects check-ins (`RIDE_CLOSED`), except a request timestamp that predates `closedAt`.
 8. `stageNumber` is mandatory only for normal check-ins; Not Riding and Quit Riding entries can be created without stage attributes.
 
 ### Additional Endpoint-Specific Validation Highlights

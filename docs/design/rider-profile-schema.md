@@ -1,145 +1,30 @@
-# Rider Profile Attributes Design (Phase 1 backend)
+# Rider profile schema
+_Last updated: 2026-09-29_
 
-## Scope
-Configuration-driven rider profile definitions are stored in `AppConfig` and enforced by backend APIs.
-Frontend apps (`tour-mgmt-app`, `tour-rider-app`) must integrate against this contract.
+## Configuration model
 
-## AppConfig model
-Shared table columns: `configType` (PK), `configId` (SK), `enabled`, `config`, `description`, `version`, `updatedAt`, `updatedBy`.
+Rider profile definitions are stored in the shared `AppConfig` table and read through `GET /v1/config`. The schema is configuration-driven so the profile form and its validation rules can evolve without changing the DynamoDB table shape.
 
-### Config types
-- `RIDER_PROFILE_SECTION`
-  - `config`: `{ label, icon?, order, description? }`
-- `RIDER_PROFILE_ATTRIBUTE` (where `configId` is attribute key)
-  - `config`: `{ label, helpText?, placeholder?, sectionId, order, type, lovId?, storage, required, adminOnly, sensitive, visibleToAllMgmtUsers, system, validation?, visibleWhen?, dependsOn?, fallbackToText?, fields?, repeatable?, maxItems?, handler?, handlerOptions? }`
-- `LOV`
-  - `config`: `{ label, parentLovId?, items: [{ value, label, order, enabled, parent?, meta? }] }`
+| Config type | Purpose |
+|---|---|
+| `RIDER_PROFILE_SECTION` | Profile form sections and their display order |
+| `RIDER_PROFILE_ATTRIBUTE` | Attribute type, storage location, validation, visibility, and behavior |
+| `LOV` | Reusable lists of values, including dependent lists |
 
-## Attribute field types
-- `TEXT`, `TEXTAREA`: string (`minLength`, `maxLength`, `pattern`)
-- `EMAIL`: string email
-- `PHONE`: E.164 string, 6–15 digits
-- `URL`: URL string
-- `NUMBER`: number (`min`, `max`, `decimals`, `unit`)
-- `DATE`: `YYYY-MM-DD` (`minDate`/`maxDate`, absolute or relative like `-18y`)
-- `BOOLEAN`: bool
-- `SELECT`: string + `lovId` (`dependsOn`, `fallbackToText`)
-- `MULTI_SELECT`: list of strings + `lovId` (`minItems`, `maxItems`)
-- `FILE`, `IMAGE`: `{ s3Key, fileName, contentType, sizeBytes, uploadedAt }` (`allowedMimeTypes`, `maxFileSizeBytes`)
-- `GROUP`: map or list-of-maps (`fields`, `repeatable`, `maxItems`)
+Attributes support scalar values and structured groups, including repeatable groups. Supported attribute types include text, email, phone, URL, number, date, boolean, select, multi-select, file, image, and group. File/image attributes store an S3 object reference and upload metadata; the file itself remains in S3.
 
-## Immutable rules
-- `RIDER_PROFILE_ATTRIBUTE` key (`configId`) and `type` are immutable after create.
-- No delete: set `enabled=false`.
-- `system=true` attributes cannot be disabled; key/type/storage are immutable.
+Definitions identify whether an attribute is required, administrator-only, sensitive, visible to management users, system-controlled, or conditionally visible. System attributes are protected from disabling and key/type/storage changes. Attribute type and identifier are immutable once created; disabling is used instead of deletion.
 
-## Handler registry
-Supported handlers:
-- `PERSONAL_CODE`: personalCode normalization + uniqueness checks
-- `COGNITO_EMAIL`: system-controlled email
-- `PROFILE_PHOTO`: profile picture binding (`photoS3Key`)
+## Validation and updates
 
-Unknown handler names are rejected during definition writes.
+`src/layers/common/profile_schema.py` loads enabled definitions and LOVs with a short warm cache. It validates type, value membership, dependent LOVs, conditional visibility, grouped values, and required attributes. `definitionsVersion` is derived by the backend and returned alongside configuration; clients pass that value on profile writes to detect stale forms.
 
-## Seeded sections/LOVs/attributes
-Seed script provides:
-- Sections: `personal`, `contact`, `address`, `emergency`, `medical`, `preferences`, `organizer`
-- LOVs: `COUNTRY`, `STATE`, `GENDER`, `DIETARY_PREFERENCE`, `BLOOD_GROUP`, `RELATIONSHIP`
-- System attributes: `name`, `email`, `phone`, `photo`, `personalCode`
-- Additional attributes: `dateOfBirth`, `gender`, `address`, `emergencyContact`, `dietaryPreference`, `bloodGroup`, `hasMedicalCondition`, `medicalConditions`
+Profile updates merge submitted values into the existing profile. Unsubmitted values are preserved, optional `null` values clear attributes, and required validation runs against the merged result. Unknown or disabled submitted keys are rejected. Responses omit disabled or unknown stored attributes and apply role-based visibility filtering.
 
-`dietaryPreference` now writes to `attributes.dietaryPreference`; old top-level values are not auto-migrated.
+## Identity and access
 
-## Shared profile schema module
-`src/layers/common/profile_schema.py`:
-- Loads enabled sections/attributes/LOVs with ~60s warm cache
-- Computes `definitionsVersion` and exposes it through `GET /v1/config` (`data.definitionsVersion`)
-- Validates type, LOV membership, dependent LOVs, `visibleWhen`, GROUP/repeatable
-- Merge semantics:
-  - top-level payload keys resolve to enabled CORE attributes by **storage path first**, then by attribute key
-  - `attributes.<key>` entries always resolve by attribute key
-  - update only submitted keys; unsent keys are retained
-  - optional attribute `null` clears the value; required checks run on the merged result
-- Unknown/disabled submitted keys -> `422 UNKNOWN_OR_DISABLED_ATTRIBUTE`
-- Required checks run on merged profile on save; rider saves skip `adminOnly` required fields
-- Response filtering by role, excluding disabled/unknown stored attributes
-- SELECT validation accepts LOV `value` or `label` (case-insensitive) and normalizes writes to LOV `value`
+Rider profiles are keyed by `profileId` and are separate from tour-scoped rider records. On the Rider API, `src/layers/common/ownership.py` resolves the caller's profile through the `RiderCognitoUser` mapping and enforces ownership before reading or writing profile data. Ownership failures return `PROFILE_ACCESS_DENIED`. Staff responses use the configured visibility rules; medical or otherwise sensitive data is not returned to unauthorized staff.
 
-## Ownership security model
-`src/layers/common/ownership.py`:
-- Rider API identification uses `requestContext.apiId == RIDER_API_ID` when `RIDER_API_ID` is configured.
-- Fail-closed behavior: if `apiId` is present but `RIDER_API_ID` is not configured, routes under `/v1/riders/` and `/v1/profile/` are treated as RiderApi requests for ownership enforcement.
-- `require_own_profile(event, profile_id)` enforces rider ownership using `RiderCognitoUser` (`sub -> profileId`)
-- Ownership mismatch returns `403 PROFILE_ACCESS_DENIED` **before data reads**
-- Link routes enforce path `{cognitoUserName} == JWT sub`
+The profile picture is represented by an S3 key on the profile. File/image attribute uploads use a profile-scoped key prefix and presigned URLs.
 
-## APIs
-### Definitions version contract
-- `GET /v1/config` returns `data.definitionsVersion` plus `data.items`.
-- Profile create/update responses continue returning `definitionsVersion`.
-- Clients must pass the server value in profile writes and must never compute their own.
-
-### Admin config (TourDataApi, ADMINISTRATOR only)
-- `GET /v1/admin/config/{configType}`
-  - Allowed types: `RIDER_PROFILE_ATTRIBUTE`, `RIDER_PROFILE_SECTION`, `LOV`
-  - Returns enabled + disabled entries
-- `PUT /v1/admin/config/{configType}/{configId}`
-  - Upsert, version conflict on mismatch -> `409 CONFIG_VERSION_CONFLICT`
-  - Updates `version`, `updatedAt`, `updatedBy`
-  - Validates schema + references + immutable rules
-  - Errors: `SYSTEM_ATTRIBUTE_PROTECTED`, `IMMUTABLE_FIELD`
-
-### Rider profile write APIs
-- `POST /v1/riders/profile`
-- `POST /v1/riders/profile/{profileId}`
-- `PUT /v1/riders/profile/{profileId}`
-
-Request additions:
-- `attributes` map
-- `definitionsVersion` optimistic definition check (`409 PROFILE_DEFINITIONS_CHANGED`)
-
-Rules:
-- `adminOnly` write by rider -> `403 ADMIN_ONLY_ATTRIBUTE`
-- Admin write via TourDataApi allowed
-- `PROFILE_PHOTO` writes the S3 key string at `photoS3Key`; accepted prefixes: `riders/{profileId}/photo/` and legacy `profiles/{profileId}/`
-- Legacy emergency-contact compatibility retained (`emergencyContact.relation` seeded as `TEXT`)
-
-### Attribute file routes
-- `POST /v1/riders/profile/{profileId}/attributes/{key}/upload`
-  - Owner or ADMINISTRATOR
-  - Valid only for FILE/IMAGE attributes in `ATTRIBUTES` scope
-  - S3 key format: `riders/{profileId}/attributes/{key}/{uuid}.{ext}`
-- `GET /v1/riders/profile/{profileId}/attributes/{key}/download`
-  - Owner, or staff with role-based visibility
-
-## Staff response filtering
-Applied to:
-- `GET /v1/tours/{tourId}/riders`
-- `GET /v1/tours/{tourId}/riders/{riderId}`
-- `GET /v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details`
-- TourDataApi access to `GET /v1/riders/profile/{profileId}`
-
-Rules:
-- Attributes with `visibleToAllMgmtUsers=false` visible only to `ADMINISTRATOR` and `SUPER_USER`
-- Disabled/unknown stored attributes are never returned
-- Sensitive visible attributes listed in `sensitiveKeys`
-- Ride details include filtered `profileAttributes`
-
-## Error codes
-- `UNKNOWN_OR_DISABLED_ATTRIBUTE`
-- `ADMIN_ONLY_ATTRIBUTE`
-- `PROFILE_DEFINITIONS_CHANGED`
-- `CONFIG_VERSION_CONFLICT`
-- `SYSTEM_ATTRIBUTE_PROTECTED`
-- `IMMUTABLE_FIELD`
-- `PROFILE_ACCESS_DENIED`
-
-## Out of scope
-- Migration/cleanup of old profile data
-- Frontend implementation
-
-## Seeding and existing-data compatibility
-- Seeded LOV `COUNTRY` contains ISO 3166 alpha-2 values and `meta.callingCode` (India is first).
-- Seeded LOV `STATE` uses Indian state/UT full-name labels with code values.
-- Existing environments already seeded require a one-time reseed or admin update to pick up revised `RIDER_PROFILE_*` and `LOV` entries.
-- `scripts/seed_app_config.py --force-profile-config` overwrites only `RIDER_PROFILE_SECTION`, `RIDER_PROFILE_ATTRIBUTE`, and `LOV`; other insert-only types remain protected.
+See [API reference](api-reference.md#riders) and [Data model](data-model.md) for API contracts and table inventory. Product requirements are maintained in [Rider profile requirements](../requirements/rider-profile.md).
