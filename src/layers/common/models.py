@@ -81,6 +81,7 @@ class CheckInMethod(str, Enum):
     QR_SCAN = "QR_SCAN"
     MANUAL = "MANUAL"
     FALLBACK = "FALLBACK"
+    SELF_SERVICE = "SELF_SERVICE"
 
 
 class CheckInStatus(str, Enum):
@@ -192,6 +193,7 @@ TOUR_TABLE_TYPES = [
     'Event',
     'EventOccurrence',
     'EventActivityLogs',
+    'EventRegistration',
     'Hotel',
     'RoomAllocation',
 ]
@@ -269,6 +271,7 @@ class Tour:
     status: TourStatus
     rideCount: int
     description: Optional[str] = None
+    selfQuitRidingAllowed: bool = False
     provisionedAt: Optional[str] = None
     archivedAt: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
@@ -331,6 +334,8 @@ class Stage:
     distanceFromStart: Optional[float] = None
     estimatedOpenTime: Optional[int] = None
     pitStopDuration: Optional[int] = None
+    selfCheckInAllowed: Optional[bool] = None
+    selfNotRidingAllowed: Optional[bool] = None
     pitStopStatus: Optional[PitStopStatus] = None
     openedAt: Optional[str] = None
     closedAt: Optional[str] = None
@@ -375,6 +380,8 @@ class Ride:
     floats: Optional[List[RideFloat]] = None
     openTime: Optional[str] = None
     closeTime: Optional[str] = None
+    selfQuitRidingAllowed: Optional[bool] = None
+    selfCheckInAllowed: Optional[bool] = None
     description: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)
@@ -544,6 +551,7 @@ class ActivityDefinition:
     mandatory: bool = False
     allowedTypeCodes: List[str] = field(default_factory=list)
     allowOptOut: bool = False
+    selfServiceAllowed: Optional[bool] = None
     prerequisiteActivityIds: List[str] = field(default_factory=list)
     restrictToAssignedUsers: bool = True
     variantOptions: List[str] = field(default_factory=list)
@@ -562,7 +570,8 @@ class EventDefinition:
     location: str
     sequenceEnforced: bool
     defaultAllowedTypeCodes: List[str]
-    allowSelfService: bool = False
+    registrationEnabled: bool = False
+    selfServiceAllowed: bool = False
     notificationConfig: Optional[Dict[str, Any]] = None
     activities: List[ActivityDefinition] = field(default_factory=list)
     createdAt: str = field(default_factory=utc_now_iso)
@@ -581,7 +590,7 @@ class ActivityOverride:
     """Per-activity occurrence override."""
     activityId: str
     enabled: Optional[bool] = None
-    selfServiceEnabled: Optional[bool] = None
+    selfServiceAllowed: Optional[bool] = None
     skipped: Optional[bool] = None
     allowedTypeCodes: Optional[List[str]] = None
     note: Optional[str] = None
@@ -602,7 +611,7 @@ class EventOccurrence:
     seq: int
     status: EventOccurrenceStatus = EventOccurrenceStatus.PLANNED
     activityOverrides: List[ActivityOverride] = field(default_factory=list)
-    selfServiceEnabled: bool = False
+    selfServiceAllowed: Optional[bool] = None
     linkedOccurrenceRef: Optional[str] = None
     restrictToAssignedUsers: bool = True
     startedAt: Optional[str] = None
@@ -709,7 +718,9 @@ def create_stage_from_dict(data: Dict[str, Any]) -> Stage:
             if data.get('pitStopStatus') is not None else None
         ),
         openedAt=data.get('openedAt'),
-        closedAt=data.get('closedAt')
+        closedAt=data.get('closedAt'),
+        selfCheckInAllowed=data.get('selfCheckInAllowed'),
+        selfNotRidingAllowed=data.get('selfNotRidingAllowed'),
     )
 
 
@@ -747,6 +758,9 @@ def create_ride_from_dynamodb_item(item: Dict[str, Any]) -> Ride:
         openedAt=item.get('openedAt'),
         completedAt=item.get('completedAt'),
         closedAt=item.get('closedAt')
+        ,
+        selfQuitRidingAllowed=item.get('selfQuitRidingAllowed'),
+        selfCheckInAllowed=item.get('selfCheckInAllowed')
     )
 
 

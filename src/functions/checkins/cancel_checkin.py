@@ -27,8 +27,10 @@ from response import (
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from models import CheckInStatus, utc_now_iso
 from notification_service import notify
-from dynamodb_utils import get_tour_item, update_tour_item
+from dynamodb_utils import get_tour_item, update_tour_item, query_tour_items, get_item
 from rbac import Permission, require_permission
+from ownership import resolve_profile_id_for_sub
+from self_checkin import effective_self_checkin_allowed, effective_not_riding_allowed
 
 logger = get_logger(__name__)
 
@@ -36,7 +38,11 @@ logger = get_logger(__name__)
 def lambda_handler(event, context):
     """Cancel an existing check-in record using special status-driven behavior."""
     try:
-        deny = require_permission(event, Permission.CHECKIN)
+        self_service = bool(event.get('_self_service'))
+        deny = require_permission(
+            event,
+            Permission.SELF_CHECKIN if self_service else Permission.CHECKIN,
+        )
         if deny:
             return deny
 
@@ -78,6 +84,43 @@ def lambda_handler(event, context):
         )
         if not existing:
             return not_found_response('CheckIn', checkin_id)
+
+        if self_service:
+            if existing.get('isQuitRiding'):
+                return error_response(
+                    'QUIT_RIDING_CANCEL_NOT_ALLOWED',
+                    'Quit Riding check-ins can only be cancelled by management users.',
+                    status_code=403,
+                )
+            claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
+            profile_id = resolve_profile_id_for_sub(claims.get('sub', ''))
+            linked = query_tour_items(
+                table_type='TourRider', tour_id=tour_id,
+                key_condition_expression='profileId = :profileId',
+                expression_values={':profileId': profile_id},
+                index_name='ProfileIdIndex',
+            ) if profile_id else []
+            if not linked or linked[0].get('riderId') != existing.get('riderId'):
+                return error_response('FORBIDDEN', 'Riders may only cancel their own check-ins.', status_code=403)
+            ride = get_tour_item('Ride', tour_id, {'rideId': ride_id}) or {}
+            tour = get_item('TOUR_MASTER_TABLE', {'tourId': tour_id}) or {}
+            if existing.get('isNotRiding'):
+                stage = next((s for s in ride.get('stages', []) if s.get('type') == 'START'), None)
+                allowed = bool(stage and effective_not_riding_allowed(stage))
+            elif existing.get('stageNumber') is not None:
+                stage = next(
+                    (s for s in ride.get('stages', []) if s.get('stageNumber') == existing.get('stageNumber')),
+                    None,
+                )
+                allowed = bool(stage and effective_self_checkin_allowed(tour, ride, stage))
+            else:
+                allowed = False
+            if not allowed:
+                return error_response('SELF_CHECKIN_NOT_ALLOWED', 'Self check-in cancellation is not allowed for this record.', status_code=403)
+            body = {
+                'status': CheckInStatus.CANCELLED.value,
+                'prevStatus': existing.get('status', 'CHECKED_IN'),
+            }
 
         cancelled_by = event.get('requestContext', {}).get(
             'authorizer', {}

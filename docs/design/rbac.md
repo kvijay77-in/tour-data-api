@@ -9,7 +9,7 @@ _Last updated: 2026-09-29_
 
 Use these exact permission values from the `Permission` enum:
 
-`READ`, `CHECKIN`, `CHECKIN_MANUAL`, `RIDE_MANAGE`, `PIT_STOP_MANAGE`, `TOUR_MANAGE`, `USER_LIST`, `DASHBOARD`, `NOTIFICATION_MANAGE`, `RIDER_EXIT`, `ARTIFACT_MANAGE`, `RIDER_SELF_UPDATE`, `EVENT_MANAGE`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_SCAN`, `HOTEL_ALLOC_MANAGE`, and `USER_MANAGE`.
+`READ`, `CHECKIN`, `CHECKIN_MANUAL`, `SELF_CHECKIN`, `RIDE_MANAGE`, `PIT_STOP_MANAGE`, `TOUR_MANAGE`, `USER_LIST`, `DASHBOARD`, `NOTIFICATION_MANAGE`, `RIDER_EXIT`, `ARTIFACT_MANAGE`, `RIDER_SELF_UPDATE`, `EVENT_MANAGE`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_SCAN`, `EVENT_REGISTRATION_MANAGE`, `HOTEL_ALLOC_MANAGE`, and `USER_MANAGE`.
 
 ## Default group mapping
 
@@ -20,7 +20,7 @@ Use these exact permission values from the `Permission` enum:
 | `PS_<n>_USER` | `READ`, `CHECKIN`, `PIT_STOP_MANAGE`, `DASHBOARD`, `EVENT_SCAN` |
 | `HOTEL_STAFF` | `READ`, `CHECKIN`, `EVENT_SCAN` |
 | `GUEST` | `READ`, `DASHBOARD` |
-| `RIDER` | `READ`, `RIDER_SELF_UPDATE` |
+| `RIDER` | `READ`, `RIDER_SELF_UPDATE`, `SELF_CHECKIN` |
 
 `PS_<n>_USER` is a dynamic group-name pattern. The deployment currently creates `PS_1_USER` through `PS_5_USER`; backend permission resolution recognizes valid numeric suffixes without code changes.
 

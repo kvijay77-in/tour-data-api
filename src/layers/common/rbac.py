@@ -64,6 +64,7 @@ class Permission(str, Enum):
     """Create a check-in via manual entry (elevated privilege)."""
 
     RIDE_MANAGE = "RIDE_MANAGE"
+    SELF_CHECKIN = "SELF_CHECKIN"
     """Create, update, or close a ride."""
 
     PIT_STOP_MANAGE = "PIT_STOP_MANAGE"
@@ -100,6 +101,7 @@ class Permission(str, Enum):
     """Create/cancel event activity scan records."""
 
     HOTEL_ALLOC_MANAGE = "HOTEL_ALLOC_MANAGE"
+    EVENT_REGISTRATION_MANAGE = "EVENT_REGISTRATION_MANAGE"
     """Manage hotel master data and room allocations."""
 
     USER_MANAGE = "USER_MANAGE"
@@ -130,6 +132,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.EVENT_MANAGE,
         Permission.EVENT_OCCURRENCE_MANAGE,
         Permission.EVENT_SCAN,
+        Permission.EVENT_REGISTRATION_MANAGE,
         Permission.HOTEL_ALLOC_MANAGE,
         Permission.USER_MANAGE,
     ],
@@ -143,6 +146,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.RIDER_EXIT,
         Permission.EVENT_OCCURRENCE_MANAGE,
         Permission.EVENT_SCAN,
+        Permission.EVENT_REGISTRATION_MANAGE,
         Permission.HOTEL_ALLOC_MANAGE,
     ],
     "HOTEL_STAFF": [
@@ -157,6 +161,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
     "RIDER": [
         Permission.READ,
         Permission.RIDER_SELF_UPDATE,
+        Permission.SELF_CHECKIN,
     ],
 }
 

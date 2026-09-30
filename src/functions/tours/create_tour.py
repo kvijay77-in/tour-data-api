@@ -118,6 +118,10 @@ def lambda_handler(event, context):
         
         if body.get('description'):
             tour_item['description'] = body['description']
+        if 'selfQuitRidingAllowed' in body:
+            if not isinstance(body['selfQuitRidingAllowed'], bool):
+                return bad_request_response("selfQuitRidingAllowed must be a boolean")
+            tour_item['selfQuitRidingAllowed'] = body['selfQuitRidingAllowed']
         
         put_item('TOUR_MASTER_TABLE', tour_item)
         logger.info(f"Tour record created: {tour_id} (status: {tour_item['status']})")

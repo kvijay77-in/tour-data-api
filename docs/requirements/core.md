@@ -25,6 +25,8 @@ This document is the source of truth for the backend's core tour, ride, check-in
 - Normal check-ins, `Not Riding`, and `Quit Riding` are distinct outcomes. QR scanning is supported; manual entry is available only to users with the corresponding permission.
 - A rider must be enrolled in the tour. A rider may have no more than one `Not Riding` record per ride, and duplicate normal check-ins at the same stage are rejected.
 - A rider marked `Not Riding` or `Quit Riding` cannot make later check-ins for that ride, subject to the API's timestamp and cancellation rules.
+- Riders may self check in only when effective stage/ride permissions allow it. Start and Finish default to allowed; pit stops, Not Riding, and Quit Riding default to not allowed unless configured.
+- Riders cannot cancel Quit Riding check-ins; management must assess rider safety before cancellation.
 - A check-in cancellation retains the record and its audit information; cancelled records are excluded from normal check-in validation and read results, except where the dashboard contract returns them separately.
 - A pit-stop user may create regular check-ins only for their assigned pit-stop stage. Any `PS_<n>_USER` may record `Quit Riding` at any stage.
 

@@ -1749,6 +1749,31 @@ Resources:
             Path: /v1/tours/{tourId}/checkins
             Method: POST
 
+  RiderSelfCheckInFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: rider_self_checkin.lambda_handler
+      Description: Create a rider self check-in
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/self-checkins
+            Method: POST
+
   GetRideCheckInsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1867,6 +1892,117 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel
             Method: POST
+
+  RiderSelfCancelCheckInFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: self_cancel_checkin.lambda_handler
+      Description: Cancel a rider self check-in
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/self-checkins/{checkInId}/cancel
+            Method: POST
+
+  EventRegistrationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: registration.lambda_handler
+      Description: Register a rider for an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        RiderRegister:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration
+            Method: POST
+        RiderUnregister:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration
+            Method: DELETE
+
+  RiderSelfEventRecordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: rider_self_record.lambda_handler
+      Description: Create a rider self-service event record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query, dynamodb:Scan]
+              Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records
+            Method: POST
+
+  RiderCancelSelfEventRecordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: rider_cancel_self_record.lambda_handler
+      Description: Cancel a rider self-service event record
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:Query]
+              Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records/{recordId}/cancel
+            Method: POST
+        ManageRegister:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}
+            Method: PUT
+        ManageUnregister:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}
+            Method: DELETE
 
   GetDashboardDataFunction:
     Type: AWS::Serverless::Function

@@ -380,7 +380,6 @@ events:
     location: "Tour start venue"
     sequence_enforced: true
     default_allowed_type_codes: ["1"]
-    allow_self_service: false
     activities:
       - activity_id: ACT-001
         name: "ID Card collection"
@@ -396,7 +395,6 @@ events:
       - day_offset: -2                         # date = anchor_date + day_offset
         seq: 1
         linked_event_id: null                  # for Baggage Loading <-> Unloading pairing
-        self_service_enabled: false            # optional, default false
         progress:                              # only used when day_offset < 0 (historical)
           activity_outcomes:
             ACT-004:

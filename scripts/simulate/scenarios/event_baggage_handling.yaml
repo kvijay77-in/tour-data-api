@@ -84,7 +84,6 @@ events:
     location: "Origin hotel"
     sequence_enforced: true
     default_allowed_type_codes: ["3", "4", "5", "6", "7", "8"]
-    allow_self_service: true
     activities:
       - activity_id: ACT-001
         name: "Room pickup"
@@ -123,7 +122,6 @@ events:
     location: "Destination hotel"
     sequence_enforced: true
     default_allowed_type_codes: ["3", "4", "5", "6", "7", "8"]
-    allow_self_service: true
     activities:
       - activity_id: ACT-001
         name: "Unloaded from truck"

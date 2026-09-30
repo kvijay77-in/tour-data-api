@@ -8,7 +8,7 @@ The backend uses two DynamoDB scopes:
 - **Shared tables** are created and managed by the deployed SAM stack. They hold data shared across tours.
 - **Tour-specific tables** are created at runtime for each tour using the naming pattern `{stack}-{TableType}-{tourId}`. This keeps operational data isolated by tour.
 
-Tour provisioning creates or repairs the complete set of **12** tour-specific table types. The table inventory is defined by `TOUR_TABLE_TYPES` in `src/layers/common/models.py` and the provisioning specifications in `src/layers/common/tour_provisioning.py`.
+Tour provisioning creates or repairs the complete set of **13** tour-specific table types. The table inventory is defined by `TOUR_TABLE_TYPES` in `src/layers/common/models.py` and the provisioning specifications in `src/layers/common/tour_provisioning.py`.
 
 ## Shared tables
 
@@ -41,6 +41,7 @@ The shared table resources and their indexes, billing mode, streams, TTL setting
 | `Event` | Event definitions, including embedded activity definitions |
 | `EventOccurrence` | Dated event instances and occurrence-level overrides |
 | `EventActivityLogs` | Event activity scan and completion records |
+| `EventRegistration` | Rider registration for each event occurrence |
 | `Hotel` | Tour hotel records |
 | `RoomAllocation` | One rider's room allocation for one stay date |
 

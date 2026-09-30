@@ -9,6 +9,8 @@ This document is the source of truth for backend requirements for non-ride event
 - The initial use cases are tour-day registration and baggage loading/unloading.
 - Each activity must be able to declare whether it is enabled, mandatory, sequence constrained, eligible for opt-out, and restricted to assigned users. It may define the accepted configured ID-code types and any variant choices or prerequisites.
 - Organizers must be able to adjust applicable activity settings for an individual occurrence without changing the shared event definition.
+- Event registration is optional per event occurrence. When enabled, only registered tour riders may participate; registration closes when the occurrence starts.
+- Event self-service is controlled by event, activity, and occurrence overrides, with the most specific setting taking precedence.
 - Event scans must resolve to the existing rider identity using configured ID-code types; the backend must not introduce a separate baggage ID or allocation identity.
 - Event definition, occurrence, and scan operations must be independently authorized. See the authoritative [RBAC design](../design/rbac.md).
 

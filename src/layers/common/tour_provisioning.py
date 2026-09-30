@@ -16,6 +16,7 @@ Tour-specific tables:
 - Event-{tourId}: Event definitions
 - EventOccurrence-{tourId}: Event occurrences
 - EventActivityLogs-{tourId}: Event activity records
+- EventRegistration-{tourId}: Rider registration per event occurrence
 - Hotel-{tourId}: Hotel master data
 - RoomAllocation-{tourId}: Per-night room allocation data
 """
@@ -219,6 +220,26 @@ TOUR_TABLE_DEFINITIONS = {
                 'KeySchema': [
                     {'AttributeName': 'riderId', 'KeyType': 'HASH'},
                     {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
+                ],
+                'Projection': {'ProjectionType': 'ALL'},
+            },
+        ],
+    },
+    'EventRegistration': {
+        'AttributeDefinitions': [
+            {'AttributeName': 'occurrenceId', 'AttributeType': 'S'},
+            {'AttributeName': 'riderId', 'AttributeType': 'S'},
+        ],
+        'KeySchema': [
+            {'AttributeName': 'occurrenceId', 'KeyType': 'HASH'},
+            {'AttributeName': 'riderId', 'KeyType': 'RANGE'},
+        ],
+        'GlobalSecondaryIndexes': [
+            {
+                'IndexName': 'RiderIdIndex',
+                'KeySchema': [
+                    {'AttributeName': 'riderId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'occurrenceId', 'KeyType': 'RANGE'},
                 ],
                 'Projection': {'ProjectionType': 'ALL'},
             },

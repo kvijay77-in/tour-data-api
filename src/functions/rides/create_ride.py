@@ -178,12 +178,18 @@ def lambda_handler(event, context):
             'openTime': body.get('openTime'),
             'closeTime': body.get('closeTime'),
             'description': body.get('description'),
+            'selfQuitRidingAllowed': body.get('selfQuitRidingAllowed'),
+            'selfCheckInAllowed': body.get('selfCheckInAllowed'),
             'createdAt': now,
             'updatedAt': now
         }
         
         # Remove None values
         ride = {k: v for k, v in ride.items() if v is not None}
+
+        for field_name in ('selfQuitRidingAllowed', 'selfCheckInAllowed'):
+            if field_name in body and not isinstance(body[field_name], bool):
+                return bad_request_response(f"{field_name} must be a boolean")
         
         # Save to tour-specific Ride table
         logger.info(f"Creating ride: {ride_id} in tour {tour_id}")

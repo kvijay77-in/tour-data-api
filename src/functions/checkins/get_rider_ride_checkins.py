@@ -19,6 +19,7 @@ from models import is_cancelled_checkin_item
 from validation import validate_tour_id, validate_rider_id, ValidationError
 from dynamodb_utils import get_tour_item, query_tour_items, scan_tour_items
 from rbac import Permission, require_permission
+from ownership import resolve_profile_id_for_sub
 
 logger = get_logger(__name__)
 
@@ -49,6 +50,19 @@ def lambda_handler(event, context):
 
         if ride_no <= 0:
             return bad_request_response("rideNo must be a positive integer")
+
+        rider_groups = (event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {}).get('cognito:groups') or '')
+        if 'RIDER' in rider_groups and rider_id:
+            claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
+            profile_id = resolve_profile_id_for_sub(claims.get('sub', ''))
+            own = query_tour_items(
+                table_type='TourRider', tour_id=tour_id,
+                key_condition_expression='profileId = :profileId',
+                expression_values={':profileId': profile_id},
+                index_name='ProfileIdIndex',
+            ) if profile_id else []
+            if not own or own[0].get('riderId') != rider_id:
+                return error_response('FORBIDDEN', 'Riders may only read their own check-ins.', status_code=403)
 
         tour_rider = get_tour_item(
             table_type='TourRider',

@@ -666,6 +666,18 @@ def validate_ride_stages(stages: Any) -> List[Dict[str, Any]]:
             )
 
         stage_id = stage['stageId']
+        for permission_field in ('selfCheckInAllowed', 'selfNotRidingAllowed'):
+            if permission_field in stage and stage[permission_field] is not None and not isinstance(stage[permission_field], bool):
+                raise ValidationError(
+                    f"{permission_field} for stage '{stage_id}' must be a boolean",
+                    {"field": f"stages[{index}].{permission_field}"}
+                )
+        if stage.get('selfNotRidingAllowed') and stage_type != 'START':
+            raise ValidationError(
+                "selfNotRidingAllowed is only applicable to the START stage",
+                {"field": f"stages[{index}].selfNotRidingAllowed"}
+            )
+
         if stage_id in seen_stage_ids:
             raise ValidationError(
                 f"Duplicate stageId: {stage_id}",
@@ -679,6 +691,9 @@ def validate_ride_stages(stages: Any) -> List[Dict[str, Any]]:
             'type': stage_type,
             'name': stage['name'].strip(),
         }
+        for permission_field in ('selfCheckInAllowed', 'selfNotRidingAllowed'):
+            if permission_field in stage and stage[permission_field] is not None:
+                normalized_stage[permission_field] = stage[permission_field]
 
         if 'location' in stage and stage['location'] is not None:
             if not isinstance(stage['location'], str) or not stage['location'].strip():

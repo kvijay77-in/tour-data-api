@@ -6,7 +6,7 @@ from event_engine import create_activity_record
 
 
 def lambda_handler(event, context):
-    deny = require_permission(event, Permission.EVENT_SCAN)
+    deny = require_permission(event, Permission.SELF_CHECKIN if event.get('_self_service') else Permission.EVENT_SCAN)
     if deny:
         return deny
     return create_activity_record(event)

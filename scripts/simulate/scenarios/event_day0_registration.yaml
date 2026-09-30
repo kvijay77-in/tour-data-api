@@ -62,7 +62,6 @@ events:
     location: "Tour start venue"
     sequence_enforced: true
     default_allowed_type_codes: ["1"]
-    allow_self_service: false
     activities:
       - activity_id: ACT-001
         name: "ID Card collection"

@@ -47,6 +47,7 @@ from models import (
     utc_now_iso,
     utc_today_iso,
 )
+from event_permissions import effective_event_self_service_allowed
 from response import (
     bad_request_response,
     conflict_response,
@@ -130,14 +131,30 @@ def _validate_allowed_type_codes_exist(allowed_type_codes: List[str]) -> None:
 
 
 def _get_event_definition(tour_id: str, event_id: str) -> Optional[Dict[str, Any]]:
-    return get_tour_item("Event", tour_id, {"eventId": event_id})
+    item = get_tour_item("Event", tour_id, {"eventId": event_id})
+    return _without_legacy_self_service(item) if item else item
 
 
 def _get_occurrence(tour_id: str, event_id: str, occurrence_id: str) -> Optional[Dict[str, Any]]:
     parts = occurrence_id.split("#", 1)
     if len(parts) != 2:
         return None
-    return get_tour_item("EventOccurrence", tour_id, {"eventId": event_id, "dateSeq": parts[1]})
+    item = get_tour_item("EventOccurrence", tour_id, {"eventId": event_id, "dateSeq": parts[1]})
+    return _without_legacy_self_service(item) if item else item
+
+
+def _without_legacy_self_service(item: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Prevent legacy informational fields from being read or returned."""
+    if item is None:
+        return None
+    clean = dict(item)
+    clean.pop("allowSelfService", None)
+    clean.pop("selfServiceEnabled", None)
+    for activity in clean.get("activities", []) or []:
+        activity.pop("selfServiceEnabled", None)
+    for override in clean.get("activityOverrides", []) or []:
+        override.pop("selfServiceEnabled", None)
+    return clean
 
 
 def _get_activity(event_definition: Dict[str, Any], activity_id: str) -> Optional[Dict[str, Any]]:
@@ -171,6 +188,10 @@ def _normalise_activity(activity: Dict[str, Any]) -> ActivityDefinition:
         mandatory=bool(activity.get("mandatory", False)),
         allowedTypeCodes=activity.get("allowedTypeCodes", []) or [],
         allowOptOut=bool(activity.get("allowOptOut", False)),
+        selfServiceAllowed=(
+            activity.get("selfServiceAllowed")
+            if isinstance(activity.get("selfServiceAllowed"), bool) else None
+        ),
         prerequisiteActivityIds=prerequisite_ids,
         restrictToAssignedUsers=bool(activity.get("restrictToAssignedUsers", True)),
         variantOptions=activity.get("variantOptions", []) or [],
@@ -392,7 +413,8 @@ def create_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
         location=body["location"],
         sequenceEnforced=bool(body["sequenceEnforced"]),
         defaultAllowedTypeCodes=body.get("defaultAllowedTypeCodes") or [],
-        allowSelfService=bool(body.get("allowSelfService", False)),
+        registrationEnabled=bool(body.get("registrationEnabled", False)),
+        selfServiceAllowed=bool(body.get("selfServiceAllowed", False)),
         notificationConfig=notification_config or None,
         activities=activities,
         updatedBy=get_claim(event, "sub"),
@@ -448,7 +470,7 @@ def update_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
             updated["activities"] = [activity.to_dict() for activity in activities]
         if "notificationConfig" in body:
             updated["notificationConfig"] = _validate_notification_config(body.get("notificationConfig")) or None
-        for field in ("eventName", "location", "sequenceEnforced", "allowSelfService"):
+        for field in ("eventName", "location", "sequenceEnforced", "registrationEnabled", "selfServiceAllowed"):
             if field in body:
                 updated[field] = body[field]
     except ValidationError as exc:
@@ -549,7 +571,10 @@ def create_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
         occurrenceId=occurrence_id,
         date=body["date"],
         seq=seq,
-        selfServiceEnabled=bool(body.get("selfServiceEnabled", event_definition.get("allowSelfService", False))),
+        selfServiceAllowed=(
+            body.get("selfServiceAllowed")
+            if isinstance(body.get("selfServiceAllowed"), bool) else None
+        ),
         linkedOccurrenceRef=body.get("linkedOccurrenceRef"),
         restrictToAssignedUsers=True,
         updatedBy=get_claim(event, "sub"),
@@ -583,8 +608,11 @@ def update_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
         return error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
     if occurrence.get("status") in {EventOccurrenceStatus.COMPLETED.value, EventOccurrenceStatus.CANCELLED.value}:
         return error_response("OCCURRENCE_CLOSED", "Occurrence is already closed.", status_code=409)
-    if "selfServiceEnabled" in body:
-        occurrence["selfServiceEnabled"] = bool(body["selfServiceEnabled"])
+    if "selfServiceAllowed" in body:
+        occurrence["selfServiceAllowed"] = (
+            body["selfServiceAllowed"]
+            if isinstance(body["selfServiceAllowed"], bool) else None
+        )
     if "linkedOccurrenceRef" in body:
         occurrence["linkedOccurrenceRef"] = body.get("linkedOccurrenceRef")
     occurrence["updatedAt"] = utc_now_iso()
@@ -647,7 +675,7 @@ def update_activity_override(event: Dict[str, Any]) -> Dict[str, Any]:
         matched = {"activityId": activity_id}
         overrides.append(matched)
 
-    for field in ("enabled", "selfServiceEnabled", "allowedTypeCodes", "note", "skipped"):
+    for field in ("enabled", "selfServiceAllowed", "allowedTypeCodes", "note", "skipped"):
         if field in body:
             matched[field] = body.get(field)
     matched["updatedAt"] = utc_now_iso()
@@ -655,7 +683,7 @@ def update_activity_override(event: Dict[str, Any]) -> Dict[str, Any]:
 
     if (
         matched.get("enabled") is None
-        and matched.get("selfServiceEnabled") is None
+        and matched.get("selfServiceAllowed") is None
         and matched.get("allowedTypeCodes") is None
         and matched.get("skipped") is None
     ):
@@ -787,6 +815,7 @@ def _rider_event_completion_reached(
 
 
 def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
+    self_service = bool(event.get("_self_service"))
     params = event.get("pathParameters") or {}
     tour_id = params.get("tourId")
     event_id = params.get("eventId")
@@ -816,16 +845,33 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     if not _effective_activity_enabled(occurrence, activity):
         return error_response("ACTIVITY_NOT_FOUND", "Activity not found.", status_code=404)
 
+    if self_service and not effective_event_self_service_allowed(event_definition, occurrence, activity):
+        return error_response("SELF_SERVICE_NOT_ALLOWED", "Self-service is not allowed for this activity.", status_code=403)
+
     if occurrence.get("status") != EventOccurrenceStatus.ACTIVE.value:
         return error_response("OCCURRENCE_NOT_ACTIVE", "Occurrence is not active.", status_code=409)
 
-    access_denied = _check_event_scan_access(event, tour_id, event_definition, occurrence, activity, body["riderId"])
-    if access_denied:
-        return access_denied
+    if not self_service:
+        access_denied = _check_event_scan_access(event, tour_id, event_definition, occurrence, activity, body["riderId"])
+        if access_denied:
+            return access_denied
 
     rider = get_tour_item("TourRider", tour_id, {"riderId": body["riderId"]})
     if not rider:
         return error_response("RIDER_NOT_FOUND", "Rider not found.", status_code=404)
+
+    if event_definition.get("registrationEnabled"):
+        registration = get_tour_item(
+            "EventRegistration",
+            tour_id,
+            {"occurrenceId": occurrence_id, "riderId": body["riderId"]},
+        )
+        if not registration:
+            return error_response(
+                "RIDER_NOT_REGISTERED_FOR_EVENT",
+                "Rider is not registered for this event occurrence.",
+                status_code=403,
+            )
 
     flagged = False
     flag_reason = None
@@ -848,7 +894,7 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         return error_response("VALIDATION_ERROR", "This activity does not allow opt-out.", status_code=400)
 
     type_code = body.get("typeCode")
-    requires_type_code = body.get("outcome") != EventRecordOutcome.OPTED_OUT.value
+    requires_type_code = not self_service and body.get("outcome") != EventRecordOutcome.OPTED_OUT.value
     effective_allowed_type_codes = _effective_allowed_type_codes(event_definition, occurrence, activity)
     if requires_type_code and not type_code:
         return error_response("VALIDATION_ERROR", "typeCode is required for this activity record.", status_code=400)
@@ -966,6 +1012,22 @@ def cancel_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         return error_response("RECORD_NOT_FOUND", "Record not found.", status_code=404)
     if record.get("cancelledAt"):
         return error_response("RECORD_ALREADY_CANCELLED", "Record is already cancelled.", status_code=409)
+    if event.get("_self_service"):
+        from ownership import resolve_profile_id_for_sub
+        profile_id = resolve_profile_id_for_sub(get_claim(event, "sub"))
+        riders = query_tour_items(
+            "TourRider", tour_id,
+            "profileId = :profileId",
+            {":profileId": profile_id},
+            index_name="ProfileIdIndex",
+        ) if profile_id else []
+        if not riders or riders[0].get("riderId") != record.get("riderId"):
+            return error_response("FORBIDDEN", "Riders may only cancel their own records.", status_code=403)
+        definition = _get_event_definition(tour_id, event_id)
+        occurrence = _get_occurrence(tour_id, event_id, occurrence_id)
+        activity = _get_activity(definition or {}, record.get("activityId"))
+        if not definition or not occurrence or not activity or not effective_event_self_service_allowed(definition, occurrence, activity):
+            return error_response("SELF_SERVICE_NOT_ALLOWED", "Self-service is not allowed for this activity.", status_code=403)
     body, err = parse_body(event)
     if err:
         return err

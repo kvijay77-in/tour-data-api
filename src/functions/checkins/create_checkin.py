@@ -25,7 +25,7 @@ from response import (
     success_response, error_response, conflict_response,
     bad_request_response, not_found_response, internal_error_response
 )
-from dynamodb_utils import get_tour_item, query_tour_items, put_tour_item
+from dynamodb_utils import get_tour_item, query_tour_items, put_tour_item, get_item
 from validation import (
     validate_rider_id,
     validate_ride_id,
@@ -50,6 +50,8 @@ from rbac import (
     has_non_pit_stop_checkin_access,
     require_permission,
 )
+from ownership import resolve_profile_id_for_sub
+from self_checkin import effective_self_checkin_allowed, effective_quit_riding_allowed, effective_not_riding_allowed
 
 logger = get_logger(__name__)
 
@@ -161,7 +163,11 @@ def lambda_handler(event, context):
         log_event(logger, event)
         
         # Enforce RBAC — CHECKIN permission required; GUEST may not create check-ins
-        deny = require_permission(event, Permission.CHECKIN)
+        self_service = bool(event.get('_self_service'))
+        deny = require_permission(
+            event,
+            Permission.SELF_CHECKIN if self_service else Permission.CHECKIN,
+        )
         if deny:
             return deny
         
@@ -184,10 +190,26 @@ def lambda_handler(event, context):
         
         # Validate required fields
         try:
-            validate_required_fields(body, ['riderId', 'rideId', 'method'])
+            validate_required_fields(
+                body,
+                ['rideId'] if self_service else ['riderId', 'rideId', 'method'],
+            )
         except ValidationError as e:
             return bad_request_response(str(e))
         
+        if self_service:
+            claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
+            profile_id = resolve_profile_id_for_sub(claims.get('sub', ''))
+            linked_riders = query_tour_items(
+                table_type='TourRider', tour_id=tour_id,
+                key_condition_expression='profileId = :profileId',
+                expression_values={':profileId': profile_id},
+                index_name='ProfileIdIndex',
+            ) if profile_id else []
+            if not linked_riders:
+                return error_response("RIDER_PROFILE_NOT_LINKED", "Rider is not registered for this tour.", status_code=403)
+            body['riderId'] = linked_riders[0]['riderId']
+            body['method'] = CheckInMethod.SELF_SERVICE.value
         rider_id = body['riderId']
         ride_id = body['rideId']
         method = body['method']
@@ -273,6 +295,16 @@ def lambda_handler(event, context):
         
         if not ride:
             return not_found_response("Ride", ride_id)
+
+        if self_service:
+            tour = get_item('TOUR_MASTER_TABLE', {'tourId': tour_id}) or {}
+            if tour.get('status') != 'ACTIVE':
+                return error_response('TOUR_NOT_ACTIVE', 'Self check-in is only available for an active tour.', status_code=403)
+            if ride.get('status') not in {RideStatus.OPEN.value, RideStatus.STARTED.value}:
+                return error_response('RIDE_NOT_OPEN', 'Self check-in is only available while the ride is open or started.', status_code=403)
+            from datetime import datetime, timezone
+            if ride.get('date') != datetime.now(timezone.utc).date().isoformat():
+                return error_response('RIDE_NOT_TODAY', 'Self check-in is only available for today’s ride.', status_code=403)
         
         # Check if ride is closed
         if ride.get('status') == RideStatus.CLOSED.value:
@@ -318,6 +350,19 @@ def lambda_handler(event, context):
             stage = stages[stage_number]
             stage_id = stage.get('stageId')
             stage_type = stage.get('type')
+
+            if self_service and not effective_self_checkin_allowed(tour, ride, stage):
+                return error_response('SELF_CHECKIN_NOT_ALLOWED', 'Self check-in is not allowed for this stage.', status_code=403)
+            if self_service and stage_type == StageType.PIT_STOP.value and stage.get('pitStopStatus') != 'OPEN':
+                return error_response('PIT_STOP_NOT_OPEN', 'The pit stop is not open.', status_code=403)
+
+        if self_service and is_not_riding:
+            start_stage = next((s for s in stages if s.get('type') == StageType.START.value), None)
+            if ride.get('status') != RideStatus.OPEN.value or not start_stage or not effective_not_riding_allowed(start_stage):
+                return error_response('SELF_CHECKIN_NOT_ALLOWED', 'Not Riding is only allowed at an enabled START stage before the ride starts.', status_code=403)
+        if self_service and is_quit_riding:
+            if not effective_quit_riding_allowed(tour, ride) or ride.get('status') != RideStatus.STARTED.value:
+                return error_response('SELF_CHECKIN_NOT_ALLOWED', 'Quit Riding is not currently allowed.', status_code=403)
         
         # Step 2: Verify rider is registered for this tour
         tour_rider = get_tour_item(

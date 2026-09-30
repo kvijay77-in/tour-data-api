@@ -17,7 +17,7 @@ An event definition is stored in `Event-{tourId}`. Its ordered activities are em
 
 - Event and activity definitions are editable as tour data. Initial event definitions are not required by the backend schema; event content is configured for a tour.
 - Scan types are configured through `AppConfig` `ID_CODE_TYPE` values. Event-level defaults may be narrowed by each activity's `allowedTypeCodes`.
-- Occurrences support per-activity overrides for enabled state, self-service, allowed type codes, skip state, and an explanatory note.
+- Occurrences support per-activity overrides for enabled state, self-service permission, allowed type codes, skip state, and an explanatory note. Self-service precedence is occurrence override, activity setting, then event setting.
 - Activity records preserve the event/activity identity and scan-time details for history. Sequence, prerequisite, assignment, and allowed-type rules are enforced by the backend.
 - Event activity records use the existing rider personal-code/ID-code lookup model; a separate baggage identity is not introduced.
 - Hotel master records are in `Hotel-{tourId}`. `RoomAllocation-{tourId}` stores one rider allocation per stay date, including room-sharing information.

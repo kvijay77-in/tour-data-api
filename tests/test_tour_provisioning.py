@@ -144,7 +144,7 @@ class TestProvisionTourTables:
             MOCK_TOUR_ID,
             ignore_existing=True,
         )
-        assert len(created) == 12
+        assert len(created) == 13
 
         # Verify table names
         expected_prefix = f"{MOCK_STACK_NAME}-"
@@ -170,6 +170,7 @@ class TestProvisionTourTables:
             f"{MOCK_STACK_NAME}-Event-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-EventOccurrence-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-EventActivityLogs-{MOCK_TOUR_ID}",
+            f"{MOCK_STACK_NAME}-EventRegistration-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-Hotel-{MOCK_TOUR_ID}",
             f"{MOCK_STACK_NAME}-RoomAllocation-{MOCK_TOUR_ID}",
         ]
@@ -233,7 +234,7 @@ class TestProvisionTourTables:
             ignore_existing=True,
         )
 
-        assert len(created) == 12
+        assert len(created) == 13
         for table_type in TOUR_TABLE_TYPES:
             resp = dynamodb_client_mock.describe_table(
                 TableName=f"{MOCK_STACK_NAME}-{table_type}-{MOCK_TOUR_ID}"

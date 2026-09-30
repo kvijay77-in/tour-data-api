@@ -98,6 +98,7 @@ def lambda_handler(event, context):
             'name', 'date', 'rideNo', 'startLocation', 'finishLocation',
             'totalDistance', 'flagOffTime', 'stages', 'floats', 'description', 'status',
             'openTime', 'closeTime'
+            , 'selfQuitRidingAllowed', 'selfCheckInAllowed'
         ]
         updates = {k: v for k, v in body.items() if k in updatable_fields}
         
@@ -142,6 +143,10 @@ def lambda_handler(event, context):
                 return bad_request_response(
                     f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
                 )
+
+        for field_name in ('selfQuitRidingAllowed', 'selfCheckInAllowed'):
+            if field_name in updates and not isinstance(updates[field_name], bool):
+                return bad_request_response(f"{field_name} must be a boolean")
 
         if 'stages' in updates:
             try:

@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 
 dynamodb_client = boto3.client('dynamodb')
 
-TOUR_UPDATE_FIELDS = {'name', 'startDate', 'endDate', 'description', 'status', 'rideCount'}
+TOUR_UPDATE_FIELDS = {'name', 'startDate', 'endDate', 'description', 'status', 'rideCount', 'selfQuitRidingAllowed'}
 
 
 def _validate_optional_bool(value, field_name):
@@ -57,6 +57,9 @@ def _validate_update_fields(updates, merged_tour):
 
     if 'rideCount' in updates:
         validate_ride_count(updates['rideCount'])
+
+    if 'selfQuitRidingAllowed' in updates and not isinstance(updates['selfQuitRidingAllowed'], bool):
+        raise ValidationError("selfQuitRidingAllowed must be a boolean")
 
     if merged_tour['endDate'] < merged_tour['startDate']:
         raise ValidationError("endDate must be on or after startDate")

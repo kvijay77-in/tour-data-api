@@ -12,6 +12,8 @@ from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from dynamodb_utils import get_tour_item
+from models import self_service_summary
+from dynamodb_utils import get_item
 
 logger = get_logger(__name__)
 
@@ -56,6 +58,10 @@ def lambda_handler(event, context):
         if not ride:
             logger.info(f"Ride not found: {ride_id}")
             return not_found_response("Ride", ride_id)
+
+        tour = get_item('TOUR_MASTER_TABLE', {'tourId': tour_id}) or {}
+        ride = dict(ride)
+        ride['selfService'] = self_service_summary(tour, ride)
         
         logger.info(f"Successfully retrieved ride: {ride_id}")
         return success_response(ride)
