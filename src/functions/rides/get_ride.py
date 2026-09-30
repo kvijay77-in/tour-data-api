@@ -11,7 +11,8 @@ sys.path.insert(0, '/opt/python')
 from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, validate_ride_id, ValidationError
-from dynamodb_utils import get_tour_item
+from dynamodb_utils import get_item, get_tour_item
+from self_service_policy import build_ride_self_service
 
 logger = get_logger(__name__)
 
@@ -25,7 +26,7 @@ def lambda_handler(event, context):
     - rideId: Ride identifier (e.g., RIDE001)
     
     Returns:
-    - 200: Ride found
+    - 200: Ride found, with the calculated read-only ``selfService`` permissions
     - 400: Invalid input
     - 404: Ride not found
     - 500: Server error
@@ -57,6 +58,9 @@ def lambda_handler(event, context):
             logger.info(f"Ride not found: {ride_id}")
             return not_found_response("Ride", ride_id)
         
+        tour = get_item(table_name_env='TOUR_MASTER_TABLE', key={'tourId': tour_id})
+        ride['selfService'] = build_ride_self_service(ride, tour)
+
         logger.info(f"Successfully retrieved ride: {ride_id}")
         return success_response(ride)
         

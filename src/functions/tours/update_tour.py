@@ -15,19 +15,22 @@ import boto3
 from logger import get_logger, log_event
 from response import (
     success_response, bad_request_response, not_found_response,
-    internal_error_response
+    internal_error_response, validation_exception_response
 )
 from dynamodb_utils import get_item, put_item
-from validation import validate_tour_id, validate_iso_date, validate_ride_count, ValidationError
+from validation import (
+    validate_tour_id, validate_iso_date, validate_ride_count, validate_optional_bool, ValidationError
+)
 from models import TourStatus, utc_now_iso
 from tour_provisioning import provision_tour_tables
+from self_service_policy import apply_tour_defaults
 from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
 
 dynamodb_client = boto3.client('dynamodb')
 
-TOUR_UPDATE_FIELDS = {'name', 'startDate', 'endDate', 'description', 'status', 'rideCount'}
+TOUR_UPDATE_FIELDS = {'name', 'startDate', 'endDate', 'description', 'status', 'rideCount', 'selfQuitRidingAllowed'}
 
 
 def _validate_optional_bool(value, field_name):
@@ -82,6 +85,7 @@ def lambda_handler(event, context):
         description: Tour description (optional)
         rideCount: Total number of rides planned for the tour (optional, positive integer)
         status: Tour status (optional)
+        selfQuitRidingAllowed: Whether riders may self-report Quit Riding (optional boolean)
     """
     try:
         log_event(logger, event)
@@ -125,6 +129,13 @@ def lambda_handler(event, context):
             return bad_request_response("At least one TourMaster field is required")
 
         updated_tour = {**tour, **updates}
+        if 'selfQuitRidingAllowed' in updates:
+            try:
+                validate_optional_bool(updates['selfQuitRidingAllowed'], 'selfQuitRidingAllowed')
+            except ValidationError as e:
+                return validation_exception_response(e)
+            updates['selfQuitRidingAllowed'] = updates['selfQuitRidingAllowed'] is True
+            updated_tour['selfQuitRidingAllowed'] = updates['selfQuitRidingAllowed']
         try:
             _validate_update_fields(updates, updated_tour)
         except ValidationError as e:
@@ -136,7 +147,7 @@ def lambda_handler(event, context):
 
         if not provisioning:
             return success_response({
-                'tour': updated_tour,
+                'tour': apply_tour_defaults(updated_tour),
                 'provisioning': provisioning,
                 'provisionedTables': [],
             })
@@ -161,7 +172,7 @@ def lambda_handler(event, context):
 
         logger.info(f"Tour {tour_id} provisioning rerun completed with {len(provisioned_tables)} tables")
         return success_response({
-            'tour': updated_tour,
+            'tour': apply_tour_defaults(updated_tour),
             'provisioning': provisioning,
             'provisionedTables': provisioned_tables,
         })

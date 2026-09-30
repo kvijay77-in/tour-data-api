@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
+from self_service_policy import apply_tour_defaults
 from response import success_response, error_response, internal_error_response
 from dynamodb_utils import scan_items, query_items
 from models import TourStatus
@@ -65,7 +66,7 @@ def lambda_handler(event, context):
         logger.info(f"Found {len(items)} tour(s)")
         
         return success_response({
-            'tours': items,
+            'tours': [apply_tour_defaults(item) for item in items],
             'count': len(items)
         })
     

@@ -40,6 +40,7 @@ from models import (
     EventRecordOutcome,
     EventType,
     Hotel,
+    SELF_SERVICE_METHOD,
     HotelUploadStatus,
     RoomAllocation,
     TourRiderStatus,
@@ -78,6 +79,9 @@ from validation import (
 )
 from logger import get_logger
 from notification_service import notify
+from self_service_policy import activity_self_service_allowed
+from rider_identity import is_rider_caller, require_own_rider_data, resolve_caller_tour_rider
+import event_registration
 
 
 logger = get_logger(__name__)
@@ -129,15 +133,95 @@ def _validate_allowed_type_codes_exist(allowed_type_codes: List[str]) -> None:
             )
 
 
+# Removed display-only self-service settings. Values sent by older clients are
+# ignored and values stored before the removal are never read or returned.
+_LEGACY_SELF_SERVICE_FIELDS = (
+    "allowSelfService",
+    "selfServiceEnabled",
+    "allow_self_service",
+    "self_service_enabled",
+)
+
+
+def _strip_legacy_fields(item: Dict[str, Any]) -> Dict[str, Any]:
+    for field_name in _LEGACY_SELF_SERVICE_FIELDS:
+        item.pop(field_name, None)
+    return item
+
+
+def _present_event_definition(item: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Normalise a stored event definition for use and output."""
+    if item is None:
+        return None
+    _strip_legacy_fields(item)
+    item["registrationEnabled"] = item.get("registrationEnabled") is True
+    item["selfServiceAllowed"] = item.get("selfServiceAllowed") is True
+    for activity in item.get("activities") or []:
+        if isinstance(activity, dict):
+            _strip_legacy_fields(activity)
+    return item
+
+
+def _present_occurrence(item: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Normalise a stored occurrence (and its activity overrides) for use and output."""
+    if item is None:
+        return None
+    _strip_legacy_fields(item)
+    for override in item.get("activityOverrides") or []:
+        if isinstance(override, dict):
+            _strip_legacy_fields(override)
+    return item
+
+
 def _get_event_definition(tour_id: str, event_id: str) -> Optional[Dict[str, Any]]:
-    return get_tour_item("Event", tour_id, {"eventId": event_id})
+    return _present_event_definition(get_tour_item("Event", tour_id, {"eventId": event_id}))
 
 
 def _get_occurrence(tour_id: str, event_id: str, occurrence_id: str) -> Optional[Dict[str, Any]]:
     parts = occurrence_id.split("#", 1)
     if len(parts) != 2:
         return None
-    return get_tour_item("EventOccurrence", tour_id, {"eventId": event_id, "dateSeq": parts[1]})
+    return _present_occurrence(
+        get_tour_item("EventOccurrence", tour_id, {"eventId": event_id, "dateSeq": parts[1]})
+    )
+
+
+def _optional_bool(body: Dict[str, Any], field_name: str) -> Optional[bool]:
+    """Return a bool or None for an optional flag; any other value is a validation error."""
+    value = body.get(field_name)
+    if value is None or isinstance(value, bool):
+        return value
+    raise ValidationError(f"{field_name} must be true, false or null", {"field": field_name, "value": value})
+
+
+def _required_bool(body: Dict[str, Any], field_name: str, default: bool = False) -> bool:
+    """Return a bool flag (missing -> default); any non-bool value is a validation error."""
+    if field_name not in body:
+        return default
+    value = body.get(field_name)
+    if not isinstance(value, bool):
+        raise ValidationError(f"{field_name} must be true or false", {"field": field_name, "value": value})
+    return value
+
+
+def _find_override(occurrence: Dict[str, Any], activity_id: str) -> Optional[Dict[str, Any]]:
+    for override in occurrence.get("activityOverrides", []) or []:
+        if override.get("activityId") == activity_id:
+            return override
+    return None
+
+
+def _activity_self_service(
+    event_definition: Dict[str, Any],
+    occurrence: Dict[str, Any],
+    activity: Dict[str, Any],
+) -> bool:
+    return activity_self_service_allowed(
+        event_definition,
+        activity,
+        occurrence,
+        _find_override(occurrence, activity.get("activityId")),
+    )
 
 
 def _get_activity(event_definition: Dict[str, Any], activity_id: str) -> Optional[Dict[str, Any]]:
@@ -175,6 +259,7 @@ def _normalise_activity(activity: Dict[str, Any]) -> ActivityDefinition:
         restrictToAssignedUsers=bool(activity.get("restrictToAssignedUsers", True)),
         variantOptions=activity.get("variantOptions", []) or [],
         notes=activity.get("notes", "") or "",
+        selfServiceAllowed=_optional_bool(activity, "selfServiceAllowed"),
     )
 
 
@@ -331,7 +416,10 @@ def list_events(event: Dict[str, Any]) -> Dict[str, Any]:
         validate_tour_id(tour_id)
     except ValidationError as exc:
         return bad_request_response(exc.message, exc.details)
-    items = sorted(scan_tour_items("Event", tour_id), key=lambda item: item.get("eventId", ""))
+    items = sorted(
+        (_present_event_definition(item) for item in scan_tour_items("Event", tour_id)),
+        key=lambda item: item.get("eventId", ""),
+    )
     return success_response({"items": items})
 
 
@@ -382,6 +470,8 @@ def create_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
         notification_config = _validate_notification_config(body.get("notificationConfig"))
         for activity in activities:
             _validate_allowed_type_codes_exist(activity.allowedTypeCodes)
+        registration_enabled = _required_bool(body, "registrationEnabled")
+        self_service_allowed = _required_bool(body, "selfServiceAllowed")
     except ValidationError as exc:
         return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
 
@@ -392,7 +482,8 @@ def create_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
         location=body["location"],
         sequenceEnforced=bool(body["sequenceEnforced"]),
         defaultAllowedTypeCodes=body.get("defaultAllowedTypeCodes") or [],
-        allowSelfService=bool(body.get("allowSelfService", False)),
+        registrationEnabled=registration_enabled,
+        selfServiceAllowed=self_service_allowed,
         notificationConfig=notification_config or None,
         activities=activities,
         updatedBy=get_claim(event, "sub"),
@@ -448,9 +539,12 @@ def update_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
             updated["activities"] = [activity.to_dict() for activity in activities]
         if "notificationConfig" in body:
             updated["notificationConfig"] = _validate_notification_config(body.get("notificationConfig")) or None
-        for field in ("eventName", "location", "sequenceEnforced", "allowSelfService"):
+        for field in ("eventName", "location", "sequenceEnforced"):
             if field in body:
                 updated[field] = body[field]
+        for field in ("registrationEnabled", "selfServiceAllowed"):
+            if field in body:
+                updated[field] = _required_bool(body, field)
     except ValidationError as exc:
         return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
 
@@ -484,6 +578,7 @@ def list_occurrences(event: Dict[str, Any]) -> Dict[str, Any]:
         key_condition_expression="eventId = :eventId",
         expression_values={":eventId": event_id},
     )
+    items = [_present_occurrence(item) for item in items]
     date_filter = query_params.get("date")
     status_filter = query_params.get("status")
     try:
@@ -537,6 +632,7 @@ def create_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
         seq = int(body["seq"])
         if seq <= 0:
             raise ValidationError("seq must be a positive integer", {"field": "seq", "value": body["seq"]})
+        occurrence_self_service = _optional_bool(body, "selfServiceAllowed")
     except (ValidationError, ValueError) as exc:
         if isinstance(exc, ValidationError):
             return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
@@ -549,7 +645,7 @@ def create_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
         occurrenceId=occurrence_id,
         date=body["date"],
         seq=seq,
-        selfServiceEnabled=bool(body.get("selfServiceEnabled", event_definition.get("allowSelfService", False))),
+        selfServiceAllowed=occurrence_self_service,
         linkedOccurrenceRef=body.get("linkedOccurrenceRef"),
         restrictToAssignedUsers=True,
         updatedBy=get_claim(event, "sub"),
@@ -583,8 +679,15 @@ def update_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
         return error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
     if occurrence.get("status") in {EventOccurrenceStatus.COMPLETED.value, EventOccurrenceStatus.CANCELLED.value}:
         return error_response("OCCURRENCE_CLOSED", "Occurrence is already closed.", status_code=409)
-    if "selfServiceEnabled" in body:
-        occurrence["selfServiceEnabled"] = bool(body["selfServiceEnabled"])
+    if "selfServiceAllowed" in body:
+        try:
+            self_service_value = _optional_bool(body, "selfServiceAllowed")
+        except ValidationError as exc:
+            return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
+        if self_service_value is None:
+            occurrence.pop("selfServiceAllowed", None)
+        else:
+            occurrence["selfServiceAllowed"] = self_service_value
     if "linkedOccurrenceRef" in body:
         occurrence["linkedOccurrenceRef"] = body.get("linkedOccurrenceRef")
     occurrence["updatedAt"] = utc_now_iso()
@@ -629,6 +732,7 @@ def update_activity_override(event: Dict[str, Any]) -> Dict[str, Any]:
         validate_allowed_type_codes(body.get("allowedTypeCodes"), "allowedTypeCodes")
         if "skipped" in body and not isinstance(body.get("skipped"), bool):
             raise ValidationError("skipped must be boolean", {"field": "skipped"})
+        _optional_bool(body, "selfServiceAllowed")
         if body.get("allowedTypeCodes") is not None:
             _validate_allowed_type_codes_exist(body.get("allowedTypeCodes") or [])
     except ValidationError as exc:
@@ -647,7 +751,7 @@ def update_activity_override(event: Dict[str, Any]) -> Dict[str, Any]:
         matched = {"activityId": activity_id}
         overrides.append(matched)
 
-    for field in ("enabled", "selfServiceEnabled", "allowedTypeCodes", "note", "skipped"):
+    for field in ("enabled", "selfServiceAllowed", "allowedTypeCodes", "note", "skipped"):
         if field in body:
             matched[field] = body.get(field)
     matched["updatedAt"] = utc_now_iso()
@@ -655,7 +759,7 @@ def update_activity_override(event: Dict[str, Any]) -> Dict[str, Any]:
 
     if (
         matched.get("enabled") is None
-        and matched.get("selfServiceEnabled") is None
+        and matched.get("selfServiceAllowed") is None
         and matched.get("allowedTypeCodes") is None
         and matched.get("skipped") is None
     ):
@@ -787,6 +891,7 @@ def _rider_event_completion_reached(
 
 
 def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Staff activity record (``POST .../records``)."""
     params = event.get("pathParameters") or {}
     tour_id = params.get("tourId")
     event_id = params.get("eventId")
@@ -801,9 +906,44 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         validate_activity_id(body["activityId"])
         validate_rider_id(body["riderId"])
         validate_iso_datetime(body["timestamp"], "timestamp")
+        if body["method"] == SELF_SERVICE_METHOD:
+            raise ValidationError(
+                "method SELF_SERVICE is reserved for rider self-service records",
+                {"field": "method", "value": body["method"]},
+            )
     except ValidationError as exc:
         return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
 
+    return record_activity(
+        event,
+        tour_id=tour_id,
+        event_id=event_id,
+        occurrence_id=occurrence_id,
+        body=body,
+        rider_id=body["riderId"],
+        recorded_by=get_claim(event, "sub", "system"),
+        self_service=False,
+    )
+
+
+def record_activity(
+    event: Dict[str, Any],
+    tour_id: str,
+    event_id: str,
+    occurrence_id: str,
+    body: Dict[str, Any],
+    rider_id: str,
+    recorded_by: str,
+    self_service: bool,
+) -> Dict[str, Any]:
+    """Shared activity record logic used by staff records and rider self-records.
+
+    ``self_service=True`` (rider self-record) differs from staff recording only in:
+    the calculated self-service permission is checked instead of staff assignment
+    (``restrictToAssignedUsers``) access, ``typeCode`` is not required and the
+    allowed-ID-type check is skipped, disabled or organiser-skipped activities are
+    not available, and ``variantSelected`` is only required for ``COMPLETED``.
+    """
     event_definition = _get_event_definition(tour_id, event_id)
     occurrence = _get_occurrence(tour_id, event_id, occurrence_id)
     if not event_definition:
@@ -813,19 +953,42 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     activity = _get_activity(event_definition, body["activityId"])
     if not activity:
         return error_response("ACTIVITY_NOT_FOUND", "Activity not found.", status_code=404)
-    if not _effective_activity_enabled(occurrence, activity):
+    if not self_service and not _effective_activity_enabled(occurrence, activity):
         return error_response("ACTIVITY_NOT_FOUND", "Activity not found.", status_code=404)
 
     if occurrence.get("status") != EventOccurrenceStatus.ACTIVE.value:
         return error_response("OCCURRENCE_NOT_ACTIVE", "Occurrence is not active.", status_code=409)
 
-    access_denied = _check_event_scan_access(event, tour_id, event_definition, occurrence, activity, body["riderId"])
-    if access_denied:
-        return access_denied
+    if self_service:
+        if not _activity_self_service(event_definition, occurrence, activity):
+            return error_response(
+                "SELF_SERVICE_NOT_ALLOWED",
+                "Self-service is not allowed for this activity.",
+                status_code=403,
+            )
+    else:
+        access_denied = _check_event_scan_access(event, tour_id, event_definition, occurrence, activity, rider_id)
+        if access_denied:
+            return access_denied
 
-    rider = get_tour_item("TourRider", tour_id, {"riderId": body["riderId"]})
+    rider = get_tour_item("TourRider", tour_id, {"riderId": rider_id})
     if not rider:
         return error_response("RIDER_NOT_FOUND", "Rider not found.", status_code=404)
+
+    if event_definition.get("registrationEnabled") is True and not event_registration.get_registration(
+        tour_id, occurrence_id, rider_id
+    ):
+        return error_response(
+            "RIDER_NOT_REGISTERED_FOR_EVENT",
+            "The rider is not registered for this event occurrence.",
+            status_code=403,
+        )
+
+    if self_service and (
+        not _effective_activity_enabled(occurrence, activity)
+        or _is_activity_skipped_by_organizer(occurrence, activity.get("activityId"))
+    ):
+        return error_response("ACTIVITY_NOT_FOUND", "Activity not found.", status_code=404)
 
     flagged = False
     flag_reason = None
@@ -836,7 +999,7 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
             flag_reason = "LATE_SYNC_BEFORE_BAGGAGE_RELEASE"
         else:
             rider_profile = get_item("RIDER_PROFILE_TABLE", {"profileId": rider.get("profileId")}) or {}
-            rider_name = rider_profile.get("name", body["riderId"])
+            rider_name = rider_profile.get("name", rider_id)
             release_date = baggage_released_at or "an earlier date"
             return error_response(
                 "BAGGAGE_NOT_IN_TOUR",
@@ -844,36 +1007,41 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
                 status_code=409,
             )
 
-    if body.get("outcome") == EventRecordOutcome.OPTED_OUT.value and not activity.get("allowOptOut", False):
+    outcome = body.get("outcome", EventRecordOutcome.COMPLETED.value)
+    if outcome == EventRecordOutcome.OPTED_OUT.value and not activity.get("allowOptOut", False):
         return error_response("VALIDATION_ERROR", "This activity does not allow opt-out.", status_code=400)
 
-    type_code = body.get("typeCode")
-    requires_type_code = body.get("outcome") != EventRecordOutcome.OPTED_OUT.value
-    effective_allowed_type_codes = _effective_allowed_type_codes(event_definition, occurrence, activity)
-    if requires_type_code and not type_code:
-        return error_response("VALIDATION_ERROR", "typeCode is required for this activity record.", status_code=400)
-    if type_code and type_code not in effective_allowed_type_codes:
-        return error_response(
-            "SCAN_TYPE_NOT_ALLOWED",
-            "The scanned type is not allowed for this event activity.",
-            status_code=400,
-        )
+    type_code = None
+    if not self_service:
+        type_code = body.get("typeCode")
+        requires_type_code = outcome != EventRecordOutcome.OPTED_OUT.value
+        effective_allowed_type_codes = _effective_allowed_type_codes(event_definition, occurrence, activity)
+        if requires_type_code and not type_code:
+            return error_response("VALIDATION_ERROR", "typeCode is required for this activity record.", status_code=400)
+        if type_code and type_code not in effective_allowed_type_codes:
+            return error_response(
+                "SCAN_TYPE_NOT_ALLOWED",
+                "The scanned type is not allowed for this event activity.",
+                status_code=400,
+            )
 
     variant_options = activity.get("variantOptions") or []
-    if variant_options and body.get("variantSelected") not in variant_options:
+    variant_selected = body.get("variantSelected")
+    variant_required = not self_service or outcome == EventRecordOutcome.COMPLETED.value
+    if variant_options and (variant_required or variant_selected is not None) and variant_selected not in variant_options:
         return error_response("VALIDATION_ERROR", "variantSelected is required and must match variantOptions.", status_code=400)
 
     records = _non_cancelled_records(_scan_records_for_occurrence(tour_id, occurrence_id))
-    completion_before = _rider_event_completion_reached(body["riderId"], event_definition, occurrence, records)
+    completion_before = _rider_event_completion_reached(rider_id, event_definition, occurrence, records)
     for record in records:
-        if record.get("riderId") == body["riderId"] and record.get("activityId") == body["activityId"]:
+        if record.get("riderId") == rider_id and record.get("activityId") == body["activityId"]:
             return error_response("DUPLICATE_ACTIVITY_RECORD", "Activity already recorded for this rider.", status_code=409)
 
     sequence_enforced = bool(event_definition.get("sequenceEnforced"))
     completed_activity_ids = {
         record.get("activityId")
         for record in records
-        if record.get("riderId") == body["riderId"] and record.get("outcome") in {EventRecordOutcome.COMPLETED.value, EventRecordOutcome.OPTED_OUT.value}
+        if record.get("riderId") == rider_id and record.get("outcome") in {EventRecordOutcome.COMPLETED.value, EventRecordOutcome.OPTED_OUT.value}
     }
     prerequisites = set(activity.get("prerequisiteActivityIds") or [])
     if sequence_enforced:
@@ -893,11 +1061,13 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         if missing:
             return error_response("PREREQUISITE_NOT_MET", "Prerequisite activity not yet completed.", status_code=409)
 
-    record_id = f"{body['riderId']}#{body['activityId']}#{body['timestamp']}"
-    type_map = _get_enabled_id_code_types()
-    bag_label = ((type_map.get(type_code) or {}).get("config", {}) or {}).get("name")
-    scanned_by = get_claim(event, "sub", "system")
-    user_record = _load_user_assignment(tour_id, scanned_by) or {}
+    record_id = f"{rider_id}#{body['activityId']}#{body['timestamp']}"
+    bag_label = None
+    hotel_id = None
+    if not self_service:
+        type_map = _get_enabled_id_code_types()
+        bag_label = ((type_map.get(type_code) or {}).get("config", {}) or {}).get("name")
+        hotel_id = (_load_user_assignment(tour_id, recorded_by) or {}).get("hotelId")
 
     item = EventActivityRecord(
         occurrenceId=occurrence_id,
@@ -905,14 +1075,14 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
         eventId=event_id,
         activityId=body["activityId"],
         activityName=activity.get("name"),
-        riderId=body["riderId"],
-        scannedBy=scanned_by,
+        riderId=rider_id,
+        scannedBy=recorded_by,
         typeCode=type_code,
         bagLabel=bag_label,
-        outcome=EventRecordOutcome(body.get("outcome", EventRecordOutcome.COMPLETED.value)),
-        variantSelected=body.get("variantSelected"),
-        hotelId=user_record.get("hotelId"),
-        method=body["method"],
+        outcome=EventRecordOutcome(outcome),
+        variantSelected=variant_selected,
+        hotelId=hotel_id,
+        method=SELF_SERVICE_METHOD if self_service else body["method"],
         timestamp=body["timestamp"],
         syncedAt=utc_now_iso(),
         isFlagged=flagged,
@@ -926,11 +1096,13 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
             item=item,
             condition_expression="attribute_not_exists(occurrenceId) AND attribute_not_exists(recordId)",
         )
-    except ClientError:
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return error_response("DUPLICATE_ACTIVITY_RECORD", "Activity already recorded for this rider.", status_code=409)
         return internal_error_response("Failed to create activity record")
 
     notification_config = event_definition.get("notificationConfig") or {}
-    completion_after = _rider_event_completion_reached(body["riderId"], event_definition, occurrence, records + [item])
+    completion_after = _rider_event_completion_reached(rider_id, event_definition, occurrence, records + [item])
     if notification_config.get("completionNotifyEnabled") and not completion_before and completion_after:
         try:
             notify(
@@ -941,16 +1113,32 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
                     "eventId": event_id,
                     "eventName": event_definition.get("eventName"),
                     "occurrenceId": occurrence_id,
-                    "riderId": body["riderId"],
+                    "riderId": rider_id,
                     "activityId": body["activityId"],
                     "timestamp": body["timestamp"],
                 },
-                audience_override=[f"TOUR#{tour_id}#RIDER#{body['riderId']}"],
-                actor=scanned_by,
+                audience_override=[f"TOUR#{tour_id}#RIDER#{rider_id}"],
+                actor=recorded_by,
             )
         except Exception as notify_exc:  # pragma: no cover - safeguard only
             logger.warning("event completion notify trigger failed: %s", str(notify_exc))
     return success_response(item, status_code=201)
+
+
+def cancel_record(
+    tour_id: str,
+    record: Dict[str, Any],
+    cancelled_by: str,
+    cancel_reason: Optional[str],
+) -> Dict[str, Any]:
+    """Shared activity record cancel used by staff and rider self-service cancels."""
+    if record.get("cancelledAt"):
+        return error_response("RECORD_ALREADY_CANCELLED", "Record is already cancelled.", status_code=409)
+    record["cancelledAt"] = utc_now_iso()
+    record["cancelledBy"] = cancelled_by
+    record["cancelReason"] = cancel_reason
+    put_tour_item("EventActivityLogs", tour_id, record, condition_expression="attribute_exists(occurrenceId)")
+    return success_response(record)
 
 
 def cancel_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -969,11 +1157,7 @@ def cancel_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     body, err = parse_body(event)
     if err:
         return err
-    record["cancelledAt"] = utc_now_iso()
-    record["cancelledBy"] = get_claim(event, "sub")
-    record["cancelReason"] = (body or {}).get("cancelReason")
-    put_tour_item("EventActivityLogs", tour_id, record, condition_expression="attribute_exists(occurrenceId)")
-    return success_response(record)
+    return cancel_record(tour_id, record, get_claim(event, "sub"), (body or {}).get("cancelReason"))
 
 
 def get_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -985,9 +1169,11 @@ def get_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
     event_definition = _get_event_definition(tour_id, event_id)
     if not occurrence:
         return error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
+    event_definition = event_definition or {}
     records = _scan_records_for_occurrence(tour_id, occurrence_id)
     non_cancelled = _non_cancelled_records(records)
     riders = scan_tour_items("TourRider", tour_id)
+    registered_ids = event_registration.registered_rider_ids(tour_id, event_definition, occurrence_id, riders)
     items = []
     for rider in riders:
         rider_status = []
@@ -998,10 +1184,18 @@ def get_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
                     status = record.get("outcome") or "COMPLETED"
                     break
             rider_status.append({"activityId": activity.get("activityId"), "status": status})
-        items.append({"riderId": rider.get("riderId"), "activities": rider_status})
+        items.append(
+            {
+                "riderId": rider.get("riderId"),
+                "registered": rider.get("riderId") in registered_ids,
+                "activities": rider_status,
+            }
+        )
     return success_response(
         {
             "occurrence": occurrence,
+            "registrationEnabled": event_definition.get("registrationEnabled") is True,
+            "registeredCount": len(registered_ids),
             "riders": items,
             "cancelled": [record for record in records if record.get("cancelledAt")],
         }
@@ -1020,9 +1214,12 @@ def get_dashboard_progress(event: Dict[str, Any]) -> Dict[str, Any]:
     riders = scan_tour_items("TourRider", tour_id)
     records = _non_cancelled_records(_scan_records_for_occurrence(tour_id, occurrence_id))
     mandatory_count = _count_outstanding_mandatory(tour_id, event_id, occurrence)
+    registered_ids = event_registration.registered_rider_ids(tour_id, event_definition or {}, occurrence_id, riders)
     return success_response(
         {
             "totalRiders": len(riders),
+            "registrationEnabled": (event_definition or {}).get("registrationEnabled") is True,
+            "registeredCount": len(registered_ids),
             "completedCount": len([record for record in records if record.get("outcome") == EventRecordOutcome.COMPLETED.value]),
             "outstandingMandatoryCount": mandatory_count,
             "optedOutCount": len([record for record in records if record.get("outcome") == EventRecordOutcome.OPTED_OUT.value]),
@@ -1043,6 +1240,10 @@ def get_rider_progress(event: Dict[str, Any]) -> Dict[str, Any]:
         validate_rider_id(rider_id)
     except ValidationError as exc:
         return bad_request_response(exc.message, exc.details)
+    # Rider API: a rider may only read their own progress (403 NOT_OWN_DATA)
+    deny = require_own_rider_data(event, tour_id, rider_id)
+    if deny:
+        return deny
     items = query_tour_items(
         "EventActivityLogs",
         tour_id,
@@ -1058,12 +1259,53 @@ def get_rider_progress(event: Dict[str, Any]) -> Dict[str, Any]:
             "eventId": item.get("eventId"),
             "occurrenceId": item.get("occurrenceId"),
             "activityId": item.get("activityId"),
+            "recordId": item.get("recordId"),
             "status": item.get("outcome"),
+            "method": item.get("method"),
+            "timestamp": item.get("timestamp"),
         }
         for item in items
         if not item.get("cancelledAt")
     ]
-    return success_response({"items": progress_items})
+    return success_response(
+        {
+            "items": progress_items,
+            "registrations": _rider_registration_statuses(tour_id, rider_id, event_filter),
+        }
+    )
+
+
+def _rider_registration_statuses(
+    tour_id: str,
+    rider_id: str,
+    event_filter: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Effective registration status of one rider for every occurrence (optionally one event)."""
+    tour_rider = get_tour_item("TourRider", tour_id, {"riderId": rider_id})
+    events = {
+        item.get("eventId"): _present_event_definition(item)
+        for item in scan_tour_items("Event", tour_id)
+        if not event_filter or item.get("eventId") == event_filter
+    }
+    stored = {
+        item.get("occurrenceId"): item
+        for item in event_registration.list_rider_registrations(tour_id, rider_id)
+    }
+    statuses = []
+    for occurrence in scan_tour_items("EventOccurrence", tour_id):
+        event_definition = events.get(occurrence.get("eventId"))
+        if event_definition is None:
+            continue
+        registration = stored.get(occurrence.get("occurrenceId"))
+        statuses.append(
+            {
+                "eventId": occurrence.get("eventId"),
+                "occurrenceId": occurrence.get("occurrenceId"),
+                "registrationEnabled": event_definition.get("registrationEnabled") is True,
+                "registered": event_registration.is_registered(event_definition, tour_rider, registration),
+            }
+        )
+    return sorted(statuses, key=lambda item: item.get("occurrenceId") or "")
 
 
 def _final_activity_id(tour_id: str, event_id: str, occurrence: Dict[str, Any]) -> Optional[str]:
@@ -1131,21 +1373,52 @@ def get_bootstrap(event: Dict[str, Any]) -> Dict[str, Any]:
     except ValidationError as exc:
         return bad_request_response(exc.message, exc.details)
 
+    caller = None
+    if is_rider_caller(event):
+        caller, caller_error = resolve_caller_tour_rider(event, tour_id)
+        if caller_error:
+            return caller_error
+
     today = utc_today_iso()
-    events = scan_tour_items("Event", tour_id)
-    occurrences = scan_tour_items("EventOccurrence", tour_id)
+    events = [_present_event_definition(item) for item in scan_tour_items("Event", tour_id)]
+    events_by_id = {item.get("eventId"): item for item in events}
+    occurrences = [_present_occurrence(item) for item in scan_tour_items("EventOccurrence", tour_id)]
     filtered_occurrences = [
         occurrence for occurrence in occurrences
         if occurrence.get("status") in {EventOccurrenceStatus.ACTIVE.value, EventOccurrenceStatus.PLANNED.value}
         and occurrence.get("date", "") >= today
     ]
+    caller_registrations = {}
+    if caller:
+        caller_registrations = {
+            item.get("occurrenceId"): item
+            for item in event_registration.list_rider_registrations(tour_id, caller["riderId"])
+        }
+    for occurrence in filtered_occurrences:
+        event_definition = events_by_id.get(occurrence.get("eventId")) or {}
+        occurrence["activitySelfService"] = [
+            {
+                "activityId": activity.get("activityId"),
+                "selfServiceAllowed": _activity_self_service(event_definition, occurrence, activity),
+            }
+            for activity in event_definition.get("activities", []) or []
+        ]
+        if caller:
+            occurrence["registered"] = event_registration.is_registered(
+                event_definition,
+                caller["tourRider"],
+                caller_registrations.get(occurrence.get("occurrenceId")),
+            )
+    tour_riders = scan_tour_items("TourRider", tour_id)
+    if caller:
+        tour_riders = [rider for rider in tour_riders if rider.get("riderId") == caller["riderId"]]
     rider_baggage_status = [
         {
             "riderId": rider.get("riderId"),
             "baggageStatus": rider.get("baggageStatus", BaggageStatus.ACTIVE.value),
             "baggageReleasedAt": rider.get("baggageReleasedAt"),
         }
-        for rider in scan_tour_items("TourRider", tour_id)
+        for rider in tour_riders
     ]
     hotel_stays_today = query_tour_items(
         "RoomAllocation",
@@ -1153,6 +1426,8 @@ def get_bootstrap(event: Dict[str, Any]) -> Dict[str, Any]:
         key_condition_expression="stayDate = :stayDate",
         expression_values={":stayDate": today},
     )
+    if caller:
+        hotel_stays_today = [stay for stay in hotel_stays_today if stay.get("riderId") == caller["riderId"]]
     payload = {
         "events": sorted(events, key=lambda item: item.get("eventId", "")),
         "activeOccurrences": sorted(filtered_occurrences, key=lambda item: item.get("dateSeq", "")),

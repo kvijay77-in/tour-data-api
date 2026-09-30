@@ -31,6 +31,9 @@ Permission → Group mapping (current default):
     TOUR_MANAGE       |      ✅       |     ❌     |      ❌      |     ❌      |   ❌  |   ❌
     USER_LIST         |      ✅       |     ✅     |      ❌      |     ❌      |   ❌  |   ❌
     DASHBOARD         |      ✅       |     ✅     |      ✅      |     ❌      |   ✅  |   ❌
+    SELF_CHECKIN      |      ❌       |     ❌     |      ❌      |     ❌      |   ❌  |   ✅
+    EVENT_OCCURRENCE_MANAGE / EVENT_REGISTRATION_MANAGE
+                      |      ✅       |     ✅     |      ❌      |     ❌      |   ❌  |   ❌
 """
 
 import json
@@ -105,6 +108,12 @@ class Permission(str, Enum):
     USER_MANAGE = "USER_MANAGE"
     """Create/update tour-scoped user assignment records."""
 
+    SELF_CHECKIN = "SELF_CHECKIN"
+    """Rider API only: a rider creates/cancels their own ride check-ins and event self-records."""
+
+    EVENT_REGISTRATION_MANAGE = "EVENT_REGISTRATION_MANAGE"
+    """List event occurrence registrations and register/un-register riders as staff."""
+
 
 # ============================================================================
 # GROUP → PERMISSION MAPPING
@@ -132,6 +141,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.EVENT_SCAN,
         Permission.HOTEL_ALLOC_MANAGE,
         Permission.USER_MANAGE,
+        Permission.EVENT_REGISTRATION_MANAGE,
     ],
     "SUPER_USER": [
         Permission.READ,
@@ -144,6 +154,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
         Permission.EVENT_OCCURRENCE_MANAGE,
         Permission.EVENT_SCAN,
         Permission.HOTEL_ALLOC_MANAGE,
+        Permission.EVENT_REGISTRATION_MANAGE,
     ],
     "HOTEL_STAFF": [
         Permission.READ,
@@ -157,6 +168,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
     "RIDER": [
         Permission.READ,
         Permission.RIDER_SELF_UPDATE,
+        Permission.SELF_CHECKIN,
     ],
 }
 

@@ -25,9 +25,8 @@ from response import (
     error_response,
 )
 from validation import validate_tour_id, validate_ride_id, ValidationError
-from models import CheckInStatus, utc_now_iso
-from notification_service import notify
-from dynamodb_utils import get_tour_item, update_tour_item
+from checkin_service import cancel_checkin
+from dynamodb_utils import get_tour_item
 from rbac import Permission, require_permission
 
 logger = get_logger(__name__)
@@ -82,45 +81,15 @@ def lambda_handler(event, context):
         cancelled_by = event.get('requestContext', {}).get(
             'authorizer', {}
         ).get('jwt', {}).get('claims', {}).get('sub', 'system')
-        cancelled_at = utc_now_iso()
 
-        updated = update_tour_item(
-            table_type='CheckIn',
+        # Shared cancel (also used by rider self check-in cancel)
+        updated = cancel_checkin(
             tour_id=tour_id,
-            key={'rideId': ride_id, 'checkInId': checkin_id},
-            update_expression=(
-                'SET prevStatus = :prevStatus, '
-                'cancelledBy = :cancelledBy, '
-                'cancelledAt = :cancelledAt, '
-                '#status = :status'
-            ),
-            expression_values={
-                ':prevStatus': prev_status,
-                ':cancelledBy': cancelled_by,
-                ':cancelledAt': cancelled_at,
-                ':status': CheckInStatus.CANCELLED.value,
-            }
-            ,
-            expression_names={'#status': 'status'}
+            ride_id=ride_id,
+            existing={**existing, 'checkInId': checkin_id},
+            prev_status=prev_status,
+            cancelled_by=cancelled_by,
         )
-
-        try:
-            notify(
-                rule_id='CHECKIN_CANCELLED',
-                tour_id=tour_id,
-                context={
-                    'tourId': tour_id,
-                    'riderId': existing.get('riderId'),
-                    'rideId': ride_id,
-                    'stageNumber': existing.get('stageNumber'),
-                    'checkInId': checkin_id,
-                    'status': CheckInStatus.CANCELLED.value,
-                    'cancelledAt': cancelled_at,
-                },
-                actor=cancelled_by,
-            )
-        except Exception as notify_exc:  # pragma: no cover - safeguard only
-            logger.warning('cancel check-in notification trigger failed: %s', str(notify_exc))
 
         return success_response(updated)
 

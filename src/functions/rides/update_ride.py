@@ -11,16 +11,23 @@ import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, not_found_response, bad_request_response, internal_error_response
+from response import (
+    success_response, not_found_response, bad_request_response, internal_error_response,
+    validation_exception_response
+)
 from validation import (
     validate_tour_id, validate_ride_id, validate_iso_date,
-    validate_time_hhmm, validate_ride_stages, validate_ride_floats, ValidationError
+    validate_time_hhmm, validate_ride_stages, validate_ride_floats,
+    validate_optional_bool, ValidationError
 )
 from dynamodb_utils import get_tour_item, put_tour_item
 from models import RideStatus, utc_now_iso
 from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
+
+# Optional ride-level self check-in settings; sending null clears the setting.
+RIDE_SELF_SERVICE_FIELDS = ('selfCheckInAllowed', 'selfQuitRidingAllowed')
 
 
 def _merge_stage_runtime_fields(existing_stages, updated_stages):
@@ -97,7 +104,7 @@ def lambda_handler(event, context):
         updatable_fields = [
             'name', 'date', 'rideNo', 'startLocation', 'finishLocation',
             'totalDistance', 'flagOffTime', 'stages', 'floats', 'description', 'status',
-            'openTime', 'closeTime'
+            'openTime', 'closeTime', *RIDE_SELF_SERVICE_FIELDS
         ]
         updates = {k: v for k, v in body.items() if k in updatable_fields}
         
@@ -143,11 +150,18 @@ def lambda_handler(event, context):
                     f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
                 )
 
+        try:
+            for setting in RIDE_SELF_SERVICE_FIELDS:
+                if updates.get(setting) is not None:
+                    validate_optional_bool(updates[setting], setting)
+        except ValidationError as e:
+            return validation_exception_response(e)
+
         if 'stages' in updates:
             try:
                 normalized_stages = validate_ride_stages(updates['stages'])
             except ValidationError as e:
-                return bad_request_response(str(e))
+                return validation_exception_response(e)
             updates['stages'] = _merge_stage_runtime_fields(
                 existing_ride.get('stages', []),
                 normalized_stages
@@ -162,6 +176,9 @@ def lambda_handler(event, context):
         
         # Update ride
         updated_ride = {**existing_ride, **updates}
+        for setting in RIDE_SELF_SERVICE_FIELDS:
+            if setting in updates and updates[setting] is None:
+                updated_ride.pop(setting, None)
         updated_ride['updatedAt'] = utc_now_iso()
         
         logger.info(f"Updating ride: {ride_id}")

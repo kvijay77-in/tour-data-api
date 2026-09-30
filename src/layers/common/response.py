@@ -111,6 +111,21 @@ def bad_request_response(message: str, details: Optional[Dict] = None) -> Dict[s
     )
 
 
+def validation_exception_response(exc: Exception) -> Dict[str, Any]:
+    """Create a 400 response for a ValidationError, keeping its specific code.
+
+    Errors that declare an ``error_code`` (for example ``INVALID_STAGE_LAYOUT`` or
+    ``VALIDATION_ERROR``) keep it; other validation errors stay ``BAD_REQUEST``.
+    """
+    error_code = getattr(exc, "error_code", None)
+    return error_response(
+        error_code=error_code or "BAD_REQUEST",
+        message=str(exc),
+        status_code=400,
+        details=(getattr(exc, "details", None) or None) if error_code else None
+    )
+
+
 def validation_error_response(message: str, details: Optional[Dict] = None) -> Dict[str, Any]:
     """Create a 400 validation error response"""
     return error_response(

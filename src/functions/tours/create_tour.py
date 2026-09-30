@@ -16,12 +16,12 @@ import boto3
 from logger import get_logger, log_event
 from response import (
     success_response, error_response, bad_request_response,
-    conflict_response, internal_error_response
+    conflict_response, internal_error_response, validation_exception_response
 )
 from dynamodb_utils import get_item, put_item
 from validation import (
     validate_tour_id, validate_iso_date, validate_required_fields,
-    validate_ride_count, ValidationError
+    validate_ride_count, validate_optional_bool, ValidationError
 )
 from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from tour_provisioning import provision_tour_tables
@@ -44,6 +44,7 @@ def lambda_handler(event, context):
         rideCount: Total number of rides planned for the tour (required, positive integer)
         description: Tour description (optional)
         provisioning: Whether to provision tour-specific tables (optional, default false)
+        selfQuitRidingAllowed: Whether riders may self-report Quit Riding (optional, default false)
     
     Creates:
         1. Tour record in shared TourMaster table
@@ -102,6 +103,13 @@ def lambda_handler(event, context):
         provisioning = body.get('provisioning', False)
         if not isinstance(provisioning, bool):
             return bad_request_response("provisioning must be a boolean")
+
+        self_quit_riding_allowed = body.get('selfQuitRidingAllowed', False)
+        try:
+            validate_optional_bool(self_quit_riding_allowed, 'selfQuitRidingAllowed')
+        except ValidationError as e:
+            return validation_exception_response(e)
+        self_quit_riding_allowed = self_quit_riding_allowed is True
         
         # Create Tour record. Provisioning is request-only and is not stored.
         now = utc_now_iso()
@@ -112,6 +120,7 @@ def lambda_handler(event, context):
             'endDate': body['endDate'],
             'status': TourStatus.PROVISIONING.value if provisioning else TourStatus.PLANNING.value,
             'rideCount': body['rideCount'],
+            'selfQuitRidingAllowed': self_quit_riding_allowed,
             'createdAt': now,
             'updatedAt': now,
         }

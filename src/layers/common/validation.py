@@ -41,6 +41,25 @@ class ValidationError(Exception):
         self.details = details or {}
 
 
+class StageLayoutError(ValidationError):
+    """Ride stages do not have exactly one START first and one FINISH last."""
+    error_code = 'INVALID_STAGE_LAYOUT'
+
+
+class FieldValueError(ValidationError):
+    """Field value rejected with the generic VALIDATION_ERROR code."""
+    error_code = 'VALIDATION_ERROR'
+
+
+def validate_optional_bool(value: Any, field_name: str) -> None:
+    """Reject a self-service setting that is not a JSON boolean."""
+    if not isinstance(value, bool):
+        raise FieldValueError(
+            f"{field_name} must be true or false",
+            {"field": field_name, "value": value}
+        )
+
+
 def validate_rider_id(rider_id: str) -> None:
     """
     Validate Rider ID format (R followed by 1-3 digits, no padding)
@@ -735,6 +754,19 @@ def validate_ride_stages(stages: Any) -> List[Dict[str, Any]]:
                     {"field": f"stages[{index}].{runtime_field}", "value": stage[runtime_field]}
                 )
 
+        if 'selfCheckInAllowed' in stage and stage['selfCheckInAllowed'] is not None:
+            validate_optional_bool(stage['selfCheckInAllowed'], f"stages[{index}].selfCheckInAllowed")
+            normalized_stage['selfCheckInAllowed'] = stage['selfCheckInAllowed']
+
+        if 'selfNotRidingAllowed' in stage and stage['selfNotRidingAllowed'] is not None:
+            if stage_type != 'START':
+                raise FieldValueError(
+                    f"selfNotRidingAllowed is only applicable to the START stage: {stage_id}",
+                    {"field": f"stages[{index}].selfNotRidingAllowed", "value": stage['selfNotRidingAllowed']}
+                )
+            validate_optional_bool(stage['selfNotRidingAllowed'], f"stages[{index}].selfNotRidingAllowed")
+            normalized_stage['selfNotRidingAllowed'] = stage['selfNotRidingAllowed']
+
         normalized_stages.append(normalized_stage)
 
     ordered_stages = sorted(normalized_stages, key=lambda stage: stage['stageNumber'])
@@ -746,20 +778,39 @@ def validate_ride_stages(stages: Any) -> List[Dict[str, Any]]:
                 {"field": "stages.stageNumber", "value": stage['stageNumber']}
             )
 
-    if ordered_stages[0]['type'] != 'START':
-        raise ValidationError("First stage must be type START", {"field": "stages[0].type"})
-
-    if ordered_stages[-1]['type'] != 'FINISH':
-        raise ValidationError("Last stage must be type FINISH", {"field": "stages[-1].type"})
-
-    for stage in ordered_stages[1:-1]:
-        if stage['type'] != 'PIT_STOP':
-            raise ValidationError(
-                "Intermediate stages must be type PIT_STOP",
-                {"field": "stages.type", "value": stage['type']}
-            )
+    validate_stage_layout(ordered_stages)
 
     return ordered_stages
+
+
+def validate_stage_layout(ordered_stages: List[Dict[str, Any]]) -> None:
+    """Require exactly one START first, exactly one FINISH last, PIT_STOP in between."""
+    start_count = sum(1 for stage in ordered_stages if stage['type'] == 'START')
+    finish_count = sum(1 for stage in ordered_stages if stage['type'] == 'FINISH')
+
+    if start_count == 0:
+        raise StageLayoutError("Ride must have a START stage as the first stage", {"field": "stages"})
+    if start_count > 1:
+        raise StageLayoutError(
+            f"Ride must have exactly one START stage; found {start_count}", {"field": "stages"}
+        )
+    if finish_count == 0:
+        raise StageLayoutError("Ride must have a FINISH stage as the last stage", {"field": "stages"})
+    if finish_count > 1:
+        raise StageLayoutError(
+            f"Ride must have exactly one FINISH stage; found {finish_count}", {"field": "stages"}
+        )
+    if ordered_stages[0]['type'] != 'START':
+        raise StageLayoutError(
+            f"The START stage must be the first stage (stageNumber 0); stage 0 is {ordered_stages[0]['type']}",
+            {"field": "stages[0].type"}
+        )
+    if ordered_stages[-1]['type'] != 'FINISH':
+        raise StageLayoutError(
+            f"The FINISH stage must be the last stage (stageNumber {len(ordered_stages) - 1}); "
+            f"that stage is {ordered_stages[-1]['type']}",
+            {"field": "stages[-1].type"}
+        )
 
 
 def validate_ride_floats(floats: Any, total_stages: int) -> List[Dict[str, int]]:
