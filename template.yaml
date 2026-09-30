@@ -2085,6 +2085,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/events
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events
+            Method: GET
 
   GetEventFunction:
     Type: AWS::Serverless::Function
@@ -2106,6 +2112,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/events/{eventId}
             Method: GET
 
@@ -2189,6 +2201,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/events/{eventId}/occurrences
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences
+            Method: GET
 
   GetEventOccurrenceFunction:
     Type: AWS::Serverless::Function
@@ -2210,6 +2228,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}
             Method: GET
 
@@ -2587,6 +2611,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/bootstrap
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/events/bootstrap
             Method: GET
 
