@@ -17,6 +17,27 @@ sys.path.insert(0, 'src/functions/users')
 
 MOCK_TOUR_ID = 'TestTour-2026'
 
+
+def test_effective_event_self_service_precedence():
+    from event_permissions import effective_event_self_service_allowed
+
+    event = {'selfServiceAllowed': False}
+    activity = {'activityId': 'ACT-001', 'selfServiceAllowed': True}
+    occurrence = {}
+    assert effective_event_self_service_allowed(event, occurrence, activity) is True
+
+    occurrence['selfServiceAllowed'] = False
+    assert effective_event_self_service_allowed(event, occurrence, activity) is False
+
+    occurrence['activityOverrides'] = [
+        {'activityId': 'ACT-001', 'selfServiceAllowed': True}
+    ]
+    assert effective_event_self_service_allowed(event, occurrence, activity) is True
+
+    occurrence['activityOverrides'][0]['selfServiceAllowed'] = False
+    assert effective_event_self_service_allowed(event, occurrence, activity) is False
+
+
 # create_tour_user derives username/email/name from the managed Cognito user,
 # so tests stub a client that synthesizes one for any valid sub-shaped filter.
 USER_1 = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -159,7 +180,28 @@ def event_engine_setup(event_engine_env):
             {
                 'TableName': f'test-stack-TourRider-{MOCK_TOUR_ID}',
                 'KeySchema': [{'AttributeName': 'riderId', 'KeyType': 'HASH'}],
-                'AttributeDefinitions': [{'AttributeName': 'riderId', 'AttributeType': 'S'}],
+                'AttributeDefinitions': [
+                    {'AttributeName': 'riderId', 'AttributeType': 'S'},
+                    {'AttributeName': 'profileId', 'AttributeType': 'S'},
+                ],
+                'GlobalSecondaryIndexes': [
+                    {
+                        'IndexName': 'ProfileIdIndex',
+                        'KeySchema': [{'AttributeName': 'profileId', 'KeyType': 'HASH'}],
+                        'Projection': {'ProjectionType': 'ALL'},
+                    },
+                ],
+            },
+            {
+                'TableName': f'test-stack-EventRegistration-{MOCK_TOUR_ID}',
+                'KeySchema': [
+                    {'AttributeName': 'occurrenceId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'riderId', 'KeyType': 'RANGE'},
+                ],
+                'AttributeDefinitions': [
+                    {'AttributeName': 'occurrenceId', 'AttributeType': 'S'},
+                    {'AttributeName': 'riderId', 'AttributeType': 'S'},
+                ],
             },
             {
                 'TableName': f'test-stack-User-{MOCK_TOUR_ID}',
@@ -249,6 +291,185 @@ def test_create_event_and_occurrence_flow(event_engine_setup):
     assert occurrence_response['statusCode'] == 201
     data = json.loads(occurrence_response['body'])['data']
     assert data['occurrenceId'] == 'EVT-REG#2026-02-10#1'
+
+
+def test_event_registration_and_self_service_flags_are_boolean(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from create_event import lambda_handler as create_event_handler
+    from create_occurrence import lambda_handler as create_occurrence_handler
+
+    invalid_event = create_event_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID},
+            method='POST',
+            body={
+                'eventId': 'EVT-INVALID',
+                'eventName': 'Invalid Event',
+                'eventType': 'SINGLE',
+                'location': 'Venue',
+                'sequenceEnforced': True,
+                'defaultAllowedTypeCodes': ['1'],
+                'registrationEnabled': 'true',
+                'activities': [
+                    {'activityId': 'ACT-001', 'name': 'Check-in', 'sequenceNo': 1}
+                ],
+            },
+        ),
+        None,
+    )
+    assert invalid_event['statusCode'] == 400
+
+    dynamodb_utils.get_tour_table('Event', MOCK_TOUR_ID).put_item(Item={
+        'eventId': 'EVT-INVALID',
+        'registrationEnabled': True,
+        'activities': [],
+    })
+    invalid_occurrence = create_occurrence_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-INVALID'},
+            method='POST',
+            body={
+                'date': '2026-02-10',
+                'seq': 1,
+                'selfServiceAllowed': 'true',
+            },
+        ),
+        None,
+    )
+    assert invalid_occurrence['statusCode'] == 400
+
+
+def test_event_registration_lists_rider_and_staff_sources(event_engine_setup, monkeypatch):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from registration import lambda_handler as registration_handler
+    import registration
+
+    monkeypatch.setattr(registration, '_rider_for_claims', lambda event, tour_id: 'R1')
+    event_table = dynamodb_utils.get_tour_table('Event', MOCK_TOUR_ID)
+    event_table.put_item(Item={
+        'eventId': 'EVT-REG',
+        'registrationEnabled': True,
+    })
+    dynamodb_utils.get_tour_table('EventOccurrence', MOCK_TOUR_ID).put_item(Item={
+        'eventId': 'EVT-REG',
+        'dateSeq': '2026-02-10#1',
+        'occurrenceId': 'EVT-REG#2026-02-10#1',
+        'status': 'PLANNED',
+    })
+    tour_riders = dynamodb_utils.get_tour_table('TourRider', MOCK_TOUR_ID)
+    tour_riders.put_item(Item={'riderId': 'R2', 'profileId': 'P002', 'status': 'ACTIVE'})
+    dynamodb_utils.get_table('RIDER_PROFILE_TABLE').put_item(
+        Item={'profileId': 'P002', 'name': 'Sam Rider'}
+    )
+
+    rider_registration = registration_handler(
+        _event(
+            ['RIDER'],
+            {
+                'tourId': MOCK_TOUR_ID,
+                'eventId': 'EVT-REG',
+                'occurrenceId': 'EVT-REG#2026-02-10#1',
+            },
+            method='POST',
+            sub='rider-sub',
+        ),
+        None,
+    )
+    assert rider_registration['statusCode'] == 201
+    rider_data = json.loads(rider_registration['body'])['data']
+    assert rider_data['source'] == 'rider'
+    assert rider_data['registeredBy'] == 'rider-sub'
+
+    staff_registration = registration_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {
+                'tourId': MOCK_TOUR_ID,
+                'eventId': 'EVT-REG',
+                'occurrenceId': 'EVT-REG#2026-02-10#1',
+                'riderId': 'R2',
+            },
+            method='PUT',
+            sub='staff-sub',
+        ),
+        None,
+    )
+    assert staff_registration['statusCode'] == 200
+    staff_data = json.loads(staff_registration['body'])['data']
+    assert staff_data['source'] == 'staff'
+    assert staff_data['registeredBy'] == 'staff-sub'
+
+    list_response = registration_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {
+                'tourId': MOCK_TOUR_ID,
+                'eventId': 'EVT-REG',
+                'occurrenceId': 'EVT-REG#2026-02-10#1',
+            },
+            method='GET',
+        ),
+        None,
+    )
+    assert list_response['statusCode'] == 200
+    listed = json.loads(list_response['body'])['data']['registrations']
+    assert listed == [
+        {
+            'riderId': 'R1',
+            'name': 'John Doe',
+            'registeredAt': rider_data['registeredAt'],
+            'registeredBy': 'rider-sub',
+            'source': 'rider',
+        },
+        {
+            'riderId': 'R2',
+            'name': 'Sam Rider',
+            'registeredAt': staff_data['registeredAt'],
+            'registeredBy': 'staff-sub',
+            'source': 'staff',
+        },
+    ]
+
+    template = open('template.yaml', encoding='utf-8').read()
+    registration_resource = template.split('  EventRegistrationFunction:', 1)[1].split(
+        '  RiderSelfEventRecordFunction:', 1
+    )[0]
+    assert 'Method: GET' in registration_resource
+    assert '/occurrences/{occurrenceId}/registrations' in registration_resource
+    assert '/occurrences/{occurrenceId}/registrations/{riderId}' in registration_resource
+    assert 'Method: PUT' in registration_resource
+    assert 'Method: DELETE' in registration_resource
+    cancel_resource = template.split('  RiderCancelSelfEventRecordFunction:', 1)[1].split(
+        '  GetDashboardDataFunction:', 1
+    )[0]
+    assert 'ManageRegister:' not in cancel_resource
+
+
+def test_rider_event_progress_is_limited_to_calling_rider(monkeypatch):
+    import event_engine
+
+    monkeypatch.setattr(event_engine, 'is_rider_api_request', lambda event: True)
+    monkeypatch.setattr(event_engine, '_rider_id_for_request', lambda event, tour_id: 'R1')
+    monkeypatch.setattr(event_engine, 'validate_tour_id', lambda value: None)
+    monkeypatch.setattr(event_engine, 'validate_rider_id', lambda value: None)
+    monkeypatch.setattr(event_engine, 'query_tour_items', lambda *args, **kwargs: [])
+    monkeypatch.setattr(event_engine, 'scan_tour_items', lambda *args, **kwargs: [])
+
+    response = event_engine.get_rider_progress({
+        'pathParameters': {'tourId': MOCK_TOUR_ID, 'riderId': 'R2'},
+        'queryStringParameters': {},
+    })
+
+    assert response['statusCode'] == 403
+    assert json.loads(response['body'])['error']['code'] == 'PROFILE_ACCESS_DENIED'
 
 
 def test_create_hotel_and_tour_user(event_engine_setup):

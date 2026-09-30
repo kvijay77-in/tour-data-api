@@ -1,5 +1,5 @@
 # Data model
-_Last updated: 2026-09-29_
+_Last updated: 2026-09-30_
 
 ## Table strategy
 
@@ -41,11 +41,11 @@ The shared table resources and their indexes, billing mode, streams, TTL setting
 | `Event` | Event definitions, including embedded activity definitions |
 | `EventOccurrence` | Dated event instances and occurrence-level overrides |
 | `EventActivityLogs` | Event activity scan and completion records |
-| `EventRegistration` | Rider registration for each event occurrence |
+| `EventRegistration` | Rider registration for each event occurrence; records `registeredAt`, `registeredBy`, and `source` (`rider` or `staff`) |
 | `Hotel` | Tour hotel records |
 | `RoomAllocation` | One rider's room allocation for one stay date |
 
-The stack name and tour ID are part of each physical table name. The tour-specific partition keys do not need a redundant tour ID because each table belongs to one tour. Event, notification, artifact, and profile-specific details are documented in their respective [design pages](events.md), [notifications](notifications.md), [artifacts](artifacts.md), and [rider profile schema](rider-profile-schema.md).
+The stack name and tour ID are part of each physical table name. `EventRegistration` is keyed by `occurrenceId` and `riderId`, so registration applies to one dated occurrence, not every occurrence of the event. The tour-specific partition keys do not need a redundant tour ID because each table belongs to one tour. Event, notification, artifact, and profile-specific details are documented in their respective [design pages](events.md), [notifications](notifications.md), [artifacts](artifacts.md), and [rider profile schema](rider-profile-schema.md).
 
 ## Provisioning and lifecycle
 

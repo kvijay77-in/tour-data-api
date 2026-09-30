@@ -64,8 +64,10 @@ class Permission(str, Enum):
     """Create a check-in via manual entry (elevated privilege)."""
 
     RIDE_MANAGE = "RIDE_MANAGE"
+    """Create, update, open, start, or close a ride."""
+
     SELF_CHECKIN = "SELF_CHECKIN"
-    """Create, update, or close a ride."""
+    """Create or cancel the authenticated rider's own check-ins and event records."""
 
     PIT_STOP_MANAGE = "PIT_STOP_MANAGE"
     """Open or close a PIT_STOP stage for a ride."""
@@ -100,8 +102,10 @@ class Permission(str, Enum):
     EVENT_SCAN = "EVENT_SCAN"
     """Create/cancel event activity scan records."""
 
-    HOTEL_ALLOC_MANAGE = "HOTEL_ALLOC_MANAGE"
     EVENT_REGISTRATION_MANAGE = "EVENT_REGISTRATION_MANAGE"
+    """Register/unregister riders for event occurrences and list occurrence registrations."""
+
+    HOTEL_ALLOC_MANAGE = "HOTEL_ALLOC_MANAGE"
     """Manage hotel master data and room allocations."""
 
     USER_MANAGE = "USER_MANAGE"

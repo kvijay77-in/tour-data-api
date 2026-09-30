@@ -1,5 +1,5 @@
 # API reference
-_Last updated: 2026-09-29_
+_Last updated: 2026-09-30_
 
 [← Architecture](architecture.md)
 
@@ -104,17 +104,17 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/checkins` | List all check-ins for a rider | [Check-Ins](#check-ins) | [Example](#list-rider-check-ins) | ✅ | ✅ |
 | Check-Ins | GET | `/v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | List rider check-ins for a ride number | [Check-Ins](#check-ins) | [Example](#list-rider-check-ins-for-ride-number) | ✅ | ✅ |
 | Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | Cancel check-in (special update) | [Check-Ins](#check-ins) | [Example](#cancel-check-in) | ✅ | ❌ |
-| Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/self-checkins` | Rider self check-in | [Check-Ins](#check-ins) | — | ❌ | ✅ |
-| Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/self-checkins/{checkInId}/cancel` | Rider self check-in cancellation | [Check-Ins](#check-ins) | — | ❌ | ✅ |
+| Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/self-checkins` | Rider self check-in (stage, Not Riding, or Quit Riding) | [Check-Ins](#check-ins) | [Example](#rider-self-check-in) | ❌ | ✅ |
+| Check-Ins | POST | `/v1/tours/{tourId}/rides/{rideId}/self-checkins/{checkInId}/cancel` | Cancel rider self check-in | [Check-Ins](#check-ins) | [Example](#cancel-rider-self-check-in) | ❌ | ✅ |
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard` | Get dashboard payload | [Check-Ins](#check-ins) | [Example](#get-ride-dashboard) | ✅ | ❌ |
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | Get lightweight dashboard progress payload | [Check-Ins](#check-ins) | [Example](#get-ride-dashboard-progress) | ✅ | ❌ |
 | Check-Ins | GET | `/v1/tours/{tourId}/rides/{rideId}/riders/{riderId}/details` | Get rider popup details for selected ride | [Check-Ins](#check-ins) | [Example](#get-rider-ride-details) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events` | List event definitions | [Events](#events) | [Example](#list-events) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}` | Get event definition | [Events](#events) | [Example](#get-event) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events` | List event definitions | [Events](#events) | [Example](#list-events) | ✅ | ✅ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}` | Get event definition | [Events](#events) | [Example](#get-event) | ✅ | ✅ |
 | Events | POST | `/v1/tours/{tourId}/events` | Create event definition | [Events](#events) | [Example](#create-event) | ✅ | ❌ |
 | Events | PUT | `/v1/tours/{tourId}/events/{eventId}` | Update event definition | [Events](#events) | [Example](#update-event) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences` | List occurrences | [Events](#events) | [Example](#list-occurrences) | ✅ | ❌ |
-| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | Get occurrence | [Events](#events) | [Example](#get-occurrence) | ✅ | ❌ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences` | List occurrences | [Events](#events) | [Example](#list-occurrences) | ✅ | ✅ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | Get occurrence | [Events](#events) | [Example](#get-occurrence) | ✅ | ✅ |
 | Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences` | Create occurrence | [Events](#events) | [Example](#create-occurrence) | ✅ | ❌ |
 | Events | PUT | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | Update occurrence | [Events](#events) | [Example](#update-occurrence) | ✅ | ❌ |
 | Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | Get activity overrides | [Events](#events) | [Example](#get-activity-overrides) | ✅ | ❌ |
@@ -129,9 +129,13 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | Get event reconciliation payload | [Events](#events) | [Example](#get-event-reconciliation) | ✅ | ❌ |
 | Events | GET | `/v1/tours/{tourId}/events/bootstrap` | Get event bootstrap payload | [Events](#events) | [Example](#get-event-bootstrap) | ✅ | ✅ |
 | Events | GET | `/v1/tours/{tourId}/riders/{riderId}/events/progress` | Get rider event progress | [Events](#events) | [Example](#get-rider-event-progress) | ✅ | ✅ |
-| Events | POST/DELETE | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration` | Rider event registration | [Events](#events) | — | ❌ | ✅ |
-| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records` | Rider self-service activity record | [Events](#events) | — | ❌ | ✅ |
-| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records/{recordId}/cancel` | Cancel rider self-service activity record | [Events](#events) | — | ❌ | ✅ |
+| Events | GET | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations` | List occurrence registrations | [Events](#events) | [Example](#list-event-registrations) | ✅ | ❌ |
+| Events | PUT | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}` | Register a rider for an occurrence (staff) | [Events](#events) | [Example](#staff-register-rider) | ✅ | ❌ |
+| Events | DELETE | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}` | Unregister a rider from an occurrence (staff) | [Events](#events) | [Example](#staff-unregister-rider) | ✅ | ❌ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration` | Rider register for an occurrence | [Events](#events) | [Example](#rider-register-for-event) | ❌ | ✅ |
+| Events | DELETE | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration` | Rider unregister from an occurrence | [Events](#events) | [Example](#rider-unregister-from-event) | ❌ | ✅ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records` | Rider self-service activity record | [Events](#events) | [Example](#rider-self-record) | ❌ | ✅ |
+| Events | POST | `/v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records/{recordId}/cancel` | Cancel rider self-service activity record | [Events](#events) | [Example](#cancel-rider-self-record) | ❌ | ✅ |
 | Hotels | GET | `/v1/tours/{tourId}/hotels` | List hotels | [Hotels](#hotels) | [Example](#list-hotels) | ✅ | ❌ |
 | Hotels | POST | `/v1/tours/{tourId}/hotels` | Create hotel | [Hotels](#hotels) | [Example](#create-hotel) | ✅ | ❌ |
 | Hotels | PUT | `/v1/tours/{tourId}/hotels/{hotelId}` | Update hotel | [Hotels](#hotels) | [Example](#update-hotel) | ✅ | ❌ |
@@ -184,11 +188,11 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `GET /v1/tours/active` | None | None | None | No body required |
-| `GET /v1/tours/{tourId}` | `tourId` (required) | None | None | `tourId`: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]` |
-| `GET /v1/tours` | None | `status` (optional) | None | `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED` |
-| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate, rideCount`; Optional: `description, provisioning` | `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer (total rides planned for the tour, may exceed the number of tour days); `provisioning` is boolean, defaults to `false`, is not stored in TourMaster, and provisions 12 tour tables only when `true`; successful provisioning sets `provisionedAt` |
-| `PUT /v1/tours` | None | None | Required: `tourId`; Optional: `name, startDate, endDate, description, rideCount, status, provisioning` | Tour must exist; `tourId` format; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer; `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; `provisioning` is boolean and defaults to `false`; when `provisioning=false`, only TourMaster is updated; when `provisioning=true`, provisioning is allowed only when `provisionedAt` is absent, then it creates 12 tables and sets `provisionedAt`; repeat provisioning is rejected |
+| `GET /v1/tours/active` | None | None | None | Returns `selfQuitRidingAllowed` as a boolean; legacy tours without the field read as `false` |
+| `GET /v1/tours/{tourId}` | `tourId` (required) | None | None | `tourId`: 3-50 chars, starts with letter/number, allowed `[a-zA-Z0-9_.-]`; returns `selfQuitRidingAllowed` as a boolean, defaulting missing legacy values to `false` |
+| `GET /v1/tours` | None | `status` (optional) | None | `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; every tour returns `selfQuitRidingAllowed`, defaulting missing legacy values to `false` |
+| `POST /v1/tours` | None | None | Required: `tourId, name, startDate, endDate, rideCount`; Optional: `description, provisioning, selfQuitRidingAllowed` | `selfQuitRidingAllowed` must be boolean and defaults to `false`; `tourId` format + uniqueness; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer (total rides planned for the tour, may exceed the number of tour days); `provisioning` is boolean, defaults to `false`, is not stored in TourMaster, and provisions 13 tour tables only when `true`; successful provisioning sets `provisionedAt` |
+| `PUT /v1/tours` | None | None | Required: `tourId`; Optional: `name, startDate, endDate, description, rideCount, status, provisioning, selfQuitRidingAllowed` | `selfQuitRidingAllowed` must be boolean when supplied; tour must exist; `tourId` format; dates `YYYY-MM-DD`; `endDate >= startDate`; `rideCount` must be a positive integer; `status` in `PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED`; `provisioning` is boolean and defaults to `false`; when `provisioning=false`, only TourMaster is updated; when `provisioning=true`, provisioning is allowed only when `provisionedAt` is absent, then it creates 13 tables and sets `provisionedAt`; repeat provisioning is rejected |
 | `PUT /v1/tours/{tourId}/provision` | `tourId` (required) | None | None | Tour must exist and have `provisionedAt`; reruns idempotent provisioning to create only missing or newly defined table types; does not modify TourMaster, including `provisionedAt` |
 | `POST /v1/tours/{tourId}/archive` | `tourId` (required) | `exportToS3` (optional, default true), `deleteTables` (optional, default true) | None | Tour exists; status must be `ACTIVE` or `COMPLETED`; ARCHIVED cannot be archived again |
 
@@ -220,27 +224,32 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
-| `GET /v1/tours/{tourId}/events` | `tourId` (required) | None | None | Requires `READ`; returns all event definitions for the tour |
-| `GET /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | None | Requires `READ`; `eventId` format `EVT-...`; returns `404 EVENT_NOT_FOUND` when absent |
-| `POST /v1/tours/{tourId}/events` | `tourId` (required) | None | Required: `eventId, eventName, eventType, location, sequenceEnforced, defaultAllowedTypeCodes, activities`; Optional: `registrationEnabled`, `selfServiceAllowed` (both default `false`), `notificationConfig` | Requires `EVENT_MANAGE`; activity `selfServiceAllowed` is optional |
-| `PUT /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | Optional: `eventName, eventType, location, sequenceEnforced, registrationEnabled, selfServiceAllowed, defaultAllowedTypeCodes, activities` | Requires `EVENT_MANAGE`; legacy self-service fields are ignored |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | `date` (optional), `status` (optional) | None | Requires `READ`; lists occurrences for the event, filterable by date and status |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ`; `occurrenceId` format `EVT-...#YYYY-MM-DD#seq` |
-| `POST /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | None | Required: `date, seq`; Optional: `selfServiceAllowed, linkedOccurrenceRef` | Requires `EVENT_OCCURRENCE_MANAGE` |
-| `PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | Optional: `selfServiceAllowed, linkedOccurrenceRef` | Requires `EVENT_OCCURRENCE_MANAGE`; rejects closed occurrences |
-| `GET/PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | `tourId, eventId, occurrenceId` (required) | None | For PUT: `activityId`; Optional: `enabled, selfServiceAllowed, skipped, allowedTypeCodes, note` | Occurrence override wins over activity and event settings |
-| `POST/DELETE /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration` | `tourId, eventId, occurrenceId` (required) | Rider token | Optional body | Rider registration; only while occurrence is `PLANNED` |
-| `PUT/DELETE /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}` | `tourId, eventId, occurrenceId, riderId` (required) | None | None | Requires `EVENT_REGISTRATION_MANAGE`; only while `PLANNED` |
+| `GET /v1/tours/{tourId}/events` | `tourId` (required) | None | None | Requires `READ` on TourDataApi and RiderApi; returns all event definitions for the tour |
+| `GET /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | None | Requires `READ` on TourDataApi and RiderApi; `eventId` format `EVT-...`; returns `404 EVENT_NOT_FOUND` when absent |
+| `POST /v1/tours/{tourId}/events` | `tourId` (required) | None | Required: `eventId, eventName, eventType, location, sequenceEnforced, defaultAllowedTypeCodes, activities`; Optional: `registrationEnabled`, `selfServiceAllowed` (both default `false`), `notificationConfig` | Requires `EVENT_MANAGE`; event registration and event/activity `selfServiceAllowed` values must be booleans when supplied |
+| `PUT /v1/tours/{tourId}/events/{eventId}` | `tourId, eventId` (required) | None | Optional: `eventName, eventType, location, sequenceEnforced, registrationEnabled, selfServiceAllowed, defaultAllowedTypeCodes, activities` | Requires `EVENT_MANAGE`; registration and self-service flags must be booleans; sending `activities` replaces the list |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | `date` (optional), `status` (optional) | None | Requires `READ` on TourDataApi and RiderApi; lists occurrences for the event, filterable by date and status |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `READ` on TourDataApi and RiderApi; `occurrenceId` format `EVT-...#YYYY-MM-DD#seq` |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences` | `tourId, eventId` (required) | None | Required: `date, seq`; Optional: `selfServiceAllowed, linkedOccurrenceRef` | Requires `EVENT_OCCURRENCE_MANAGE`; `selfServiceAllowed` is boolean or null |
+| `PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}` | `tourId, eventId, occurrenceId` (required) | None | Optional: `selfServiceAllowed, linkedOccurrenceRef` | Requires `EVENT_OCCURRENCE_MANAGE`; `selfServiceAllowed` is boolean or null; rejects completed/cancelled occurrences |
+| `GET/PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/activity-overrides` | `tourId, eventId, occurrenceId` (required) | None | For PUT: `activityId`; Optional: `enabled, selfServiceAllowed, skipped, allowedTypeCodes, note` | Requires `EVENT_OCCURRENCE_MANAGE` for PUT; `selfServiceAllowed` is boolean or null; effective precedence is event → activity → occurrence-wide setting → occurrence activity override |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `EVENT_REGISTRATION_MANAGE`; event must have `registrationEnabled=true` and occurrence must be `PLANNED`; returns riderId, name, registeredAt, registeredBy (actor sub), and source (`rider` or `staff`) |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration` | `tourId, eventId, occurrenceId` (required) | Rider token | None | RiderApi only, requires `READ`; registers only the authenticated, non-exited rider; event registration must be enabled and occurrence `PLANNED`; riderId is not accepted from the request |
+| `DELETE /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration` | `tourId, eventId, occurrenceId` (required) | Rider token | None | RiderApi only, requires `READ`; unregisters only the authenticated rider; same enablement and `PLANNED` cut-off as rider registration |
+| `PUT /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}` | `tourId, eventId, occurrenceId, riderId` (required) | None | None | Requires `EVENT_REGISTRATION_MANAGE`; event registration must be enabled and occurrence `PLANNED`; target must be in tour and not exited |
+| `DELETE /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}` | `tourId, eventId, occurrenceId, riderId` (required) | None | None | Requires `EVENT_REGISTRATION_MANAGE`; event registration must be enabled and occurrence `PLANNED` |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/start` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `ACTIVE`; `startedAt` is always server-set, no client override |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/complete` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `COMPLETED`; `completedAt` is always server-set, no client override |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/cancel` | `tourId, eventId, occurrenceId` (required) | None | Optional: `cancelReason` | Requires `EVENT_OCCURRENCE_MANAGE`; occurrence transitions to `CANCELLED`; `cancelledAt` is always server-set, no client override |
-| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records` | `tourId, eventId, occurrenceId` (required) | None | Required: `activityId, riderId, method, timestamp`; Optional: `typeCode, outcome, variantSelected` | Requires `EVENT_SCAN`; occurrence must be `ACTIVE`; `typeCode` is required unless `outcome=OPTED_OUT`; sequence and activity restrictions enforced |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records` | `tourId, eventId, occurrenceId` (required) | None | Required: `activityId, riderId, method, timestamp`; Optional: `typeCode, outcome, variantSelected` | Requires `EVENT_SCAN`; occurrence must be `ACTIVE`; when registration is enabled rider must be registered; exited/missing riders are rejected; `typeCode` is required unless `outcome=OPTED_OUT`; sequence and activity restrictions enforced |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel` | `tourId, eventId, occurrenceId, recordId` (required) | None | Optional: `cancelReason` | Requires `EVENT_SCAN`; retains the record and marks it cancelled with audit fields |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records` | `tourId, eventId, occurrenceId` (required) | Rider token | Required: `activityId, timestamp`; Optional: `outcome, variantSelected` | RiderApi only, requires `SELF_CHECKIN`; riderId and method `SELF_SERVICE` are server-set; occurrence must be `ACTIVE`, activity must effectively allow self-service, and registration must be satisfied |
+| `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records/{recordId}/cancel` | `tourId, eventId, occurrenceId, recordId` (required) | Rider token | Optional: `cancelReason` | RiderApi only, requires `SELF_CHECKIN`; record must belong to authenticated rider and effective self-service must still be allowed |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; aggregated occurrence dashboard payload (see [Get Event Dashboard](#get-event-dashboard)) |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; lightweight progress refresh payload |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; returns `loadedCount`, `unloadedCount`, and `missingRiderIds` (riders with a bag loaded but not unloaded); only non-cancelled, non-`OPTED_OUT` records with a `typeCode` at each occurrence's last enabled activity are counted; `400 NO_LINKED_OCCURRENCE` when the occurrence has no `linkedOccurrenceRef` |
-| `GET /v1/tours/{tourId}/events/bootstrap` | `tourId` (required) | None | None | Requires `READ`; bootstrap payload for event definitions, upcoming occurrences, and supporting lookup data |
-| `GET /v1/tours/{tourId}/riders/{riderId}/events/progress` | `tourId, riderId` (required) | `eventId` (optional) | None | Requires `READ`; rider-centric event progress summary; cancelled records excluded |
+| `GET /v1/tours/{tourId}/events/bootstrap` | `tourId` (required) | None | None | Requires `READ`; available on TourDataApi and RiderApi; RiderApi response includes the caller's registration status and each activity's effective self-service setting on active/upcoming occurrences |
+| `GET /v1/tours/{tourId}/riders/{riderId}/events/progress` | `tourId, riderId` (required) | `eventId` (optional) | None | Requires `READ`; RiderApi only permits the caller's own riderId; includes each occurrence's registration status and per-activity status/effective self-service; cancelled records excluded |
 
 #### Hotels
 
@@ -298,11 +307,11 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | Endpoint | Path Params | Query Params | Body Attributes | Validation / Business Rules |
 |---|---|---|---|---|
 | `POST /v1/tours/{tourId}/checkins` | `tourId` (required) | None | Required: `riderId, rideId, method`; Conditionally Required: `stageNumber` (normal/float check-ins), `floatNo` (when `isFloat=true`); Optional: `isNotRiding, isFloat, isQuitRiding, timestamp, notes` | `method` in `QR_SCAN, MANUAL, FALLBACK`; MANUAL requires `CHECKIN_MANUAL`; timestamp ISO UTC `Z`; `isNotRiding`, `isFloat`, and `isQuitRiding` are mutually exclusive; `floatNo` must be a positive integer when `isFloat=true`; `stageNumber` required unless status is Not Riding or Quit Riding; rider exists in tour; duplicate and status conflict checks enforced (`DUPLICATE_CHECKIN`, `DUPLICATE_NOT_RIDING`, `RIDER_NOT_RIDING`, `RIDER_QUIT_RIDING`, `RIDE_CLOSED`); cancelled check-ins are ignored during these validations |
-| `POST /v1/tours/{tourId}/rides/{rideId}/self-checkins` | `tourId, rideId` (required) | None | One of `stageNumber`, `isNotRiding`, or `isQuitRiding`; optional `timestamp, notes` | Requires rider `SELF_CHECKIN`; rider ID is derived from Cognito; method is `SELF_SERVICE`; effective permission and active-tour/today/open-stage rules apply |
-| `POST /v1/tours/{tourId}/rides/{rideId}/self-checkins/{checkInId}/cancel` | `tourId, rideId, checkInId` (required) | None | None | Own eligible records only; Quit Riding always returns `403 QUIT_RIDING_CANCEL_NOT_ALLOWED` |
-| `GET /v1/tours/{tourId}/rides/{rideId}/checkins` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist; cancelled check-ins are excluded from the response; each check-in keeps core audit attribute `checkedInBy` |
-| `GET /v1/tours/{tourId}/riders/{riderId}/checkins` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must be registered in tour; cancelled check-ins are excluded from the response |
-| `GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | `tourId, riderId, rideNo` (required) | None | None | `tourId` + `riderId` format rules; `rideNo` positive integer; rider must be registered in tour; cancelled check-ins are excluded from the response |
+| `POST /v1/tours/{tourId}/rides/{rideId}/self-checkins` | `tourId, rideId` (required) | None | Exactly one of `stageNumber`, `isNotRiding=true`, or `isQuitRiding=true`; optional `timestamp, notes` | Rider `SELF_CHECKIN`; rider ID and method `SELF_SERVICE` are server-set, and `rideId` comes from the path. Tour must be `ACTIVE`; ride must be today's `OPEN` or `STARTED` ride. Stage records require effective check-in permission; `PIT_STOP` must be open. Not Riding is START-only while ride is `OPEN` and `selfNotRidingAllowed=true`. Quit Riding requires ride `STARTED`, effective tour/ride permission, and no Finish check-in. Exited riders are rejected. |
+| `POST /v1/tours/{tourId}/rides/{rideId}/self-checkins/{checkInId}/cancel` | `tourId, rideId, checkInId` (required) | None | None | Rider may cancel only their own check-in; normal and Not Riding records require effective permission at the recorded stage (Not Riding uses START). Staff-created records are eligible too. Quit Riding always returns `403 QUIT_RIDING_CANCEL_NOT_ALLOWED`; ride status/date do not restrict cancellation. |
+| `GET /v1/tours/{tourId}/rides/{rideId}/checkins` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist; cancelled check-ins are excluded from the response; each check-in keeps core audit attribute `checkedInBy` and `method` (`QR_SCAN`, `MANUAL`, `FALLBACK`, or `SELF_SERVICE`) |
+| `GET /v1/tours/{tourId}/riders/{riderId}/checkins` | `tourId, riderId` (required) | None | None | `tourId` + `riderId` format rules; rider must be registered in tour; RiderApi caller may request only their own riderId; cancelled check-ins are excluded; each item includes `method`, including `SELF_SERVICE` |
+| `GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins` | `tourId, riderId, rideNo` (required) | None | None | `tourId` + `riderId` format rules; `rideNo` positive integer; rider must be registered in tour; RiderApi caller may request only their own riderId; cancelled check-ins are excluded; each item includes `method`, including `SELF_SERVICE` |
 | `POST /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel` | `tourId, rideId, checkInId` (required) | None | Required: `status, prevStatus` | Invocation is valid only when `status` contains `CANCELLED` (case-insensitive); updates only `status`, `prevStatus`, `cancelledBy`, and `cancelledAt`; any non-cancel status returns `INVALID_CANCEL_INVOCATION` |
 | `GET /v1/tours/{tourId}/rides/{rideId}/dashboard` | `tourId, rideId` (required) | None | None | `tourId` + `rideId` format rules; ride must exist; supports `If-None-Match` and `304 Not Modified` |
 | `GET /v1/tours/{tourId}/rides/{rideId}/dashboard/progress` | `tourId, rideId` (required) | None | None | Lightweight refresh contract with `rideId`, `checkIns`, `cancelled`, `summary`, `dataVersion`; `checkIns` retains active (non-cancelled) entries, `cancelled` contains cancelled check-in entries, and both lists keep core attribute `checkedInBy`; excludes `ride` and `riders`; supports `If-None-Match` and `304 Not Modified` |
@@ -442,6 +451,7 @@ Response `200 OK`:
   "status": "ACTIVE",
   "rideCount": 8,
   "description": "Annual coastal cycling tour",
+  "selfQuitRidingAllowed": true,
   "provisionedAt": "2026-01-05T09:01:30Z",
   "createdAt": "2026-01-05T09:00:00Z",
   "updatedAt": "2026-02-09T18:00:00Z"
@@ -474,6 +484,7 @@ Response `200 OK`:
       "status": "ACTIVE",
       "rideCount": 8,
       "description": "Annual coastal cycling tour",
+      "selfQuitRidingAllowed": true,
       "provisionedAt": "2026-01-05T09:01:30Z",
       "createdAt": "2026-01-05T09:00:00Z",
       "updatedAt": "2026-02-09T18:00:00Z"
@@ -496,6 +507,7 @@ POST /v1/tours
   "endDate": "2026-02-17",
   "rideCount": 8,
   "description": "Annual coastal cycling tour",
+  "selfQuitRidingAllowed": true,
   "provisioning": true
 }
 ```
@@ -509,12 +521,14 @@ Response `201 Created`. `provisioning` is not stored. `provisionedAt` is only pr
   "endDate": "2026-02-17",
   "status": "PLANNING",
   "rideCount": 8,
+  "selfQuitRidingAllowed": true,
   "createdAt": "2026-01-05T09:00:00Z",
   "updatedAt": "2026-01-05T09:01:30Z",
   "description": "Annual coastal cycling tour",
   "provisionedAt": "2026-01-05T09:01:30Z"
 }
 ```
+An invalid non-boolean `selfQuitRidingAllowed` returns `400 BAD_REQUEST` with the same error body shown for [Update Tour](#update-tour). When omitted, the setting defaults to `false`.
 
 ##### Update Tour
 
@@ -527,6 +541,7 @@ PUT /v1/tours
 {
   "tourId": "TOT-2026",
   "status": "ACTIVE",
+  "selfQuitRidingAllowed": false,
   "provisioning": false
 }
 ```
@@ -541,6 +556,7 @@ Response `200 OK`:
     "endDate": "2026-02-17",
     "status": "ACTIVE",
     "rideCount": 8,
+    "selfQuitRidingAllowed": false,
     "description": "Annual coastal cycling tour",
     "provisionedAt": "2026-01-05T09:01:30Z",
     "createdAt": "2026-01-05T09:00:00Z",
@@ -548,6 +564,17 @@ Response `200 OK`:
   },
   "provisioning": false,
   "provisionedTables": []
+}
+```
+
+Invalid non-boolean `selfQuitRidingAllowed` returns `400 BAD_REQUEST`:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "BAD_REQUEST",
+    "message": "selfQuitRidingAllowed must be a boolean"
+  }
 }
 ```
 
@@ -1322,7 +1349,7 @@ Response `200 OK` (ride in progress with PS1 open):
   "totalDistance": 65.5,
   "flagOffTime": "08:00",
   "stages": [
-    { "stageId": "S000", "stageNumber": 0, "type": "START", "name": "Start" },
+    { "stageId": "S000", "stageNumber": 0, "type": "START", "name": "Start", "selfCheckInAllowed": true, "selfNotRidingAllowed": true },
     {
       "stageId": "S001",
       "stageNumber": 1,
@@ -1330,10 +1357,11 @@ Response `200 OK` (ride in progress with PS1 open):
       "name": "PS1",
       "estimatedOpenTime": 90,
       "pitStopDuration": 45,
+      "selfCheckInAllowed": false,
       "pitStopStatus": "OPEN",
       "openedAt": "2026-02-11T09:25:00Z"
     },
-    { "stageId": "S002", "stageNumber": 2, "type": "FINISH", "name": "Finish" }
+    { "stageId": "S002", "stageNumber": 2, "type": "FINISH", "name": "Finish", "selfCheckInAllowed": true }
   ],
   "floats": [
     { "floatNo": 1, "floatToStage": 1 }
@@ -1345,7 +1373,17 @@ Response `200 OK` (ride in progress with PS1 open):
   "createdAt": "2026-01-20T12:00:00Z",
   "updatedAt": "2026-02-11T09:25:00Z",
   "openedAt": "2026-02-11T07:30:05Z",
-  "startedAt": "2026-02-11T08:00:10Z"
+  "startedAt": "2026-02-11T08:00:10Z",
+  "selfCheckInAllowed": false,
+  "selfQuitRidingAllowed": true,
+  "selfService": {
+    "quitRidingAllowed": true,
+    "stages": {
+      "0": { "checkInAllowed": true, "notRidingAllowed": true },
+      "1": { "checkInAllowed": false, "notRidingAllowed": false },
+      "2": { "checkInAllowed": true, "notRidingAllowed": false }
+    }
+  }
 }
 ```
 
@@ -1377,7 +1415,9 @@ POST /v1/tours/TOT-2026/rides
       "stageId": "S000",
       "stageNumber": 0,
       "type": "START",
-      "name": "Start"
+      "name": "Start",
+      "selfCheckInAllowed": true,
+      "selfNotRidingAllowed": true
     },
     {
       "stageId": "S001",
@@ -1385,15 +1425,19 @@ POST /v1/tours/TOT-2026/rides
       "type": "PIT_STOP",
       "name": "PS1",
       "estimatedOpenTime": 90,
-      "pitStopDuration": 45
+      "pitStopDuration": 45,
+      "selfCheckInAllowed": false
     },
     {
       "stageId": "S002",
       "stageNumber": 2,
       "type": "FINISH",
-      "name": "Finish"
+      "name": "Finish",
+      "selfCheckInAllowed": true
     }
-  ]
+  ],
+  "selfCheckInAllowed": false,
+  "selfQuitRidingAllowed": true
 }
 ```
 
@@ -1409,10 +1453,12 @@ Response `201 Created` (new rides start as `PLANNED`):
   "totalDistance": 65.5,
   "flagOffTime": "08:00",
   "stages": [
-    { "stageId": "S000", "stageNumber": 0, "type": "START", "name": "Start" },
-    { "stageId": "S001", "stageNumber": 1, "type": "PIT_STOP", "name": "PS1", "estimatedOpenTime": 90, "pitStopDuration": 45 },
-    { "stageId": "S002", "stageNumber": 2, "type": "FINISH", "name": "Finish" }
+    { "stageId": "S000", "stageNumber": 0, "type": "START", "name": "Start", "selfCheckInAllowed": true, "selfNotRidingAllowed": true },
+    { "stageId": "S001", "stageNumber": 1, "type": "PIT_STOP", "name": "PS1", "estimatedOpenTime": 90, "pitStopDuration": 45, "selfCheckInAllowed": false },
+    { "stageId": "S002", "stageNumber": 2, "type": "FINISH", "name": "Finish", "selfCheckInAllowed": true }
   ],
+  "selfCheckInAllowed": false,
+  "selfQuitRidingAllowed": true,
   "floats": [
     { "floatNo": 1, "floatToStage": 1 }
   ],
@@ -1431,11 +1477,26 @@ PUT /v1/tours/TOT-2026/rides/RIDE001
 ```
 ```json
 {
-  "description": "Coastal stage with one pit stop"
+  "description": "Coastal stage with one pit stop",
+  "selfCheckInAllowed": false,
+  "selfQuitRidingAllowed": true,
+  "stages": [
+    { "stageId": "S000", "stageNumber": 0, "type": "START", "name": "Start", "selfCheckInAllowed": true, "selfNotRidingAllowed": true },
+    { "stageId": "S001", "stageNumber": 1, "type": "PIT_STOP", "name": "PS1", "estimatedOpenTime": 90, "pitStopDuration": 45, "selfCheckInAllowed": false },
+    { "stageId": "S002", "stageNumber": 2, "type": "FINISH", "name": "Finish", "selfCheckInAllowed": true }
+  ]
 }
 ```
 
-Response `200 OK`: the full updated ride. This is the [Create Ride](#create-ride) response plus `"description": "Coastal stage with one pit stop"` and a new `updatedAt`. When `stages` are sent, live pit-stop fields (`pitStopStatus`, `openedAt`, `closedAt`) are kept.
+Response `200 OK`: the full updated ride with the supplied settings and a new `updatedAt`. When `stages` are sent, live pit-stop fields (`pitStopStatus`, `openedAt`, `closedAt`) are kept. The GET response adds `selfService` with the exact shape shown in [Get Ride](#get-ride): `quitRidingAllowed` is a boolean; `stages` is keyed by decimal stage number, and each stage object contains exactly the boolean fields `checkInAllowed` and `notRidingAllowed`. Ride-level Quit Riding overrides the tour setting; stage check-in overrides the ride setting, followed by defaults START/FINISH=true and PIT_STOP=false. `notRidingAllowed` is false for non-START stages.
+
+Invalid or incomplete stage sequences and non-boolean settings return `400 BAD_REQUEST`. For example, a ride without a FINISH stage returns:
+```json
+{
+  "success": false,
+  "error": { "code": "BAD_REQUEST", "message": "Last stage must be type FINISH" }
+}
+```
 
 ##### Open Pit Stop
 
@@ -1609,9 +1670,25 @@ Response `200 OK` (cancelled check-ins excluded):
       "stageNumber": 0,
       "stageId": "S000",
       "notes": "Boarded float 1"
+    },
+    {
+      "checkInId": "R57#002#2026-02-11T12:15:00Z",
+      "riderId": "R57",
+      "rideId": "RIDE001",
+      "timestamp": "2026-02-11T12:15:00Z",
+      "checkedInBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+      "method": "SELF_SERVICE",
+      "isNotRiding": false,
+      "isFloat": false,
+      "isQuitRiding": false,
+      "isManualEntry": false,
+      "createdAt": "2026-02-11T12:15:01Z",
+      "status": "CHECKED_IN",
+      "stageNumber": 2,
+      "stageId": "S002"
     }
   ],
-  "count": 2,
+  "count": 3,
   "rideId": "RIDE001",
   "tourId": "TOT-2026"
 }
@@ -1646,9 +1723,25 @@ Response `200 OK` (all rides, cancelled excluded):
       "stageNumber": 0,
       "stageId": "S000",
       "notes": "Boarded float 1"
+    },
+    {
+      "checkInId": "R57#002#2026-02-11T12:15:00Z",
+      "riderId": "R57",
+      "rideId": "RIDE001",
+      "timestamp": "2026-02-11T12:15:00Z",
+      "checkedInBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+      "method": "SELF_SERVICE",
+      "isNotRiding": false,
+      "isFloat": false,
+      "isQuitRiding": false,
+      "isManualEntry": false,
+      "createdAt": "2026-02-11T12:15:01Z",
+      "status": "CHECKED_IN",
+      "stageNumber": 2,
+      "stageId": "S002"
     }
   ],
-  "count": 1
+  "count": 2
 }
 ```
 
@@ -1696,6 +1789,127 @@ Response `200 OK`:
   "cancelledAt": "2026-02-11T09:55:00Z"
 }
 ```
+
+##### Rider Self Check-In
+
+The rider ID and `method=SELF_SERVICE` are always derived from the authenticated rider; neither is accepted from the request.
+
+Stage check-in at START:
+```http
+POST /v1/tours/TOT-2026/rides/RIDE001/self-checkins
+```
+```json
+{ "stageNumber": 0, "timestamp": "2026-02-11T08:00:12Z" }
+```
+Response `201 Created`:
+```json
+{
+  "checkInId": "R57#000#2026-02-11T08:00:12Z",
+  "riderId": "R57",
+  "rideId": "RIDE001",
+  "stageNumber": 0,
+  "stageId": "S000",
+  "method": "SELF_SERVICE",
+  "isNotRiding": false,
+  "isFloat": false,
+  "isQuitRiding": false,
+  "status": "CHECKED_IN",
+  "timestamp": "2026-02-11T08:00:12Z",
+  "checkedInBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910"
+}
+```
+
+Not Riding is allowed only at an enabled START stage while the ride is `OPEN`:
+```json
+{ "isNotRiding": true, "timestamp": "2026-02-11T07:55:00Z" }
+```
+Response `201 Created`:
+```json
+{
+  "checkInId": "R57#000#2026-02-11T07:55:00Z",
+  "riderId": "R57",
+  "rideId": "RIDE001",
+  "timestamp": "2026-02-11T07:55:00Z",
+  "checkedInBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+  "method": "SELF_SERVICE",
+  "isNotRiding": true,
+  "isFloat": false,
+  "isQuitRiding": false,
+  "isManualEntry": false,
+  "createdAt": "2026-02-11T07:55:01Z",
+  "status": "NOT_RIDING"
+}
+```
+
+Quit Riding is allowed only after the ride has started, when the effective tour/ride setting allows it:
+```json
+{ "isQuitRiding": true, "timestamp": "2026-02-11T11:20:00Z", "notes": "Unable to continue safely" }
+```
+Response `201 Created`:
+```json
+{
+  "checkInId": "R57#000#2026-02-11T11:20:00Z",
+  "riderId": "R57",
+  "rideId": "RIDE001",
+  "timestamp": "2026-02-11T11:20:00Z",
+  "checkedInBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+  "method": "SELF_SERVICE",
+  "isNotRiding": false,
+  "isFloat": false,
+  "isQuitRiding": true,
+  "isManualEntry": false,
+  "createdAt": "2026-02-11T11:20:01Z",
+  "status": "QUIT_RIDING",
+  "notes": "Unable to continue safely"
+}
+```
+Afterward the rider cannot self-check-in again unless Management cancels this record.
+
+A disallowed stage, Not Riding or Quit Riding action returns `403 SELF_CHECKIN_NOT_ALLOWED`; a ride that is not today's ride returns `403 RIDE_NOT_TODAY`; a closed pit stop returns `403 PIT_STOP_NOT_OPEN`.
+
+##### Cancel Rider Self Check-In
+
+A rider may cancel their own check-in or a staff-created check-in at an enabled stage. Use the canceled record's prior status in the request:
+```http
+POST /v1/tours/TOT-2026/rides/RIDE001/self-checkins/R57%23000%232026-02-11T08:00:12Z/cancel
+```
+```json
+{ "status": "CANCELLED", "prevStatus": "CHECKED_IN" }
+```
+Response `200 OK`:
+```json
+{
+  "checkInId": "R57#000#2026-02-11T08:00:12Z",
+  "riderId": "R57",
+  "rideId": "RIDE001",
+  "timestamp": "2026-02-11T08:00:12Z",
+  "checkedInBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+  "method": "SELF_SERVICE",
+  "isNotRiding": false,
+  "isFloat": false,
+  "isQuitRiding": false,
+  "isManualEntry": false,
+  "createdAt": "2026-02-11T08:00:13Z",
+  "status": "CANCELLED",
+  "stageNumber": 0,
+  "stageId": "S000",
+  "prevStatus": "CHECKED_IN",
+  "cancelledBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+  "cancelledAt": "2026-02-11T08:05:00Z"
+}
+```
+
+Quit Riding cannot be cancelled by a rider, even when Quit Riding self-service is enabled. Only Management can cancel it:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "QUIT_RIDING_CANCEL_NOT_ALLOWED",
+    "message": "Quit Riding check-ins can only be cancelled by management users."
+  }
+}
+```
+The response status is `403`. Cancelling any other record when self-service is not allowed also returns `403 SELF_CHECKIN_NOT_ALLOWED`.
 
 ##### Get Ride Dashboard
 
@@ -1828,8 +2042,8 @@ Response `200 OK`:
   "location": "Hotel lobby",
   "sequenceEnforced": true,
   "defaultAllowedTypeCodes": ["3", "4", "5"],
-  "registrationEnabled": false,
-  "selfServiceAllowed": false,
+  "registrationEnabled": true,
+  "selfServiceAllowed": true,
   "activities": [
     {
       "activityId": "ACT-001",
@@ -1839,6 +2053,7 @@ Response `200 OK`:
       "mandatory": false,
       "allowedTypeCodes": [],
       "allowOptOut": true,
+      "selfServiceAllowed": true,
       "prerequisiteActivityIds": [],
       "restrictToAssignedUsers": true,
       "variantOptions": [],
@@ -1852,6 +2067,7 @@ Response `200 OK`:
       "mandatory": false,
       "allowedTypeCodes": [],
       "allowOptOut": false,
+      "selfServiceAllowed": true,
       "prerequisiteActivityIds": [],
       "restrictToAssignedUsers": true,
       "variantOptions": [],
@@ -1865,6 +2081,7 @@ Response `200 OK`:
       "mandatory": true,
       "allowedTypeCodes": [],
       "allowOptOut": false,
+      "selfServiceAllowed": true,
       "prerequisiteActivityIds": [],
       "restrictToAssignedUsers": true,
       "variantOptions": [],
@@ -1876,6 +2093,7 @@ Response `200 OK`:
   "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
 }
 ```
+Missing event definitions return `404 EVENT_NOT_FOUND`.
 
 ##### Create Event
 
@@ -1892,15 +2110,19 @@ POST /v1/tours/TOT-2026/events
   "location": "Origin hotel",
   "sequenceEnforced": true,
   "defaultAllowedTypeCodes": ["3", "4", "5"],
+  "registrationEnabled": true,
+  "selfServiceAllowed": true,
   "activities": [
-    { "activityId": "ACT-001", "name": "Collected from room", "sequenceNo": 1, "allowOptOut": true, "notes": "Riders may bring bags to the lobby" },
-    { "activityId": "ACT-002", "name": "Tagged at lobby", "sequenceNo": 2 },
-    { "activityId": "ACT-003", "name": "Loaded to truck", "sequenceNo": 3, "mandatory": true }
+    { "activityId": "ACT-001", "name": "Collected from room", "sequenceNo": 1, "allowOptOut": true, "selfServiceAllowed": true, "notes": "Riders may bring bags to the lobby" },
+    { "activityId": "ACT-002", "name": "Tagged at lobby", "sequenceNo": 2, "selfServiceAllowed": true },
+    { "activityId": "ACT-003", "name": "Loaded to truck", "sequenceNo": 3, "mandatory": true, "selfServiceAllowed": true }
   ]
 }
 ```
 
 Response `201 Created`: the stored event definition. It has the same shape as [Get Event](#get-event), with `"location": "Origin hotel"` and `createdAt` = `updatedAt` = `2026-01-25T09:00:00Z`.
+
+An invalid non-boolean registration or event/activity self-service flag returns `400 VALIDATION_ERROR`.
 
 ##### Update Event
 
@@ -1909,11 +2131,20 @@ PUT /v1/tours/TOT-2026/events/EVT-BAGLOAD
 ```
 ```json
 {
-  "location": "Hotel lobby"
+  "location": "Hotel lobby",
+  "registrationEnabled": true,
+  "selfServiceAllowed": true,
+  "activities": [
+    { "activityId": "ACT-001", "name": "Collected from room", "sequenceNo": 1, "allowOptOut": true, "selfServiceAllowed": true },
+    { "activityId": "ACT-002", "name": "Tagged at lobby", "sequenceNo": 2, "selfServiceAllowed": true },
+    { "activityId": "ACT-003", "name": "Loaded to truck", "sequenceNo": 3, "mandatory": true, "selfServiceAllowed": true }
+  ]
 }
 ```
 
 Response `200 OK`: the full updated event, as shown in [Get Event](#get-event). Sending `activities` replaces the whole activity list and goes through the same validation as create.
+
+An invalid non-boolean registration or event/activity self-service flag returns `400 VALIDATION_ERROR`.
 
 ##### List Occurrences
 
@@ -1928,6 +2159,7 @@ Response `200 OK` (sorted by `dateSeq`):
 }
 ```
 Each item is an occurrence as shown in [Get Occurrence](#get-occurrence).
+An unknown event returns `404 EVENT_NOT_FOUND`.
 
 ##### Get Occurrence
 
@@ -1948,6 +2180,7 @@ Response `200 OK`:
     {
       "activityId": "ACT-002",
       "allowedTypeCodes": ["3", "4", "5", "6"],
+      "selfServiceAllowed": false,
       "note": "Heavy bags allowed today",
       "updatedAt": "2026-02-12T05:20:00Z",
       "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
@@ -1962,6 +2195,7 @@ Response `200 OK`:
   "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
 }
 ```
+An unknown event or occurrence returns `404 EVENT_NOT_FOUND` or `404 OCCURRENCE_NOT_FOUND`.
 
 ##### Create Occurrence
 
@@ -1971,7 +2205,8 @@ POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences
 ```json
 {
   "date": "2026-02-12",
-  "seq": 1
+  "seq": 1,
+  "selfServiceAllowed": true
 }
 ```
 
@@ -1985,7 +2220,7 @@ Response `201 Created`. `selfServiceAllowed` is an optional occurrence override:
   "seq": 1,
   "status": "PLANNED",
   "activityOverrides": [],
-  "selfServiceAllowed": null,
+  "selfServiceAllowed": true,
   "restrictToAssignedUsers": true,
   "createdAt": "2026-02-11T18:00:00Z",
   "updatedAt": "2026-02-11T18:00:00Z",
@@ -2000,11 +2235,12 @@ PUT /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%2
 ```
 ```json
 {
-  "linkedOccurrenceRef": "EVT-BAGUNLOAD#2026-02-12#1"
+  "linkedOccurrenceRef": "EVT-BAGUNLOAD#2026-02-12#1",
+  "selfServiceAllowed": false
 }
 ```
 
-Response `200 OK`: the [Create Occurrence](#create-occurrence) response plus `"linkedOccurrenceRef": "EVT-BAGUNLOAD#2026-02-12#1"`, with `updatedAt` set to `2026-02-11T18:05:00Z`.
+Response `200 OK`: the [Create Occurrence](#create-occurrence) response with `"linkedOccurrenceRef": "EVT-BAGUNLOAD#2026-02-12#1"` and `"selfServiceAllowed": false`, with `updatedAt` set to `2026-02-11T18:05:00Z`. A non-boolean, non-null override returns `400 VALIDATION_ERROR`; completed/cancelled occurrences return `409 OCCURRENCE_CLOSED`.
 
 ##### Get Activity Overrides
 
@@ -2019,6 +2255,7 @@ Response `200 OK`:
     {
       "activityId": "ACT-002",
       "allowedTypeCodes": ["3", "4", "5", "6"],
+      "selfServiceAllowed": false,
       "note": "Heavy bags allowed today",
       "updatedAt": "2026-02-12T05:20:00Z",
       "updatedBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
@@ -2038,11 +2275,14 @@ PUT /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%2
 {
   "activityId": "ACT-002",
   "allowedTypeCodes": ["3", "4", "5", "6"],
+  "selfServiceAllowed": false,
   "note": "Heavy bags allowed today"
 }
 ```
 
 Response `200 OK`: the full override list for the occurrence, the same as [Get Activity Overrides](#get-activity-overrides).
+
+A non-boolean, non-null `selfServiceAllowed` value returns `400 VALIDATION_ERROR`.
 
 ##### Start Occurrence
 
@@ -2209,22 +2449,30 @@ Response `200 OK`. `occurrence` is the object from [Get Occurrence](#get-occurre
   "riders": [
     {
       "riderId": "R12",
+      "registrationStatus": "NOT_REGISTERED",
       "activities": [
-        { "activityId": "ACT-001", "status": "OPTED_OUT" },
-        { "activityId": "ACT-002", "status": "PENDING" },
-        { "activityId": "ACT-003", "status": "PENDING" }
+        { "activityId": "ACT-001", "status": "OPTED_OUT", "selfServiceAllowed": true },
+        { "activityId": "ACT-002", "status": "PENDING", "selfServiceAllowed": false },
+        { "activityId": "ACT-003", "status": "PENDING", "selfServiceAllowed": true }
       ]
     },
     {
       "riderId": "R57",
+      "registrationStatus": "REGISTERED",
       "activities": [
-        { "activityId": "ACT-001", "status": "COMPLETED" },
-        { "activityId": "ACT-002", "status": "COMPLETED" },
-        { "activityId": "ACT-003", "status": "COMPLETED" }
+        { "activityId": "ACT-001", "status": "COMPLETED", "selfServiceAllowed": true },
+        { "activityId": "ACT-002", "status": "COMPLETED", "selfServiceAllowed": false },
+        { "activityId": "ACT-003", "status": "COMPLETED", "selfServiceAllowed": true }
       ]
     }
   ],
-  "cancelled": [ { ... } ]
+  "cancelled": [ { ... } ],
+  "summary": {
+    "totalRiders": 2,
+    "registrationEnabled": true,
+    "registeredCount": 1,
+    "notRegisteredCount": 1
+  }
 }
 ```
 
@@ -2238,6 +2486,9 @@ Response `200 OK`. `outstandingMandatoryCount` counts rider × mandatory-activit
 ```json
 {
   "totalRiders": 2,
+  "registrationEnabled": true,
+  "registeredCount": 1,
+  "notRegisteredCount": 1,
   "completedCount": 3,
   "outstandingMandatoryCount": 1,
   "optedOutCount": 1,
@@ -2266,11 +2517,27 @@ Response `200 OK`. Counts are distinct `(riderId, typeCode)` bags scanned at the
 GET /v1/tours/TOT-2026/events/bootstrap
 ```
 
-Response `200 OK` (with `ETag` header), fetched on `2026-02-12`. `events` holds definitions as in [Get Event](#get-event). `activeOccurrences` holds `PLANNED`/`ACTIVE` occurrences dated today or later, as in [Get Occurrence](#get-occurrence). `hotelStaysToday` holds today's allocations, as in [List Hotel Stays by Date](#list-hotel-stays-by-date):
+Response `200 OK` (with `ETag` header), fetched on `2026-02-12` using a RiderApi token. `events` holds definitions as in [Get Event](#get-event). `activeOccurrences` holds `PLANNED`/`ACTIVE` occurrences dated today or later; each includes registration and effective self-service state. `hotelStaysToday` holds today's allocations, as in [List Hotel Stays by Date](#list-hotel-stays-by-date):
 ```json
 {
   "events": [ { ... } ],
-  "activeOccurrences": [ { ... } ],
+  "activeOccurrences": [
+    {
+      "eventId": "EVT-BAGLOAD",
+      "dateSeq": "2026-02-12#1",
+      "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+      "date": "2026-02-12",
+      "seq": 1,
+      "status": "ACTIVE",
+      "registrationEnabled": true,
+      "registrationStatus": "REGISTERED",
+      "effectiveSelfServiceByActivity": {
+        "ACT-001": true,
+        "ACT-002": false,
+        "ACT-003": true
+      }
+    }
+  ],
   "riderBaggageStatus": [
     { "riderId": "R12", "baggageStatus": "ACTIVE", "baggageReleasedAt": null },
     { "riderId": "R57", "baggageStatus": "ACTIVE", "baggageReleasedAt": null }
@@ -2278,6 +2545,7 @@ Response `200 OK` (with `ETag` header), fetched on `2026-02-12`. `events` holds 
   "hotelStaysToday": [ { ... }, { ... } ]
 }
 ```
+An unlinked RiderApi account returns `403 RIDER_PROFILE_NOT_LINKED`; Management responses include the same effective self-service map but omit rider-specific `registrationStatus`.
 
 ##### Get Rider Event Progress
 
@@ -2285,16 +2553,240 @@ Response `200 OK` (with `ETag` header), fetched on `2026-02-12`. `events` holds 
 GET /v1/tours/TOT-2026/riders/R57/events/progress?eventId=EVT-BAGLOAD
 ```
 
-Response `200 OK` (cancelled records excluded; `status` is the record `outcome`):
+Response `200 OK` (cancelled records excluded; `status` is the record `outcome`). RiderApi callers may only request their linked `riderId`:
 ```json
 {
   "items": [
     { "eventId": "EVT-BAGLOAD", "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "activityId": "ACT-001", "status": "COMPLETED" },
     { "eventId": "EVT-BAGLOAD", "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "activityId": "ACT-002", "status": "COMPLETED" },
     { "eventId": "EVT-BAGLOAD", "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "activityId": "ACT-003", "status": "COMPLETED" }
+  ],
+  "occurrences": [
+    {
+      "eventId": "EVT-BAGLOAD",
+      "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+      "registrationStatus": "REGISTERED",
+      "activities": [
+        { "activityId": "ACT-001", "status": "COMPLETED", "selfServiceAllowed": true },
+        { "activityId": "ACT-002", "status": "COMPLETED", "selfServiceAllowed": false },
+        { "activityId": "ACT-003", "status": "COMPLETED", "selfServiceAllowed": true }
+      ]
+    }
   ]
 }
 ```
+When event registration is disabled, `registrationStatus` is `NOT_REQUIRED`; otherwise it is `REGISTERED` or `NOT_REGISTERED`. Requesting another rider's progress with RiderApi returns `403 PROFILE_ACCESS_DENIED`.
+
+##### Rider Self-Record
+
+The RiderApi derives `riderId` and `method=SELF_SERVICE` from the signed-in account:
+```http
+POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/self-records
+```
+```json
+{
+  "activityId": "ACT-001",
+  "timestamp": "2026-02-12T05:42:10Z"
+}
+```
+Response `201 Created`:
+```json
+{
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "recordId": "R57#ACT-001#2026-02-12T05:42:10Z",
+  "eventId": "EVT-BAGLOAD",
+  "activityId": "ACT-001",
+  "activityName": "Collected from room",
+  "riderId": "R57",
+  "scannedBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+  "timestamp": "2026-02-12T05:42:10Z",
+  "method": "SELF_SERVICE",
+  "outcome": "COMPLETED",
+  "syncedAt": "2026-02-12T05:42:15Z",
+  "isFlagged": false,
+  "createdAt": "2026-02-12T05:42:15Z"
+}
+```
+This returns `403 SELF_SERVICE_NOT_ALLOWED` when effective activity self-service is false, `403 RIDER_NOT_REGISTERED_FOR_EVENT` when registration is enabled but the rider is not registered, and `409 OCCURRENCE_NOT_ACTIVE` unless the occurrence is active.
+For an unregistered rider:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RIDER_NOT_REGISTERED_FOR_EVENT",
+    "message": "Rider is not registered for this event occurrence."
+  }
+}
+```
+The HTTP status is `403`.
+For an unregistered rider the error response is:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RIDER_NOT_REGISTERED_FOR_EVENT",
+    "message": "Rider is not registered for this event occurrence."
+  }
+}
+```
+The HTTP status is `403`.
+
+##### Cancel Rider Self-Record
+
+Riders can cancel only their own records, while effective self-service remains allowed for the activity:
+```http
+POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/self-records/R57%23ACT-001%232026-02-12T05:42:10Z/cancel
+```
+```json
+{ "cancelReason": "Recorded by mistake" }
+```
+Response `200 OK`:
+```json
+{
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "recordId": "R57#ACT-001#2026-02-12T05:42:10Z",
+  "eventId": "EVT-BAGLOAD",
+  "activityId": "ACT-001",
+  "activityName": "Collected from room",
+  "riderId": "R57",
+  "scannedBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+  "timestamp": "2026-02-12T05:42:10Z",
+  "method": "SELF_SERVICE",
+  "outcome": "COMPLETED",
+  "syncedAt": "2026-02-12T05:42:15Z",
+  "isFlagged": false,
+  "createdAt": "2026-02-12T05:42:15Z",
+  "cancelledAt": "2026-02-12T05:45:00Z",
+  "cancelledBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+  "cancelReason": "Recorded by mistake"
+}
+```
+A rider attempting to cancel another rider's record receives `403 FORBIDDEN`; disabled effective self-service receives `403 SELF_SERVICE_NOT_ALLOWED`.
+For example, canceling another rider's record returns:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Riders may only cancel their own records."
+  }
+}
+```
+The HTTP status is `403`.
+
+##### List Event Registrations
+
+Management users with `EVENT_REGISTRATION_MANAGE` can list all riders explicitly registered for one planned occurrence:
+```http
+GET /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/registrations
+```
+Response `200 OK`:
+```json
+{
+  "eventId": "EVT-BAGLOAD",
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "registrations": [
+    {
+      "riderId": "R57",
+      "name": "John Doe",
+      "registeredAt": "2026-02-11T18:30:00Z",
+      "registeredBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+      "source": "rider"
+    },
+    {
+      "riderId": "R12",
+      "name": "Priya Raman",
+      "registeredAt": "2026-02-11T18:35:00Z",
+      "registeredBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "source": "staff"
+    }
+  ],
+  "count": 2
+}
+```
+An event without registration enabled returns `409 REGISTRATION_NOT_ENABLED`; any occurrence not in `PLANNED` status returns `409 REGISTRATION_CLOSED`.
+The registration-disabled response is:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "REGISTRATION_NOT_ENABLED",
+    "message": "Registration is not enabled for this event."
+  }
+}
+```
+The HTTP status is `409`; closed occurrences return `409 REGISTRATION_CLOSED`.
+For registration-disabled events the error body is:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "REGISTRATION_NOT_ENABLED",
+    "message": "Registration is not enabled for this event."
+  }
+}
+```
+The HTTP status is `409`.
+
+##### Rider Register for Event
+
+The rider is derived from the authenticated account; registration is per occurrence:
+```http
+POST /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/registration
+```
+No request body is required. Response `201 Created`:
+```json
+{
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "riderId": "R57",
+  "eventId": "EVT-BAGLOAD",
+  "registeredAt": "2026-02-11T18:30:00Z",
+  "registeredBy": "8f7e6d5c-4b3a-2910-8f7e-6d5c4b3a2910",
+  "source": "rider"
+}
+```
+Non-planned occurrences return `409 REGISTRATION_CLOSED`; disabled registration returns `409 REGISTRATION_NOT_ENABLED`; exited riders return `403 RIDER_EXITED`.
+
+##### Rider Unregister from Event
+
+```http
+DELETE /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/registration
+```
+No request body is required. Response `200 OK`:
+```json
+{ "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "riderId": "R57", "registered": false }
+```
+The same `REGISTRATION_NOT_ENABLED` and `REGISTRATION_CLOSED` errors as registration apply.
+
+##### Staff Register Rider
+
+Management users with `EVENT_REGISTRATION_MANAGE` can register a rider on their behalf:
+```http
+PUT /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/registrations/R57
+```
+No request body is required. Response `200 OK`:
+```json
+{
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "riderId": "R57",
+  "eventId": "EVT-BAGLOAD",
+  "registeredAt": "2026-02-11T18:35:00Z",
+  "registeredBy": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "source": "staff"
+}
+```
+Registration-disabled, closed-occurrence, and exited-rider errors are the same as the rider operation.
+
+##### Staff Unregister Rider
+
+```http
+DELETE /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/registrations/R57
+```
+No request body is required. Response `200 OK`:
+```json
+{ "occurrenceId": "EVT-BAGLOAD#2026-02-12#1", "riderId": "R57", "registered": false }
+```
+Registration-disabled and closed-occurrence errors are the same as the rider operation.
 
 #### Hotels Examples
 
@@ -2968,7 +3460,37 @@ Content-Type: application/json
 DELETE /v1/admin/notification-rules/PIT_STOP_OPENED
 ```
 
-## Event Engine & Hotel Error Codes
+## Error codes
+
+These codes supplement the common HTTP errors. A `BAD_REQUEST` response uses HTTP 400 for invalid ride stage structure/settings; the response message identifies the failing START/FINISH or field validation.
+
+| Code | HTTP | Returned when |
+|---|---:|---|
+| `SELF_CHECKIN_NOT_ALLOWED` | 403 | The rider's effective ride/stage permission is false; Not Riding is requested outside the allowed START/OPEN state; or Quit Riding is requested while disallowed, before ride start, or after Finish. |
+| `QUIT_RIDING_CANCEL_NOT_ALLOWED` | 403 | A rider tries to cancel any Quit Riding check-in, whether it was created by the rider or by staff. |
+| `TOUR_NOT_ACTIVE` | 403 | Rider self check-in is attempted when the tour is not `ACTIVE`. |
+| `RIDE_NOT_OPEN` | 403 | Rider self check-in is attempted when the ride is not `OPEN` or `STARTED`. |
+| `RIDE_NOT_TODAY` | 403 | Rider self check-in is attempted for a ride whose date is not the current UTC date. |
+| `PIT_STOP_NOT_OPEN` | 403 | Rider self check-in at a pit stop is attempted when its `pitStopStatus` is not `OPEN`. |
+| `RIDER_PROFILE_NOT_LINKED` | 403 | The RiderApi caller has no profile-to-tour-rider link required for self-check-in, self-event actions, event bootstrap, or own-progress resolution. |
+| `RIDER_NOT_IN_TOUR` | 400 or 403 | The requested rider has no TourRider item; ride check-in creation returns 400, while event registration returns 403. |
+| `RIDER_EXITED` | 403 | An exited tour rider attempts rider self check-in, event registration, or event activity participation. |
+| `DUPLICATE_CHECKIN` | 409 | The rider already has a non-cancelled normal check-in for that ride stage. |
+| `DUPLICATE_NOT_RIDING` | 409 | The rider already has a non-cancelled Not Riding check-in for the ride. |
+| `RIDER_NOT_RIDING` | 409 | A normal check-in is attempted after the rider was marked Not Riding. |
+| `RIDER_QUIT_RIDING` | 409 | Another check-in is attempted after a non-cancelled Quit Riding record, unless its client timestamp predates that record. |
+| `RIDE_CLOSED` | 409 | Check-in is attempted for a closed ride without a timestamp predating `closedAt`. |
+| `REGISTRATION_NOT_ENABLED` | 409 | An explicit register, unregister, or registration-list request is made for an event with `registrationEnabled=false`; all non-exited tour riders are otherwise treated as registered. |
+| `REGISTRATION_CLOSED` | 409 | Registration or unregistration is requested after the occurrence leaves `PLANNED`. The occurrence's transition out of `PLANNED` is the only registration cut-off. |
+| `RIDER_NOT_REGISTERED_FOR_EVENT` | 403 | Activity participation is attempted for an event occurrence with registration enabled and no registration row for the rider. |
+| `SELF_SERVICE_NOT_ALLOWED` | 403 | A rider attempts to create or cancel an event activity record when its effective self-service permission is false. |
+| `OCCURRENCE_NOT_ACTIVE` | 409 | An activity record is created before an occurrence becomes `ACTIVE` or after it leaves `ACTIVE`. |
+| `DUPLICATE_ACTIVITY_RECORD` | 409 | A non-cancelled record already exists for the rider, activity, and occurrence. |
+| `PREREQUISITE_NOT_MET` | 409 | A prior sequence activity or configured prerequisite is incomplete. |
+| `PROFILE_ACCESS_DENIED` | 403 | A RiderApi caller requests another rider's event progress. |
+| `VALIDATION_ERROR` | 400 | An event/occurrence/activity `selfServiceAllowed` or event `registrationEnabled` value has the wrong type. |
+
+## Event Engine and Hotel Error Code Reference
 
 Request and response examples for event and hotel endpoints are in [Events Examples](#events-examples) and [Hotels Examples](#hotels-examples).
 
@@ -3070,10 +3592,32 @@ All requests are validated at three levels: API Gateway auth, Lambda RBAC, and h
 7. Ride in CLOSED status rejects check-ins (`RIDE_CLOSED`), except a request timestamp that predates `closedAt`.
 8. `stageNumber` is mandatory only for normal check-ins; Not Riding and Quit Riding entries can be created without stage attributes.
 
+### Rider Self Check-In Rules
+
+1. The rider identity is resolved from the authenticated Cognito subject and the tour rider profile link. A caller-supplied `riderId` is never trusted. The rider must have a TourRider record and must not have `status=EXITED`.
+2. The tour must be `ACTIVE`. The requested ride must be dated today in UTC and be `OPEN` or `STARTED`; a `CLOSED` ride returns `RIDE_NOT_OPEN` for RiderApi self check-in.
+3. For a normal stage check-in, `stageNumber` is required and must identify a stage. Exactly one outcome is allowed: normal stage check-in, `isNotRiding=true`, or `isQuitRiding=true`. `isNotRiding`, `isFloat`, and `isQuitRiding` cannot be combined.
+4. Effective stage check-in permission is resolved stage → ride → type default. A stage's explicit `selfCheckInAllowed` overrides the ride setting. If the ride has `selfCheckInAllowed`, it is the default for stages without a stage override. If neither is configured, `START` and `FINISH` are allowed and `PIT_STOP` is denied. A pit-stop check-in additionally requires `pitStopStatus=OPEN`.
+5. Not Riding does not take a stage number; it is allowed only when the ride is `OPEN` and its START stage has `selfNotRidingAllowed=true`. A rider can have only one non-cancelled Not Riding record for that ride.
+6. Quit Riding does not take a stage number; it is allowed only when the ride is `STARTED` and effective Quit Riding permission is true. Ride `selfQuitRidingAllowed`, when set, overrides tour `selfQuitRidingAllowed`; otherwise the tour setting applies, default `false`. Quit Riding is rejected after any non-cancelled check-in at FINISH and after an earlier Quit Riding. No check-in may follow a Quit Riding record except a late-synced timestamp earlier than that record.
+7. Rider cancellation applies only to the caller's own check-in, including a check-in originally created by staff. Normal stage and Not Riding cancellations require the current effective permission for that stage (Not Riding uses START). The ride need not still be open or current-day. Quit Riding is never rider-cancellable; staff must assess rider safety and cancel it through the management endpoint. A cancellation retains the record and audit data.
+8. Every self-created check-in response and list item reports `method=SELF_SERVICE`; the method is not accepted from the rider request.
+
+### Event Registration and Self-Service Rules
+
+1. `registrationEnabled` is a boolean event-definition setting, default `false`, and registrations are per occurrence. When false, every non-exited TourRider is implicitly registered and eligible; explicit registration mutations/list requests return `REGISTRATION_NOT_ENABLED`. When true, only a rider with an `EventRegistration` row for that occurrence is eligible to participate.
+2. Rider and staff registration/unregistration, and the staff registration list, are available only while the occurrence status is `PLANNED`. This status is the only cut-off: after start or any other transition out of `PLANNED`, all registration mutations and list requests return `REGISTRATION_CLOSED`.
+3. Event registration list and staff register/unregister require `EVENT_REGISTRATION_MANAGE`; rider register/unregister require `READ` on RiderApi and use the linked rider identity. The list includes `riderId`, profile `name`, `registeredAt`, the registering actor's Cognito `sub` as `registeredBy`, and `source` (`rider` or `staff`).
+4. Staff or rider activity records require an existing, non-exited TourRider. If registration is enabled, the occurrence-specific registration must exist or the request returns `RIDER_NOT_REGISTERED_FOR_EVENT`. Disabling registration bypasses only this row check; occurrence activity state, assignment, baggage, sequence, prerequisite, type-code, opt-out, and variant rules continue to apply.
+5. Effective event self-service precedence is event definition → activity definition → occurrence-wide setting → occurrence activity override. Event setting defaults false; activity, occurrence, and per-activity occurrence settings may be boolean or null. The most specific non-null setting wins.
+6. A rider self-record is allowed only for the authenticated rider, in an `ACTIVE` occurrence, on an effectively enabled activity whose effective self-service permission is true. The normal sequence/prerequisite checks still apply; `OPTED_OUT` is allowed only when `allowOptOut=true`, and configured variant options still require a matching `variantSelected`.
+7. Rider self-cancel requires record ownership and that the same activity's effective self-service permission remains true. The cancellation is audited; a cancelled record no longer blocks recording that activity again. Rider event progress on RiderApi accepts only the caller's own `riderId`.
+8. Event bootstrap and rider progress provide occurrence registration status (`NOT_REQUIRED`, `REGISTERED`, or `NOT_REGISTERED`) and effective `selfServiceAllowed` by activity. Dashboard and dashboard-progress responses report `registrationEnabled`, `registeredCount`, and `notRegisteredCount`.
+
 ### Additional Endpoint-Specific Validation Highlights
 
 1. Create Tour enforces `endDate >= startDate` and unique `tourId`.
-2. Create Ride enforces positive `totalDistance`, positive integer `rideNo`, and sequential `stages` with `START` first and `FINISH` last.
+2. Create/update Ride enforce positive `totalDistance`, positive integer `rideNo`, sequential stages numbered from zero, exactly one `START` at stage 0, exactly one `FINISH` as the last stage, and only `PIT_STOP` intermediate stages. Stage self-check-in settings must be boolean; `selfNotRidingAllowed` is valid only on START. Invalid stage structure/settings return HTTP 400 `BAD_REQUEST`.
 3. List filters validate enum values (`status`, `role`, `notification type`).
 4. Dashboard, dashboard-progress, rider-details, and config endpoints support ETag and conditional `304 Not Modified`.
 

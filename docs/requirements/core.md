@@ -1,5 +1,5 @@
 # Core requirements
-_Last updated: 2026-09-29_
+_Last updated: 2026-09-30_
 
 This document is the source of truth for the backend's core tour, ride, check-in, and platform requirements. Topic-specific requirements are maintained in the sibling files in this folder.
 
@@ -14,6 +14,7 @@ This document is the source of truth for the backend's core tour, ride, check-in
 ## Tour and ride operations
 
 - A tour has a unique `tourId`, name, date range, lifecycle status, and planned ride count.
+- `selfQuitRidingAllowed` is a tour-level boolean defaulting to `false`; a ride may override it.
 - A tour must be provisioned before tour-specific operations are available. Repair provisioning must be safe for already-provisioned tours and must not change their existing `provisionedAt` timestamp.
 - A ride belongs to one tour and has a date, schedule, distance, status, and ordered stages.
 - Stage numbering starts at zero. Stage `0` is `START`; the final stage is `FINISH`; intermediate pit-stop stages are `PIT_STOP`.
@@ -25,8 +26,10 @@ This document is the source of truth for the backend's core tour, ride, check-in
 - Normal check-ins, `Not Riding`, and `Quit Riding` are distinct outcomes. QR scanning is supported; manual entry is available only to users with the corresponding permission.
 - A rider must be enrolled in the tour. A rider may have no more than one `Not Riding` record per ride, and duplicate normal check-ins at the same stage are rejected.
 - A rider marked `Not Riding` or `Quit Riding` cannot make later check-ins for that ride, subject to the API's timestamp and cancellation rules.
-- Riders may self check in only when effective stage/ride permissions allow it. Start and Finish default to allowed; pit stops, Not Riding, and Quit Riding default to not allowed unless configured.
-- Riders cannot cancel Quit Riding check-ins; management must assess rider safety before cancellation.
+- Rider self check-in is available only for an active tour and today's ride while its status is `OPEN` or `STARTED`; a pit stop must also be `OPEN`. The rider identity is taken from the authenticated profile, and exited riders cannot self check in.
+- Stage check-in permission is resolved from stage → ride → default. A stage setting overrides the ride setting; otherwise a configured ride-wide setting applies. If neither is set, `START` and `FINISH` are allowed, and `PIT_STOP` is not.
+- `Not Riding` is allowed only at `START`, when that stage's `selfNotRidingAllowed` is true and the ride is `OPEN`. `Quit Riding` is allowed only after the ride is `STARTED`, when ride-level `selfQuitRidingAllowed` overrides the tour-level setting (default false), and before a Finish check-in.
+- Riders may cancel their own eligible check-ins only while the effective self-check-in permission for the corresponding stage is allowed. Riders cannot cancel any `Quit Riding` check-in; management must assess rider safety before cancellation.
 - A check-in cancellation retains the record and its audit information; cancelled records are excluded from normal check-in validation and read results, except where the dashboard contract returns them separately.
 - A pit-stop user may create regular check-ins only for their assigned pit-stop stage. Any `PS_<n>_USER` may record `Quit Riding` at any stage.
 

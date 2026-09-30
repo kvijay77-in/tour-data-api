@@ -48,6 +48,7 @@ from models import (
     utc_today_iso,
 )
 from event_permissions import effective_event_self_service_allowed
+from ownership import is_rider_api_request, resolve_profile_id_for_sub
 from response import (
     bad_request_response,
     conflict_response,
@@ -104,6 +105,56 @@ def get_claim(event: Dict[str, Any], key: str, default: str = "") -> str:
         .get("jwt", {})
         .get("claims", {})
         .get(key, default)
+    )
+
+
+def _rider_id_for_request(event: Dict[str, Any], tour_id: str) -> Optional[str]:
+    profile_id = resolve_profile_id_for_sub(get_claim(event, "sub"))
+    riders = query_tour_items(
+        "TourRider",
+        tour_id,
+        key_condition_expression="profileId = :profileId",
+        expression_values={":profileId": profile_id},
+        index_name="ProfileIdIndex",
+    ) if profile_id else []
+    return riders[0].get("riderId") if riders else None
+
+
+def _event_occurrence_registration_status(
+    tour_id: str,
+    event_definition: Dict[str, Any],
+    occurrence_id: str,
+    rider_id: str,
+) -> str:
+    if not event_definition.get("registrationEnabled", False):
+        return "NOT_REQUIRED"
+    registration = get_tour_item(
+        "EventRegistration",
+        tour_id,
+        {"occurrenceId": occurrence_id, "riderId": rider_id},
+    )
+    return "REGISTERED" if registration else "NOT_REGISTERED"
+
+
+def _effective_self_service_by_activity(
+    event_definition: Dict[str, Any],
+    occurrence: Dict[str, Any],
+) -> Dict[str, bool]:
+    return {
+        activity.get("activityId"): effective_event_self_service_allowed(
+            event_definition, occurrence, activity
+        )
+        for activity in event_definition.get("activities", []) or []
+        if activity.get("activityId")
+    }
+
+
+def _occurrence_registrations(tour_id: str, occurrence_id: str) -> List[Dict[str, Any]]:
+    return query_tour_items(
+        "EventRegistration",
+        tour_id,
+        key_condition_expression="occurrenceId = :occurrenceId",
+        expression_values={":occurrenceId": occurrence_id},
     )
 
 
@@ -173,6 +224,8 @@ def _normalise_activity(activity: Dict[str, Any]) -> ActivityDefinition:
     validate_activity_id(activity["activityId"])
     validate_allowed_type_codes(activity.get("allowedTypeCodes", []))
     validate_variant_options(activity.get("variantOptions", []))
+    if "selfServiceAllowed" in activity and activity["selfServiceAllowed"] is not None and not isinstance(activity["selfServiceAllowed"], bool):
+        raise ValidationError("selfServiceAllowed must be a boolean or null", {"field": "selfServiceAllowed"})
 
     prerequisite_ids = activity.get("prerequisiteActivityIds") or []
     if not isinstance(prerequisite_ids, list):
@@ -352,7 +405,10 @@ def list_events(event: Dict[str, Any]) -> Dict[str, Any]:
         validate_tour_id(tour_id)
     except ValidationError as exc:
         return bad_request_response(exc.message, exc.details)
-    items = sorted(scan_tour_items("Event", tour_id), key=lambda item: item.get("eventId", ""))
+    items = sorted(
+        (_without_legacy_self_service(item) for item in scan_tour_items("Event", tour_id)),
+        key=lambda item: item.get("eventId", ""),
+    )
     return success_response({"items": items})
 
 
@@ -398,6 +454,9 @@ def create_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
         validate_event_id(body["eventId"])
         validate_event_type(body["eventType"])
         validate_allowed_type_codes(body.get("defaultAllowedTypeCodes"))
+        for field in ("registrationEnabled", "selfServiceAllowed"):
+            if field in body and not isinstance(body[field], bool):
+                raise ValidationError(f"{field} must be a boolean", {"field": field})
         _validate_allowed_type_codes_exist(body.get("defaultAllowedTypeCodes") or [])
         activities = _validate_activities(body["activities"])
         notification_config = _validate_notification_config(body.get("notificationConfig"))
@@ -472,6 +531,8 @@ def update_event_definition(event: Dict[str, Any]) -> Dict[str, Any]:
             updated["notificationConfig"] = _validate_notification_config(body.get("notificationConfig")) or None
         for field in ("eventName", "location", "sequenceEnforced", "registrationEnabled", "selfServiceAllowed"):
             if field in body:
+                if field in {"registrationEnabled", "selfServiceAllowed"} and not isinstance(body[field], bool):
+                    raise ValidationError(f"{field} must be a boolean", {"field": field})
                 updated[field] = body[field]
     except ValidationError as exc:
         return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
@@ -519,7 +580,12 @@ def list_occurrences(event: Dict[str, Any]) -> Dict[str, Any]:
         items = [item for item in items if item.get("date") == date_filter]
     if status_filter:
         items = [item for item in items if item.get("status") == status_filter]
-    return success_response({"items": sorted(items, key=lambda item: item.get("dateSeq", ""))})
+    return success_response({
+        "items": sorted(
+            (_without_legacy_self_service(item) for item in items),
+            key=lambda item: item.get("dateSeq", ""),
+        )
+    })
 
 
 def get_occurrence_response(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -556,6 +622,8 @@ def create_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
     try:
         validate_required_fields(body, ["date", "seq"])
         validate_iso_date(body["date"], "date")
+        if "selfServiceAllowed" in body and body["selfServiceAllowed"] is not None and not isinstance(body["selfServiceAllowed"], bool):
+            raise ValidationError("selfServiceAllowed must be a boolean or null", {"field": "selfServiceAllowed"})
         seq = int(body["seq"])
         if seq <= 0:
             raise ValidationError("seq must be a positive integer", {"field": "seq", "value": body["seq"]})
@@ -609,6 +677,12 @@ def update_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
     if occurrence.get("status") in {EventOccurrenceStatus.COMPLETED.value, EventOccurrenceStatus.CANCELLED.value}:
         return error_response("OCCURRENCE_CLOSED", "Occurrence is already closed.", status_code=409)
     if "selfServiceAllowed" in body:
+        if body["selfServiceAllowed"] is not None and not isinstance(body["selfServiceAllowed"], bool):
+            return error_response(
+                "VALIDATION_ERROR",
+                "selfServiceAllowed must be a boolean or null",
+                status_code=400,
+            )
         occurrence["selfServiceAllowed"] = (
             body["selfServiceAllowed"]
             if isinstance(body["selfServiceAllowed"], bool) else None
@@ -655,6 +729,8 @@ def update_activity_override(event: Dict[str, Any]) -> Dict[str, Any]:
     try:
         validate_activity_id(activity_id)
         validate_allowed_type_codes(body.get("allowedTypeCodes"), "allowedTypeCodes")
+        if "selfServiceAllowed" in body and body["selfServiceAllowed"] is not None and not isinstance(body["selfServiceAllowed"], bool):
+            raise ValidationError("selfServiceAllowed must be a boolean or null", {"field": "selfServiceAllowed"})
         if "skipped" in body and not isinstance(body.get("skipped"), bool):
             raise ValidationError("skipped must be boolean", {"field": "skipped"})
         if body.get("allowedTypeCodes") is not None:
@@ -859,6 +935,8 @@ def create_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     rider = get_tour_item("TourRider", tour_id, {"riderId": body["riderId"]})
     if not rider:
         return error_response("RIDER_NOT_FOUND", "Rider not found.", status_code=404)
+    if rider.get("status") == TourRiderStatus.EXITED.value:
+        return error_response("RIDER_EXITED", "Exited riders cannot participate in event activities.", status_code=403)
 
     if event_definition.get("registrationEnabled"):
         registration = get_tour_item(
@@ -1050,6 +1128,16 @@ def get_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
     records = _scan_records_for_occurrence(tour_id, occurrence_id)
     non_cancelled = _non_cancelled_records(records)
     riders = scan_tour_items("TourRider", tour_id)
+    eligible_rider_ids = {
+        rider.get("riderId")
+        for rider in riders
+        if rider.get("riderId") and rider.get("status") != TourRiderStatus.EXITED.value
+    }
+    registration_enabled = bool(event_definition.get("registrationEnabled", False))
+    registered_ids = {
+        item.get("riderId")
+        for item in _occurrence_registrations(tour_id, occurrence_id)
+    } & eligible_rider_ids if registration_enabled else eligible_rider_ids
     items = []
     for rider in riders:
         rider_status = []
@@ -1059,13 +1147,30 @@ def get_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
                 if record.get("riderId") == rider.get("riderId") and record.get("activityId") == activity.get("activityId"):
                     status = record.get("outcome") or "COMPLETED"
                     break
-            rider_status.append({"activityId": activity.get("activityId"), "status": status})
-        items.append({"riderId": rider.get("riderId"), "activities": rider_status})
+            rider_status.append({
+                "activityId": activity.get("activityId"),
+                "status": status,
+                "selfServiceAllowed": effective_event_self_service_allowed(
+                    event_definition, occurrence, activity
+                ),
+            })
+        rider_id = rider.get("riderId")
+        items.append({
+            "riderId": rider_id,
+            "registrationStatus": "REGISTERED" if rider_id in registered_ids else "NOT_REGISTERED",
+            "activities": rider_status,
+        })
     return success_response(
         {
             "occurrence": occurrence,
             "riders": items,
             "cancelled": [record for record in records if record.get("cancelledAt")],
+            "summary": {
+                "totalRiders": len(riders),
+                "registrationEnabled": registration_enabled,
+                "registeredCount": len(registered_ids),
+                "notRegisteredCount": len(eligible_rider_ids) - len(registered_ids),
+            },
         }
     )
 
@@ -1080,11 +1185,24 @@ def get_dashboard_progress(event: Dict[str, Any]) -> Dict[str, Any]:
     if not occurrence:
         return error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
     riders = scan_tour_items("TourRider", tour_id)
+    eligible_rider_ids = {
+        rider.get("riderId")
+        for rider in riders
+        if rider.get("riderId") and rider.get("status") != TourRiderStatus.EXITED.value
+    }
+    registration_enabled = bool(event_definition.get("registrationEnabled", False))
+    registered_ids = {
+        item.get("riderId")
+        for item in _occurrence_registrations(tour_id, occurrence_id)
+    } & eligible_rider_ids if registration_enabled else eligible_rider_ids
     records = _non_cancelled_records(_scan_records_for_occurrence(tour_id, occurrence_id))
     mandatory_count = _count_outstanding_mandatory(tour_id, event_id, occurrence)
     return success_response(
         {
             "totalRiders": len(riders),
+            "registrationEnabled": registration_enabled,
+            "registeredCount": len(registered_ids),
+            "notRegisteredCount": len(eligible_rider_ids) - len(registered_ids),
             "completedCount": len([record for record in records if record.get("outcome") == EventRecordOutcome.COMPLETED.value]),
             "outstandingMandatoryCount": mandatory_count,
             "optedOutCount": len([record for record in records if record.get("outcome") == EventRecordOutcome.OPTED_OUT.value]),
@@ -1100,6 +1218,20 @@ def get_rider_progress(event: Dict[str, Any]) -> Dict[str, Any]:
     rider_id = params.get("riderId")
     if not tour_id or not rider_id:
         return bad_request_response("tourId and riderId are required in path")
+    if is_rider_api_request(event):
+        caller_rider_id = _rider_id_for_request(event, tour_id)
+        if not caller_rider_id:
+            return error_response(
+                "RIDER_PROFILE_NOT_LINKED",
+                "Rider profile is not linked to this account.",
+                status_code=403,
+            )
+        if caller_rider_id != rider_id:
+            return error_response(
+                "PROFILE_ACCESS_DENIED",
+                "Riders may only read their own event progress.",
+                status_code=403,
+            )
     try:
         validate_tour_id(tour_id)
         validate_rider_id(rider_id)
@@ -1125,7 +1257,45 @@ def get_rider_progress(event: Dict[str, Any]) -> Dict[str, Any]:
         for item in items
         if not item.get("cancelledAt")
     ]
-    return success_response({"items": progress_items})
+
+    events = scan_tour_items("Event", tour_id)
+    if event_filter:
+        events = [item for item in events if item.get("eventId") == event_filter]
+    event_by_id = {item.get("eventId"): _without_legacy_self_service(item) for item in events}
+    occurrences = scan_tour_items("EventOccurrence", tour_id)
+    occurrence_progress = []
+    records_by_occurrence_activity = {
+        (item.get("occurrenceId"), item.get("activityId")): item
+        for item in items
+        if not item.get("cancelledAt")
+    }
+    for occurrence in occurrences:
+        event_definition = event_by_id.get(occurrence.get("eventId"))
+        if not event_definition:
+            continue
+        if event_filter and occurrence.get("eventId") != event_filter:
+            continue
+        activities = []
+        for activity in event_definition.get("activities", []) or []:
+            record = records_by_occurrence_activity.get(
+                (occurrence.get("occurrenceId"), activity.get("activityId"))
+            )
+            activities.append({
+                "activityId": activity.get("activityId"),
+                "status": (record or {}).get("outcome", "PENDING"),
+                "selfServiceAllowed": effective_event_self_service_allowed(
+                    event_definition, occurrence, activity
+                ),
+            })
+        occurrence_progress.append({
+            "eventId": event_definition.get("eventId"),
+            "occurrenceId": occurrence.get("occurrenceId"),
+            "registrationStatus": _event_occurrence_registration_status(
+                tour_id, event_definition, occurrence.get("occurrenceId"), rider_id
+            ),
+            "activities": activities,
+        })
+    return success_response({"items": progress_items, "occurrences": occurrence_progress})
 
 
 def _final_activity_id(tour_id: str, event_id: str, occurrence: Dict[str, Any]) -> Optional[str]:
@@ -1194,13 +1364,44 @@ def get_bootstrap(event: Dict[str, Any]) -> Dict[str, Any]:
         return bad_request_response(exc.message, exc.details)
 
     today = utc_today_iso()
-    events = scan_tour_items("Event", tour_id)
+    rider_id = None
+    if is_rider_api_request(event):
+        rider_id = _rider_id_for_request(event, tour_id)
+        if not rider_id:
+            return error_response(
+                "RIDER_PROFILE_NOT_LINKED",
+                "Rider profile is not linked to this account.",
+                status_code=403,
+            )
+    events = [
+        _without_legacy_self_service(item)
+        for item in scan_tour_items("Event", tour_id)
+    ]
+    event_by_id = {item.get("eventId"): item for item in events}
     occurrences = scan_tour_items("EventOccurrence", tour_id)
     filtered_occurrences = [
         occurrence for occurrence in occurrences
         if occurrence.get("status") in {EventOccurrenceStatus.ACTIVE.value, EventOccurrenceStatus.PLANNED.value}
         and occurrence.get("date", "") >= today
     ]
+    for occurrence in filtered_occurrences:
+        event_definition = event_by_id.get(occurrence.get("eventId"))
+        if not event_definition:
+            continue
+        occurrence = _without_legacy_self_service(occurrence)
+        occurrence["registrationEnabled"] = bool(
+            event_definition.get("registrationEnabled", False)
+        )
+        occurrence["effectiveSelfServiceByActivity"] = (
+            _effective_self_service_by_activity(event_definition, occurrence)
+        )
+        if rider_id:
+            occurrence["registrationStatus"] = _event_occurrence_registration_status(
+                tour_id,
+                event_definition,
+                occurrence.get("occurrenceId"),
+                rider_id,
+            )
     rider_baggage_status = [
         {
             "riderId": rider.get("riderId"),

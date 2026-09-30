@@ -102,6 +102,8 @@ def lambda_handler(event, context):
         provisioning = body.get('provisioning', False)
         if not isinstance(provisioning, bool):
             return bad_request_response("provisioning must be a boolean")
+        if 'selfQuitRidingAllowed' in body and not isinstance(body['selfQuitRidingAllowed'], bool):
+            return bad_request_response("selfQuitRidingAllowed must be a boolean")
         
         # Create Tour record. Provisioning is request-only and is not stored.
         now = utc_now_iso()
@@ -112,16 +114,12 @@ def lambda_handler(event, context):
             'endDate': body['endDate'],
             'status': TourStatus.PROVISIONING.value if provisioning else TourStatus.PLANNING.value,
             'rideCount': body['rideCount'],
+            'selfQuitRidingAllowed': body.get('selfQuitRidingAllowed', False),
             'createdAt': now,
             'updatedAt': now,
         }
-        
         if body.get('description'):
             tour_item['description'] = body['description']
-        if 'selfQuitRidingAllowed' in body:
-            if not isinstance(body['selfQuitRidingAllowed'], bool):
-                return bad_request_response("selfQuitRidingAllowed must be a boolean")
-            tour_item['selfQuitRidingAllowed'] = body['selfQuitRidingAllowed']
         
         put_item('TOUR_MASTER_TABLE', tour_item)
         logger.info(f"Tour record created: {tour_id} (status: {tour_item['status']})")

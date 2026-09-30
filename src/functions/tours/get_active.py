@@ -47,6 +47,7 @@ def lambda_handler(event, context):
         
         # Return first active tour (should be only one)
         tour = items[0]
+        tour.setdefault('selfQuitRidingAllowed', False)
         
         logger.info(f"Found active tour: {tour.get('tourId')}")
         return success_response(tour)

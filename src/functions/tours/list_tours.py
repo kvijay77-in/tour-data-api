@@ -61,6 +61,9 @@ def lambda_handler(event, context):
             items = scan_items(
                 table_name_env='TOUR_MASTER_TABLE'
             )
+
+        for item in items:
+            item.setdefault('selfQuitRidingAllowed', False)
         
         logger.info(f"Found {len(items)} tour(s)")
         

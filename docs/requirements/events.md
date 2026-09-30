@@ -1,5 +1,5 @@
 # Events and hotel logistics requirements
-_Last updated: 2026-09-29_
+_Last updated: 2026-09-30_
 
 This document is the source of truth for backend requirements for non-ride event activities, baggage handling, and hotel allocations.
 
@@ -9,8 +9,9 @@ This document is the source of truth for backend requirements for non-ride event
 - The initial use cases are tour-day registration and baggage loading/unloading.
 - Each activity must be able to declare whether it is enabled, mandatory, sequence constrained, eligible for opt-out, and restricted to assigned users. It may define the accepted configured ID-code types and any variant choices or prerequisites.
 - Organizers must be able to adjust applicable activity settings for an individual occurrence without changing the shared event definition.
-- Event registration is optional per event occurrence. When enabled, only registered tour riders may participate; registration closes when the occurrence starts.
-- Event self-service is controlled by event, activity, and occurrence overrides, with the most specific setting taking precedence.
+- Event registration is optional per event definition and is enforced per occurrence. When `registrationEnabled` is false, every non-exited tour rider is treated as registered; when true, only riders explicitly registered for that occurrence may participate. Riders and staff can register/unregister only while the occurrence is `PLANNED`; the cut-off is the occurrence start.
+- Event self-service is an enforced permission controlled by `selfServiceAllowed`: event default → activity setting → occurrence-wide override → occurrence activity override (most specific non-null setting wins). Rider self-record and self-cancel operations may affect only the authenticated rider's records and require effective permission for that activity.
+- Event occurrence dashboards and progress include registered and not-registered counts. Rider bootstrap/progress include registration status and effective self-service permission per activity without exposing another rider's registration identity.
 - Event scans must resolve to the existing rider identity using configured ID-code types; the backend must not introduce a separate baggage ID or allocation identity.
 - Event definition, occurrence, and scan operations must be independently authorized. See the authoritative [RBAC design](../design/rbac.md).
 

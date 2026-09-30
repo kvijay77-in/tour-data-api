@@ -1,5 +1,5 @@
 # Role-based access control
-_Last updated: 2026-09-29_
+_Last updated: 2026-09-30_
 
 ## Source of truth
 
@@ -23,6 +23,10 @@ Use these exact permission values from the `Permission` enum:
 | `RIDER` | `READ`, `RIDER_SELF_UPDATE`, `SELF_CHECKIN` |
 
 `PS_<n>_USER` is a dynamic group-name pattern. The deployment currently creates `PS_1_USER` through `PS_5_USER`; backend permission resolution recognizes valid numeric suffixes without code changes.
+
+## Event registration authorization
+
+The occurrence registration list and staff register/unregister endpoints require `EVENT_REGISTRATION_MANAGE`. `READ` alone is not sufficient because the list contains each rider's registration identity and audit source. Rider self-register/unregister endpoints are available only through RiderApi and require `READ`; rider IDs are resolved from the authenticated profile, never from request input. Rider event reads require `READ`, and rider event progress is restricted to the authenticated rider.
 
 ## Pit-stop stage restrictions
 

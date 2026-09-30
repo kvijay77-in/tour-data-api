@@ -1949,6 +1949,24 @@ Resources:
             ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration
             Method: DELETE
+        ListRegistrations:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations
+            Method: GET
+        ManageRegister:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}
+            Method: PUT
+        ManageUnregister:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}
+            Method: DELETE
 
   RiderSelfEventRecordFunction:
     Type: AWS::Serverless::Function
@@ -1991,18 +2009,6 @@ Resources:
             ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records/{recordId}/cancel
             Method: POST
-        ManageRegister:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref TourDataApi
-            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}
-            Method: PUT
-        ManageUnregister:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref TourDataApi
-            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}
-            Method: DELETE
 
   GetDashboardDataFunction:
     Type: AWS::Serverless::Function
@@ -2439,6 +2445,7 @@ Resources:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-User-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*'
@@ -2496,6 +2503,7 @@ Resources:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -2524,6 +2532,7 @@ Resources:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -2544,10 +2553,18 @@ Resources:
         - Statement:
             - Effect: Allow
               Action:
+                - dynamodb:GetItem
                 - dynamodb:Query
+                - dynamodb:Scan
               Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*/index/*'
+                - !Sub '${RiderCognitoUserTable.Arn}'
       Events:
         HttpApi:
           Type: HttpApi
@@ -2599,6 +2616,7 @@ Resources:
         - Statement:
             - Effect: Allow
               Action:
+                - dynamodb:GetItem
                 - dynamodb:Scan
                 - dynamodb:Query
               Resource:
@@ -2606,6 +2624,9 @@ Resources:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
+                - !Sub '${RiderCognitoUserTable.Arn}'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
       Events:
         HttpApi:
           Type: HttpApi

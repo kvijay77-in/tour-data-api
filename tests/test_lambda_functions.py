@@ -219,6 +219,7 @@ def test_create_tour_defaults_to_master_record_only(dynamodb_mock):
     assert body['success'] is True
     assert body['data']['status'] == TourStatus.PLANNING.value
     assert body['data']['rideCount'] == 12
+    assert body['data']['selfQuitRidingAllowed'] is False
     assert 'provisioning' not in body['data']
     assert 'provisionedAt' not in body['data']
 
@@ -230,6 +231,40 @@ def test_create_tour_defaults_to_master_record_only(dynamodb_mock):
     dynamodb_client = boto3.client('dynamodb', region_name='us-east-1')
     table_names = dynamodb_client.list_tables()['TableNames']
     assert f"test-stack-TourRider-NewTour-2026" not in table_names
+
+
+def test_get_tour_returns_false_default_for_legacy_setting(dynamodb_mock):
+    get_tour = _load_tours_handler('get_tour')
+
+    response = get_tour.lambda_handler(
+        _make_auth_event(path_params={'tourId': MOCK_TOUR_ID}),
+        None,
+    )
+
+    assert response['statusCode'] == 200
+    body = json.loads(response['body'])
+    assert body['data']['selfQuitRidingAllowed'] is False
+
+
+def test_create_tour_rejects_non_boolean_quit_setting(dynamodb_mock):
+    create_tour = _load_tours_handler('create_tour')
+    event = _make_auth_event(
+        method='POST',
+        groups=['ADMINISTRATOR'],
+        body={
+            'tourId': 'InvalidTour-2026',
+            'name': 'Invalid Test Tour',
+            'startDate': '2026-06-01',
+            'endDate': '2026-06-10',
+            'rideCount': 12,
+            'selfQuitRidingAllowed': 'true',
+        },
+    )
+
+    response = create_tour.lambda_handler(event, None)
+
+    assert response['statusCode'] == 400
+    assert 'selfQuitRidingAllowed must be a boolean' in json.loads(response['body'])['error']['message']
 
 
 def test_create_tour_provisions_tables_when_requested(dynamodb_mock):
@@ -293,6 +328,7 @@ def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
             'endDate': '2026-02-18',
             'status': 'planning',
             'provisioning': True,
+            'selfQuitRidingAllowed': True,
         },
     )
 
@@ -303,12 +339,14 @@ def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
     assert body['success'] is True
     assert body['data']['tour']['name'] == 'Updated Test Tour'
     assert body['data']['tour']['status'] == TourStatus.PLANNING.value
+    assert body['data']['tour']['selfQuitRidingAllowed'] is True
     assert 'provisionedAt' in body['data']['tour']
     assert len(body['data']['provisionedTables']) == 11
 
     saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
     assert saved['name'] == 'Updated Test Tour'
     assert saved['startDate'] == '2026-02-12'
+    assert saved['selfQuitRidingAllowed'] is True
     assert 'provisionedAt' in saved
 
 

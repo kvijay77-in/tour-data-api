@@ -49,6 +49,7 @@ def lambda_handler(event, context):
         if not tour:
             return not_found_response("Tour", tour_id)
         
+        tour.setdefault('selfQuitRidingAllowed', False)
         logger.info(f"Found tour: {tour_id}")
         return success_response(tour)
     

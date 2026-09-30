@@ -149,7 +149,7 @@ def lambda_handler(event, context):
     
     Body:
         riderId: Rider ID (required)
-        rideId: Ride ID (required)
+        rideId: Ride ID (required for management check-ins; RiderApi uses the path parameter)
         method: Check-in method (QR_SCAN, MANUAL, FALLBACK)
         stageNumber: Stage number (required for normal check-ins; optional for Not Riding/Quit Riding)
         isNotRiding: Not Riding flag (default: false)
@@ -192,12 +192,15 @@ def lambda_handler(event, context):
         try:
             validate_required_fields(
                 body,
-                ['rideId'] if self_service else ['riderId', 'rideId', 'method'],
+                [] if self_service else ['riderId', 'rideId', 'method'],
             )
         except ValidationError as e:
             return bad_request_response(str(e))
         
         if self_service:
+            ride_id = event.get('pathParameters', {}).get('rideId')
+            if not ride_id:
+                return bad_request_response("rideId is required in path")
             claims = event.get('requestContext', {}).get('authorizer', {}).get('jwt', {}).get('claims', {})
             profile_id = resolve_profile_id_for_sub(claims.get('sub', ''))
             linked_riders = query_tour_items(
@@ -209,6 +212,7 @@ def lambda_handler(event, context):
             if not linked_riders:
                 return error_response("RIDER_PROFILE_NOT_LINKED", "Rider is not registered for this tour.", status_code=403)
             body['riderId'] = linked_riders[0]['riderId']
+            body['rideId'] = ride_id
             body['method'] = CheckInMethod.SELF_SERVICE.value
         rider_id = body['riderId']
         ride_id = body['rideId']
@@ -377,6 +381,12 @@ def lambda_handler(event, context):
                 message=f"Rider {rider_id} is not registered for this tour",
                 status_code=400
             )
+        if self_service and tour_rider.get('status') == 'EXITED':
+            return error_response(
+                'RIDER_EXITED',
+                'Exited riders cannot self check in.',
+                status_code=403,
+            )
 
         deny = _authorize_pit_stop_role_checkin(
             event,
@@ -402,6 +412,24 @@ def lambda_handler(event, context):
             checkin for checkin in existing_checkins
             if not is_cancelled_checkin_item(checkin)
         ]
+
+        if self_service and is_quit_riding:
+            finish_stage_numbers = {
+                stage.get('stageNumber')
+                for stage in stages
+                if stage.get('type') == StageType.FINISH.value
+            }
+            if any(
+                _read_value(checkin, 'stageNumber', 'stage_number') in finish_stage_numbers
+                and not _read_value(checkin, 'isNotRiding', 'is_not_riding', False)
+                and not _read_value(checkin, 'isQuitRiding', 'is_quit_riding', False)
+                for checkin in active_checkins
+            ):
+                return error_response(
+                    'SELF_CHECKIN_NOT_ALLOWED',
+                    'Quit Riding is not allowed after checking in at Finish.',
+                    status_code=403,
+                )
         
         # Check for Not Riding conflicts
         if is_not_riding:
