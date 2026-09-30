@@ -1,4 +1,5 @@
 # Development Guide
+_Last updated: 2026-09-29_
 
 [← Back to README](../README.md)
 
@@ -42,11 +43,11 @@ cd tour-data-api
 ### 2. Set Up Virtual Environment
 
 ```bash
-python3.14 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-> **Note**: Python 3.11 to 3.14 are supported. 3.14 is the default.
+The Lambda runtime defaults to Python 3.14; the SAM template also allows Python 3.11, 3.12, and 3.13.
 
 ### 3. Install Development Dependencies
 
@@ -74,7 +75,7 @@ Your terminal needs permission to access your AWS account. Verify:
 aws sts get-caller-identity
 ```
 
-If you see your account ID, you're all set. If you get an error, follow the [AWS Setup Guide](aws-setup-guide.md) for configuration options (SSO, STS assume role, or access keys).
+If you see your account ID, you're all set. If you get an error, follow [AWS credentials and region](deployment.md#aws-credentials-and-region) in the Deployment Guide.
 
 ---
 
@@ -125,7 +126,7 @@ Test the deployment:
 curl <api-url>/v1/tours
 ```
 
-> **Note**: Most endpoints require JWT authentication. An "Unauthorized" response confirms the API is running correctly. See [AWS Setup Guide → Get JWT Token for Testing](aws-setup-guide.md#3-get-jwt-token-for-testing) for creating test users and generating tokens.
+> **Note**: Most endpoints require JWT authentication. An "Unauthorized" response confirms the API is running correctly. See [Cognito pools, test users, and groups](deployment.md#cognito-pools-test-users-and-groups) for setting up a test user.
 
 ---
 
@@ -141,7 +142,7 @@ Unit tests use **pytest** with **moto** (AWS service mocking). No AWS credential
 - Fixtures in `tests/conftest.py` set up the mock environment
 - Test data in `tests/fixtures/mock_data.py`
 
-See [tests/test_lambda_functions.py](../tests/test_lambda_functions.py) for examples.
+See [tests/test_lambda_functions.py](../../tests/test_lambda_functions.py) for examples.
 
 ### Run All Tests
 
@@ -294,7 +295,7 @@ All validators are in `src/layers/common/validation.py` and raise `ValidationErr
 
 > **Note**: Commands that accept `STACK_NAME` (e.g., `delete`, `cleanup-tour-tables`, `provision-tour`) default to `dev`. Override with `STACK_NAME=test`.
 
-> **Note**: For deploying to test or prod environments, see the [Deployment Guide](deployment-guide.md).
+> **Note**: For deploying to test or prod environments, see the [Deployment Guide](deployment.md).
 
 ---
 

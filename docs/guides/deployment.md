@@ -1,8 +1,9 @@
 # Deployment Guide
+_Last updated: 2026-09-29_
 
 [← Back to README](../README.md)
 
-This guide covers automated CI/CD deployment using GitHub Actions and multi-environment deployment to AWS. For local development setup and deploying the dev environment from your terminal, see the [Development Guide](development-guide.md).
+This guide covers AWS access and Cognito setup, GitHub Actions deployment, and the dev/test/prod environments. For local development, see the [Development Guide](development.md).
 
 ## Table of Contents
 
@@ -16,10 +17,11 @@ This guide covers automated CI/CD deployment using GitHub Actions and multi-envi
 - [After Deployment: Notification Push Setup](#after-deployment-notification-push-setup)
 - [After Deployment: Getting Your API URL](#after-deployment-getting-your-api-url)
 - [AWS Resources Reference](#aws-resources-reference)
-- [Advanced: Using an Existing Cognito User Pool](#advanced-using-an-existing-cognito-user-pool)
+- [Advanced: Using an existing management Cognito pool](#advanced-using-an-existing-management-cognito-pool)
 - [FAQ](#faq)
 - [Troubleshooting](#troubleshooting)
-- [Creating an AWS Deployment User](#creating-an-aws-deployment-user)
+- [AWS credentials and region](#aws-credentials-and-region)
+- [Cognito pools, test users, and groups](#cognito-pools-test-users-and-groups)
 
 ---
 
@@ -29,7 +31,7 @@ Deploying means publishing the application to Amazon Web Services (AWS) so your 
 
 The recommended deployment method is **GitHub Actions** — a CI/CD pipeline that automatically runs tests, builds the application, and deploys it when you trigger a workflow. This works for all environments (dev, test, prod).
 
-**Alternative**: You can also deploy directly from your terminal using SAM CLI. Developers typically use this for the dev environment (see [Development Guide → Deploy to Dev](development-guide.md#deploy-to-dev-environment)). For test and prod from terminal, see [Deploying from Terminal](#deploying-from-terminal).
+**Alternative**: You can also deploy directly from your terminal using SAM CLI. Developers typically use this for the dev environment (see [Development Guide → Deploy to Dev](development.md#deploy-to-dev-environment)). For test and prod from terminal, see [Deploying from Terminal](#deploying-from-terminal).
 
 ---
 
@@ -74,7 +76,7 @@ If you prefer static access keys instead of OIDC (less secure, not recommended):
 | `AWS_ACCESS_KEY_ID` | Your AWS access key | Dev and test deployments |
 | `AWS_SECRET_ACCESS_KEY` | Your AWS secret key | Dev and test deployments |
 
-See [Creating an AWS Deployment User](#creating-an-aws-deployment-user) for how to create these credentials.
+Use credentials issued through your organization's approved least-privilege process, store them only as GitHub Actions secrets, and continue to prefer OIDC where possible.
 
 ---
 
@@ -108,7 +110,7 @@ After successful deployment, the API endpoint URL appears in the deploy job outp
 
 ## Deploying from Terminal
 
-For deploying test and prod environments from your terminal. Dev environment deployment is covered in the [Development Guide](development-guide.md#deploy-to-dev-environment).
+For deploying test and prod environments from your terminal. Dev environment deployment is covered in the [Development Guide](development.md#deploy-to-dev-environment).
 
 ```bash
 # Build first
@@ -128,7 +130,7 @@ make deploy-test     # Build and deploy to test
 make deploy-prod     # Build and deploy to prod (asks for confirmation)
 ```
 
-> **Prerequisites**: AWS CLI configured with credentials that have permission to deploy. See [AWS Setup Guide](aws-setup-guide.md) for configuration.
+> **Prerequisites**: AWS CLI configured for the target account and region with permission to deploy. See [AWS credentials and region](#aws-credentials-and-region).
 
 ---
 
@@ -148,6 +150,92 @@ Each environment gets its own API URL:
 - Prod: `https://<id>.execute-api.<region>.amazonaws.com/prod/`
 
 > **Recommendation**: Always deploy and verify in **dev** or **test** before deploying to **prod**.
+
+---
+
+## AWS credentials and region
+
+Use AWS IAM Identity Center (SSO) or another approved short-lived credential mechanism when available. AWS CLI and SAM CLI use the same active credentials:
+
+```bash
+aws configure sso
+aws sso login --profile <profile-name>
+aws sts get-caller-identity --profile <profile-name>
+```
+
+For temporary credentials from an assumed role, set the returned `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` in the current shell. Do not commit credentials or place secrets directly in command history. GitHub deployments should use OIDC rather than long-lived keys.
+
+Choose the target stack's AWS region and verify the active account before deployment. The GitHub Actions workflow currently sets `AWS_REGION=us-east-1`; Make targets that seed or configure notification resources default to `ap-south-1`, so set `REGION=<your-region>` when needed.
+
+## Cognito pools, test users, and groups
+
+The backend template owns both Cognito pools:
+
+- **Management pool** (`{stack}-mgmt-users`): used by management APIs. By default, SAM creates the pool and app client. `CognitoUserPoolArn` and `CognitoAppClientId` can instead point the management API at an existing pool/client.
+- **Rider pool** (`{stack}-rider-users`): created and managed by this backend for the Rider API. It has its own app client and the `RIDER` group.
+
+When the management pool is created by this stack, it creates `ADMINISTRATOR`, `SUPER_USER`, `HOTEL_STAFF`, `GUEST`, and the initial pit-stop groups `PS_1_USER` through `PS_5_USER`. If you configure an existing management pool, its groups must be managed outside this template. Backend authorization accepts valid `PS_<n>_USER` names even when the numeric suffix is not one of the initial groups. Exact permission mappings are in [RBAC](../design/rbac.md).
+
+After deployment, retrieve the pool and app client IDs from these CloudFormation outputs:
+
+| Purpose | Pool ID output | App client ID output |
+|---|---|---|
+| Management | `CognitoUserPoolIdOutput` | `CognitoAppClientIdOutput` |
+| Rider | `CognitoRiderUserPoolIdOutput` | `CognitoRiderAppClientIdOutput` |
+
+The management outputs are omitted when an existing management pool and app client are configured; use the supplied IDs instead. The rider pool and client are always created by this backend. Create a management test user and set a permanent password:
+
+```bash
+aws cognito-idp admin-create-user \
+  --user-pool-id <management-pool-id> \
+  --username <test-user> \
+  --user-attributes Name=email,Value=<test-user-email> \
+  --message-action SUPPRESS
+
+read -r -s -p "Test-user password: " TEST_USER_PASSWORD
+printf '\n'
+aws cognito-idp admin-set-user-password \
+  --user-pool-id <management-pool-id> \
+  --username <test-user> \
+  --password "$TEST_USER_PASSWORD" \
+  --permanent
+unset TEST_USER_PASSWORD
+```
+
+Assign the management user to the appropriate group:
+
+```bash
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id <management-pool-id> \
+  --username <test-user> \
+  --group-name ADMINISTRATOR
+```
+
+The rider pool's corresponding group is `RIDER`:
+
+```bash
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id <rider-pool-id> \
+  --username <test-user> \
+  --group-name RIDER
+```
+
+Use the matching pool's app client to obtain an ID token for API testing. The app client must allow `USER_PASSWORD_AUTH`; this backend's generated app clients do. For a management test user, set `MANAGEMENT_APP_CLIENT_ID` to the `CognitoAppClientIdOutput` value (or the supplied client ID), then run:
+
+```bash
+read -r -p "Test username: " TEST_USER
+read -r -s -p "Test password: " TEST_USER_PASSWORD
+printf '\n'
+ID_TOKEN=$(aws cognito-idp initiate-auth \
+  --auth-flow USER_PASSWORD_AUTH \
+  --client-id "$MANAGEMENT_APP_CLIENT_ID" \
+  --auth-parameters "USERNAME=$TEST_USER,PASSWORD=$TEST_USER_PASSWORD" \
+  --query 'AuthenticationResult.IdToken' \
+  --output text)
+unset TEST_USER_PASSWORD
+```
+
+Send the ID token in the `Authorization` header when calling the API. Do not create a separate rider user pool in an app repository.
 
 ---
 
@@ -176,11 +264,11 @@ Creates or updates all required resources in your AWS account.
 | Resource | Count | Purpose |
 |---|---|---|
 | API Gateway (HTTP API) | 1 | Receives requests from your apps |
-| Cognito User Pool + App Client | 1 | User authentication (auto-created) |
+| Cognito User Pools + App Clients | 2 | Management and rider authentication (both managed by this backend) |
 | Lambda Functions | Multiple | Business logic for each API endpoint |
 | Lambda Layer | 1 | Shared utilities across all functions |
 | DynamoDB Tables (shared) | 10 | RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig, NotificationRule, RiderNotification, MgmtNotification, RiderPushDevice, MgmtPushDevice |
-| S3 Bucket | 1 | Rider photos and archived tour data |
+| S3 Buckets | 2 | Private rider photos and tour artifacts/uploads |
 | SQS Queue (DLQ) | 1 | Push sender event-source failure destination |
 | IAM Roles | Multiple | Security permissions per function |
 | CloudWatch Log Groups | Multiple | Monitoring and debugging logs |
@@ -431,7 +519,7 @@ aws cloudformation describe-stacks \
 curl <api-url>/v1/tours
 ```
 
-An "Unauthorized" response means the API is running and authentication is working correctly. See [AWS Setup Guide → Get JWT Token](aws-setup-guide.md#3-get-jwt-token-for-testing) for generating test tokens.
+An "Unauthorized" response means the API is running and the route requires authentication. See [Cognito pools, test users, and groups](#cognito-pools-test-users-and-groups) for test setup.
 
 ---
 
@@ -507,15 +595,15 @@ Detailed inventory of everything deployment creates in your AWS account.
 
 ---
 
-## Advanced: Using an Existing Cognito User Pool
+## Advanced: Using an existing management Cognito pool
 
-By default, deployment creates a Cognito User Pool and App Client. To use an existing one instead, add these to `parameter_overrides` in `samconfig.toml`:
+The management API can use an existing management Cognito User Pool and App Client instead of creating those two resources. The Rider API pool remains managed by this backend. Configure the management pool and app client in `parameter_overrides` in `samconfig.toml`:
 
 ```toml
 parameter_overrides = "Environment=dev CognitoUserPoolArn=arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_AbCdEfGhI CognitoAppClientId=1a2b3c4d5e6f7g8h9i0j"
 ```
 
-When `CognitoUserPoolArn` is provided, auto-creation is skipped and the specified User Pool is used instead.
+When `CognitoUserPoolArn` is provided, SAM does not create the management pool or its app client. The rider pool and client are still created by this stack.
 
 ---
 
@@ -531,7 +619,7 @@ A: No. Deployments only update application code and infrastructure configuration
 A: Yes. AWS CloudFormation tracks every deployment. If a deployment fails partway through, it automatically rolls back to the previous working state.
 
 **Q: How much does it cost to run?**
-A: The system uses a pay-per-use model. For a typical cycling tour (~100 riders, 7-8 rides), estimated costs are very low (under $5/month). See the [Infrastructure Guide](infrastructure-guide.md) for detailed cost estimates.
+A: Costs depend on API usage, data retention, and AWS region. See the [Infrastructure Guide](infrastructure.md) for cost drivers and monitoring guidance.
 
 **Q: Can I deploy to multiple environments simultaneously?**
 A: Yes. Each environment is independent. You can deploy to `dev` and `prod` at the same time without them affecting each other.
@@ -572,7 +660,7 @@ AWS couldn't create or update a resource.
 
 ### "Unauthorized" Error When Calling the API
 
-The API is working but requires authentication. Get a JWT token from Cognito and include it in your request. See [AWS Setup Guide → Get JWT Token](aws-setup-guide.md#3-get-jwt-token-for-testing).
+The API is working but requires authentication. Get an ID token from the appropriate Cognito pool and include it in your request. See [Cognito pools, test users, and groups](#cognito-pools-test-users-and-groups).
 
 ### Notifications Saved but Push Not Delivered
 
@@ -606,69 +694,18 @@ sam delete --stack-name dev
 
 ---
 
-## Creating an AWS Deployment User
-
-For GitHub Actions with **static access keys** (alternative to OIDC).
-
-### Create the User
-
-```bash
-aws iam create-user --user-name github-actions-deployer
-```
-
-### Attach Permissions
-
-```bash
-# CloudFormation — create/update deployment stacks
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
-
-# IAM — create execution roles for Lambda functions
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/IAMFullAccess
-
-# S3 — upload deployment packages
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
-
-# Lambda — create/update functions
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AWSLambda_FullAccess
-
-# API Gateway — create/update API endpoints
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator
-
-# DynamoDB — create/update database tables
-aws iam attach-user-policy --user-name github-actions-deployer \
-  --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
-```
-
-### Generate Access Keys
-
-```bash
-aws iam create-access-key --user-name github-actions-deployer
-```
-
-Save the `AccessKeyId` and `SecretAccessKey` — the secret is only shown once.
-
-Add to GitHub Secrets:
-- `AccessKeyId` → `AWS_ACCESS_KEY_ID`
-- `SecretAccessKey` → `AWS_SECRET_ACCESS_KEY`
-
-> **Security**: For production, create a separate deployment user and store credentials as `AWS_ACCESS_KEY_ID_PROD` and `AWS_SECRET_ACCESS_KEY_PROD` in GitHub Secrets.
+OIDC is the recommended GitHub Actions authentication method. Avoid long-lived static credentials. If an existing deployment requires static credentials, use an organization-approved least-privilege policy, store them only as GitHub Actions secrets, scope production credentials separately, and rotate them regularly. Do not attach broad administrator policies just to make deployment succeed.
 
 ---
 
 ## Related Documentation
 
-- [Development Guide](development-guide.md) — Local development, testing, deploying dev environment
-- [AWS Setup Guide](aws-setup-guide.md) — AWS credentials, Cognito setup, JWT tokens
-- [Infrastructure Guide](infrastructure-guide.md) — Resource tagging, monitoring, cost estimation
+- [Development Guide](development.md) — Local development, testing, deploying dev environment
+- [Infrastructure Guide](infrastructure.md) — Resource ownership, tagging, monitoring, and cost management
 
 ---
 
-[← Back to README](../README.md)
+[← Documentation index](../README.md)
 
 
 ## Deployment note: rider profile config seed

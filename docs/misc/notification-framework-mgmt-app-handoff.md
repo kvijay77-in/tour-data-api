@@ -1,4 +1,7 @@
 # Notification Framework Handoff: tour-data-api ➜ tour-mgmt-app
+_Last updated: 2026-09-29_
+
+> Historical / Implemented – kept for reference. Current source of truth: [Notifications design](../design/notifications.md), [Notification requirements](../requirements/notifications.md), and the [API reference](../design/api-reference.md#notifications).
 
 ## What was implemented in `tour-data-api`
 

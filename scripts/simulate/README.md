@@ -1,8 +1,9 @@
 # Test Data Simulation Utility
+_Last updated: 2026-09-29_
 
 Generate and load tour-specific test data into DynamoDB tables for development and testing of the Tour Data API. This utility is template-driven — define a scenario in YAML and the script generates tour riders, rides, check-in records, or events-engine test data (event definitions, occurrences, activity scans, hotels, and room allocations) accordingly.
 
-**Important:** This script reads existing data from shared tables (RiderProfile, TourMaster) and only generates data for tour-specific tables (TourRider, Ride, CheckIn, Event, EventOccurrence, EventActivityLogs, Hotel, RoomAllocation). Rider profiles and tour master records must already exist in DynamoDB, and the events-engine scenario additionally requires riders already registered for the tour via a `tour_data_generation` scenario run.
+**Important:** Tour and event generation scenarios read existing data from shared tables (RiderProfile, TourMaster) and populate tour-specific tables. Rider profiles and the tour master record must already exist; event scenarios also require riders already registered for the tour by a `tour_data_generation` run. The separate `personal_code_update` scenario updates eligible rows in the shared `RiderProfile` table.
 
 ## Prerequisites
 
@@ -10,13 +11,16 @@ Generate and load tour-specific test data into DynamoDB tables for development a
 - AWS credentials configured (via AWS CLI, environment variables, or IAM role)
 - Tour must already be provisioned — tour-specific tables must exist (use `scripts/provision_tour.py` or `POST /v1/tours` API)
 - Rider profiles must exist in the shared RiderProfile table
-- Dependencies: `boto3`, `pyyaml`
+- Dependencies: `boto3`, `pandas`, and `PyYAML` (listed in `scripts/simulate/requirements.txt`)
 
 Install dependencies:
 
 ```bash
-pip install -r requirements-dev.txt
+source .venv/bin/activate
+pip install -r scripts/simulate/requirements.txt
 ```
+
+See the [Development Guide](../../docs/guides/development.md) for creating the project virtual environment.
 
 ## Quick Start
 
@@ -312,7 +316,7 @@ Field meanings:
 
 ## Event Engine Simulation Scenario
 
-The `event_data_generation` scenario type populates the generic Events engine (`docs/cycling-tour-events-design.md`) with test data for any event you define — there is no hardcoded event, activity, or occurrence content in `generate_data.py`; everything comes from the scenario YAML. Two ready-to-use scenarios are provided:
+The `event_data_generation` scenario type populates the generic Events engine ([design](../../docs/design/events.md)) with test data for any event you define — there is no hardcoded event, activity, or occurrence content in `generate_data.py`; everything comes from the scenario YAML. Two ready-to-use scenarios are provided:
 
 - `scenarios/event_day0_registration.yaml` — a single Day 0 Registration event
 - `scenarios/event_baggage_handling.yaml` — linked Baggage Loading/Unloading events, plus hotels and room allocations

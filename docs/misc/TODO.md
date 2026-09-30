@@ -1,7 +1,9 @@
 # TODO: Documentation vs. Development Gap Analysis
+_Last updated: 2026-09-29_
 
-Identified on: 2026-02-14
-Last reviewed: 2026-02-19
+> Historical / Implemented – kept for reference. Current source of truth: [Events design](../design/events.md), [Notifications design](../design/notifications.md), and the [API reference](../design/api-reference.md).
+
+The legacy item about notifying a hotel-upload submitter remains deferred; clients can continue to poll the upload-status API. Other entries below describe historical implementation work and are not current requirements.
 
 This document lists all gaps found between project documentation and actual development artifacts. Each item should be reviewed and resolved before deployment.
 
@@ -19,7 +21,7 @@ This document lists all gaps found between project documentation and actual deve
 
 ## 35. 🔲 TODO: Notify Uploader When Hotel CSV Processing Completes (Notification phase)
 
-The hotel allocation CSV processor (`process_upload.py` / `process_upload_failure.py`) records `REJECTED` or `APPLIED` on the upload status record, and clients poll `GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}`. When the platform notification feature is built, send a notification to the uploader (`createdBy` on the `UPLOAD#{uploadId}` record) on either final status. Keep polling as the fallback. See `docs/cycling-tour-events-design.md` §8.22.
+The hotel allocation CSV processor (`process_upload.py` / `process_upload_failure.py`) records `REJECTED` or `APPLIED` on the upload status record, and clients poll `GET /v1/tours/{tourId}/hotelstays/uploads/{uploadId}`. Notifying the uploader (`createdBy` on the `UPLOAD#{uploadId}` record) on either final status remains deferred; keep polling as the fallback. See the [API reference](../design/api-reference.md) for the upload-status contract.
 
 ---
 

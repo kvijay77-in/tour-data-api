@@ -1,4 +1,5 @@
-# Notification Framework Design
+# Notifications design
+_Last updated: 2026-09-29_
 
 This document defines the approved notification framework for `tour-data-api`. It is the backend source of truth for notification data model, routing, APIs, and push delivery.
 
@@ -133,6 +134,8 @@ All tables use PAY_PER_REQUEST, SSE enabled, and standard deployment tags includ
 
 Legacy `readBy` and old `TypeCreatedAtIndex` are removed.
 
+The API Gateway still declares the previous `/v1/tours/{tourId}/notifications` handlers. Those handlers depend on the removed `notificationId` key, `readBy` field, and `TypeCreatedAtIndex`; they are incompatible with the current provisioned table and are not supported for client integrations. Use the notification-framework endpoints in the [API reference](api-reference.md#notifications).
+
 ### 3.3 RiderTours index
 
 `RiderTours` adds GSI `TourStatusIndex`:
@@ -160,28 +163,9 @@ Used for status/applicant audience fan-out.
 
 Unknown forms are rejected by strict regex validation.
 
-## 5) API contract
+## API integration
 
-### 5.1 Device APIs
-- `POST /v1/notifications/devices`
-- `DELETE /v1/notifications/devices/{token}`
-
-### 5.2 Inbox APIs
-- `GET /v1/notifications?since=<ISO>&limit=<n>`
-- `GET /v1/notifications/unread-count`
-- `PUT /v1/notifications/read`
-
-### 5.3 Announce API (management)
-- `POST /v1/notifications` with `NOTIFICATION_MANAGE`
-
-### 5.4 Reminder API (management)
-- `POST /v1/notifications/reminders` with `NOTIFICATION_MANAGE`
-- `reminderType`:
-  - `RIDE_CHECKIN_NOT_STARTED` (uses stage-0 active check-in semantics; cancelled stage-0 means not-started again)
-  - `EVENT_CHECKIN_NOT_STARTED` (only when event definition `notificationConfig.reminderEnabled=true`)
-
-### 5.5 Admin rule CRUD
-- `GET/POST/PUT/DELETE /v1/admin/notification-rules[/{ruleId}]` with `NOTIFICATION_MANAGE`
+Device registration, inbox, announcement, reminder, and notification-rule routes use the [API reference](api-reference.md#notifications) as their sole source of truth for paths, permissions, request and response fields, and errors.
 
 ## 6) Category semantics
 
@@ -314,4 +298,4 @@ Push delivery requires post-deploy setup beyond table/function creation:
    - Google FCM (V1 service account) for Android builds,
    - Expo project configuration for both rider/mgmt apps.
 
-See [`deployment-guide.md` → After Deployment: Notification Push Setup](deployment-guide.md#after-deployment-notification-push-setup) for exact commands and checklist.
+See the [deployment guide → Notification Push Setup](../guides/deployment.md#after-deployment-notification-push-setup) for setup commands and the deployment checklist.
