@@ -7,7 +7,9 @@ and returned by the API endpoints.
 Table Strategy (Hybrid):
 - Shared tables (SAM-managed): RiderProfile, RiderCognitoUser, TourMaster
 - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
-    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId}
+    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId},
+    Event-{tourId}, EventOccurrence-{tourId}, EventActivityLogs-{tourId},
+    EventRegistration-{tourId}, Hotel-{tourId}, RoomAllocation-{tourId}
 """
 
 from typing import Optional, List, Dict, Any

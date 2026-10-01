@@ -22,6 +22,7 @@ from validation import (
     validate_iso_date,
     validate_iso_datetime,
     validate_time_hhmm,
+    validate_ride_stages,
     validate_email,
     ValidationError
 )
@@ -276,3 +277,80 @@ class TestTimeValidation:
         for t in invalid:
             with pytest.raises(ValidationError):
                 validate_time_hhmm(t)
+
+
+class TestRideSelfServiceStageValidation:
+    def test_stage_self_service_flags_require_booleans(self):
+        stages = [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+            {'stageId': 'S001', 'stageNumber': 1, 'type': 'FINISH', 'name': 'Finish'},
+        ]
+
+        normalized = validate_ride_stages([
+            {**stages[0], 'selfNotRidingAllowed': False, 'selfCheckInAllowed': True},
+            {**stages[1], 'selfCheckInAllowed': False},
+        ])
+        assert normalized[0]['selfNotRidingAllowed'] is False
+        assert normalized[0]['selfCheckInAllowed'] is True
+        assert normalized[1]['selfCheckInAllowed'] is False
+
+        with pytest.raises(ValidationError):
+            validate_ride_stages([{**stages[0], 'selfNotRidingAllowed': None}, stages[1]])
+        with pytest.raises(ValidationError):
+            validate_ride_stages([stages[0], {**stages[1], 'selfCheckInAllowed': None}])
+
+    def test_not_riding_setting_is_start_only(self):
+        stages = [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+            {'stageId': 'S001', 'stageNumber': 1, 'type': 'PIT_STOP', 'name': 'Pit stop'},
+            {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH', 'name': 'Finish'},
+        ]
+
+        with pytest.raises(ValidationError) as exc_info:
+            validate_ride_stages([stages[0], {**stages[1], 'selfNotRidingAllowed': True}, stages[2]])
+        assert exc_info.value.error_code == 'VALIDATION_ERROR'
+
+    def test_stage_number_must_not_be_a_boolean(self):
+        stages = [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+            {'stageId': 'S001', 'stageNumber': True, 'type': 'PIT_STOP', 'name': 'Pit stop'},
+            {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH', 'name': 'Finish'},
+        ]
+
+        with pytest.raises(ValidationError):
+            validate_ride_stages(stages)
+
+    @pytest.mark.parametrize('stages', [
+        [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'PIT_STOP', 'name': 'Pit stop'},
+            {'stageId': 'S001', 'stageNumber': 1, 'type': 'FINISH', 'name': 'Finish'},
+        ],
+        [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+            {'stageId': 'S001', 'stageNumber': 1, 'type': 'START', 'name': 'Second start'},
+            {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH', 'name': 'Finish'},
+        ],
+        [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'PIT_STOP', 'name': 'Pit stop'},
+            {'stageId': 'S001', 'stageNumber': 1, 'type': 'START', 'name': 'Start'},
+            {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH', 'name': 'Finish'},
+        ],
+        [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+            {'stageId': 'S001', 'stageNumber': 1, 'type': 'PIT_STOP', 'name': 'Pit stop'},
+        ],
+        [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+            {'stageId': 'S001', 'stageNumber': 1, 'type': 'FINISH', 'name': 'Finish'},
+            {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH', 'name': 'Second finish'},
+        ],
+        [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+            {'stageId': 'S001', 'stageNumber': 1, 'type': 'FINISH', 'name': 'Finish'},
+            {'stageId': 'S002', 'stageNumber': 2, 'type': 'PIT_STOP', 'name': 'Pit stop'},
+        ],
+    ])
+    def test_start_finish_layout_errors_have_specific_code(self, stages):
+        with pytest.raises(ValidationError) as exc_info:
+            validate_ride_stages(stages)
+        assert exc_info.value.error_code == 'INVALID_STAGE_LAYOUT'

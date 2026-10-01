@@ -202,6 +202,197 @@ def _make_dashboard_event(tour_id, ride_id, headers=None):
     return event
 
 
+def test_shared_rider_ride_checkin_query_finds_uuid_keyed_records(checkin_dynamodb):
+    from checkin_service import list_rider_ride_checkins
+
+    checkin_dynamodb.Table(f'test-stack-CheckIn-{MOCK_TOUR_ID}').put_item(Item={
+        'rideId': 'RIDE001',
+        'checkInId': 'f1b4a97a-47f7-40df-a864-8be4682d3e22',
+        'riderId': 'R1',
+        'timestamp': '2026-02-11T07:00:00Z',
+        'isQuitRiding': True,
+        'status': 'QUIT_RIDING',
+    })
+
+    records = list_rider_ride_checkins(MOCK_TOUR_ID, 'RIDE001', 'R1')
+
+    assert any(
+        record['checkInId'] == 'f1b4a97a-47f7-40df-a864-8be4682d3e22'
+        for record in records
+    )
+    assert all(record['rideId'] == 'RIDE001' for record in records)
+
+
+def test_rider_self_checkin_uses_profile_identity_and_self_service_method(checkin_dynamodb, monkeypatch):
+    import self_checkin
+
+    ride = {
+        'rideId': 'RIDE001',
+        'status': 'STARTED',
+        'stages': [
+            {'stageId': 'S000', 'stageNumber': 0, 'type': 'START'},
+            {'stageId': 'S001', 'stageNumber': 1, 'type': 'PIT_STOP'},
+            {'stageId': 'S002', 'stageNumber': 2, 'type': 'FINISH'},
+        ],
+    }
+    identity = {'riderId': 'R2', 'profileId': 'P002'}
+    monkeypatch.setattr(
+        self_checkin,
+        'load_self_checkin_context',
+        lambda event, tour_id, ride_id: ({'identity': identity, 'ride': ride, 'tour': {}}, None),
+    )
+    monkeypatch.setattr(self_checkin, 'check_self_checkin_request', lambda *args: None)
+    event = {
+        'pathParameters': {'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001'},
+        'requestContext': {'authorizer': {'jwt': {'claims': {
+            'sub': 'rider-sub',
+            'cognito:groups': 'RIDER',
+        }}}},
+        'body': json.dumps({'stageNumber': 0}),
+    }
+
+    response = self_checkin.lambda_handler(event, None)
+    checkin = json.loads(response['body'])['data']
+
+    assert response['statusCode'] == 201
+    assert checkin['riderId'] == 'R2'
+    assert checkin['checkedInBy'] == 'P002'
+    assert checkin['method'] == 'SELF_SERVICE'
+    assert checkin['isFloat'] is False
+    assert 'floatNo' not in checkin
+
+
+def test_rider_self_checkin_rejects_client_rider_id(checkin_dynamodb):
+    import self_checkin
+
+    event = {
+        'pathParameters': {'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001'},
+        'requestContext': {'authorizer': {'jwt': {'claims': {
+            'sub': 'rider-sub',
+            'cognito:groups': 'RIDER',
+        }}}},
+        'body': json.dumps({'stageNumber': 0, 'riderId': 'R1'}),
+    }
+
+    response = self_checkin.lambda_handler(event, None)
+    payload = json.loads(response['body'])
+
+    assert response['statusCode'] == 400
+    assert payload['error']['code'] == 'VALIDATION_ERROR'
+
+
+def test_self_cancel_rules_enforce_ownership_permission_and_quit_safety():
+    from self_checkin_rules import check_self_cancel_allowed
+
+    context = {
+        'identity': {'riderId': 'R1'},
+        'ride': {
+            'stages': [
+                {'stageNumber': 0, 'type': 'START', 'selfCheckInAllowed': True},
+                {'stageNumber': 1, 'type': 'PIT_STOP', 'selfCheckInAllowed': False},
+                {'stageNumber': 2, 'type': 'FINISH'},
+            ],
+        },
+    }
+    staff_created_own = {
+        'riderId': 'R1',
+        'stageNumber': 0,
+        'method': 'QR_SCAN',
+        'status': 'CHECKED_IN',
+    }
+    assert check_self_cancel_allowed(context, staff_created_own) is None
+
+    another_rider = check_self_cancel_allowed(context, {'riderId': 'R2', 'stageNumber': 0})
+    assert json.loads(another_rider['body'])['error']['code'] == 'NOT_OWN_CHECKIN'
+
+    disallowed_stage = check_self_cancel_allowed(
+        context,
+        {'riderId': 'R1', 'stageNumber': 1, 'status': 'CHECKED_IN'},
+    )
+    assert json.loads(disallowed_stage['body'])['error']['code'] == 'SELF_CHECKIN_NOT_ALLOWED'
+
+    quit_record = check_self_cancel_allowed(
+        context,
+        {'riderId': 'R1', 'isQuitRiding': True, 'status': 'QUIT_RIDING'},
+    )
+    assert json.loads(quit_record['body'])['error']['code'] == 'QUIT_RIDING_CANCEL_NOT_ALLOWED'
+
+
+def test_rider_api_own_data_guard_rejects_another_rider(monkeypatch):
+    import rider_identity
+
+    monkeypatch.setattr(rider_identity, 'is_rider_caller', lambda event: True)
+    monkeypatch.setattr(
+        rider_identity,
+        'resolve_caller_tour_rider',
+        lambda event, tour_id: ({'riderId': 'R1'}, None),
+    )
+
+    denied = rider_identity.require_own_rider_data({'path': 'rider'}, MOCK_TOUR_ID, 'R2')
+    assert denied['statusCode'] == 403
+    assert json.loads(denied['body'])['error']['code'] == 'NOT_OWN_DATA'
+
+
+def test_self_checkin_rule_matrix(monkeypatch):
+    from self_checkin_rules import check_self_checkin_request
+
+    context = {
+        'identity': {'riderId': 'R1'},
+        'tour': {'selfQuitRidingAllowed': False},
+        'ride': {
+            'rideId': 'RIDE001',
+            'status': 'OPEN',
+            'stages': [
+                {'stageNumber': 0, 'stageId': 'S000', 'type': 'START', 'selfNotRidingAllowed': False},
+                {'stageNumber': 1, 'stageId': 'S001', 'type': 'PIT_STOP', 'selfCheckInAllowed': True, 'pitStopStatus': 'CLOSED'},
+                {'stageNumber': 2, 'stageId': 'S002', 'type': 'FINISH'},
+            ],
+        },
+    }
+    monkeypatch.setattr('self_checkin_rules.list_rider_ride_checkins', lambda *args: [])
+
+    missing_stage = check_self_checkin_request(context, MOCK_TOUR_ID, 9, False, False)
+    assert json.loads(missing_stage['body'])['error']['code'] == 'STAGE_NOT_FOUND'
+
+    closed_pit = check_self_checkin_request(context, MOCK_TOUR_ID, 1, False, False)
+    assert json.loads(closed_pit['body'])['error']['code'] == 'PIT_STOP_NOT_OPEN'
+
+    context['ride']['stages'][1]['selfCheckInAllowed'] = False
+    denied_stage = check_self_checkin_request(context, MOCK_TOUR_ID, 1, False, False)
+    assert json.loads(denied_stage['body'])['error']['code'] == 'SELF_CHECKIN_NOT_ALLOWED'
+
+    not_riding_denied = check_self_checkin_request(context, MOCK_TOUR_ID, None, True, False)
+    assert json.loads(not_riding_denied['body'])['error']['code'] == 'SELF_CHECKIN_NOT_ALLOWED'
+    context['ride']['stages'][0]['selfNotRidingAllowed'] = True
+    context['ride']['status'] = 'STARTED'
+    unavailable_not_riding = check_self_checkin_request(context, MOCK_TOUR_ID, None, True, False)
+    assert json.loads(unavailable_not_riding['body'])['error']['code'] == 'NOT_RIDING_NOT_AVAILABLE'
+    context['ride']['status'] = 'OPEN'
+    assert check_self_checkin_request(context, MOCK_TOUR_ID, None, True, False) is None
+
+    quit_denied = check_self_checkin_request(context, MOCK_TOUR_ID, None, False, True)
+    assert json.loads(quit_denied['body'])['error']['code'] == 'SELF_CHECKIN_NOT_ALLOWED'
+    context['ride']['selfQuitRidingAllowed'] = True
+    unavailable_quit = check_self_checkin_request(context, MOCK_TOUR_ID, None, False, True)
+    assert json.loads(unavailable_quit['body'])['error']['code'] == 'QUIT_RIDING_NOT_AVAILABLE'
+    context['ride']['status'] = 'STARTED'
+    monkeypatch.setattr(
+        'self_checkin_rules.list_rider_ride_checkins',
+        lambda *args: [{'stageNumber': 2, 'isNotRiding': False, 'isQuitRiding': False}],
+    )
+    finish_already_recorded = check_self_checkin_request(context, MOCK_TOUR_ID, None, False, True)
+    assert json.loads(finish_already_recorded['body'])['error']['code'] == 'QUIT_RIDING_NOT_AVAILABLE'
+    monkeypatch.setattr('self_checkin_rules.list_rider_ride_checkins', lambda *args: [])
+    assert check_self_checkin_request(context, MOCK_TOUR_ID, None, False, True) is None
+
+    monkeypatch.setattr(
+        'self_checkin_rules.list_rider_ride_checkins',
+        lambda *args: [{'isQuitRiding': True, 'stageNumber': 0}],
+    )
+    already_quit = check_self_checkin_request(context, MOCK_TOUR_ID, 0, False, False)
+    assert json.loads(already_quit['body'])['error']['code'] == 'RIDER_ALREADY_QUIT'
+
+
 def _make_dashboard_progress_event(tour_id, ride_id, headers=None):
     """Helper to create dashboard progress GET API Gateway event."""
     event = {

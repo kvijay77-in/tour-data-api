@@ -770,6 +770,10 @@ def _build_stage(stage_def, idx, base_date, flag_off_time, ride_status):
         stage['location'] = stage_def['location']
     if stage_def.get('distance_from_start') is not None:
         stage['distance_from_start'] = Decimal(str(stage_def['distance_from_start']))
+    if 'self_check_in_allowed' in stage_def:
+        stage['self_check_in_allowed'] = stage_def['self_check_in_allowed']
+    if 'self_not_riding_allowed' in stage_def:
+        stage['self_not_riding_allowed'] = stage_def['self_not_riding_allowed']
 
     if stage_def['type'] != 'PIT_STOP':
         return stage
@@ -961,6 +965,10 @@ def build_rides(config):
                 'created_at': '2026-02-01T00:00:00Z',
                 'updated_at': '2026-02-01T00:00:00Z',
             }
+            for setting in ('self_check_in_allowed', 'self_quit_riding_allowed'):
+                value = ride_cfg.get(setting, day_cfg.get(setting, rides_cfg.get(setting)))
+                if value is not None:
+                    ride[setting] = value
 
             if status in ('COMPLETED', 'CLOSED'):
                 ride['started_at'] = f"{day_cfg['date']}T{flag_off}:00Z"
@@ -1343,6 +1351,10 @@ def _stage_to_dynamodb(stage):
         item['location'] = stage['location']
     if stage.get('distance_from_start') is not None:
         item['distanceFromStart'] = stage['distance_from_start']
+    if 'self_check_in_allowed' in stage:
+        item['selfCheckInAllowed'] = stage['self_check_in_allowed']
+    if 'self_not_riding_allowed' in stage:
+        item['selfNotRidingAllowed'] = stage['self_not_riding_allowed']
     if stage.get('estimated_open_time') is not None:
         item['estimatedOpenTime'] = stage['estimated_open_time']
     if stage.get('pit_stop_duration') is not None:
@@ -1399,6 +1411,10 @@ def _ride_to_dynamodb(item):
         ]
     ride['createdAt'] = item['created_at']
     ride['updatedAt'] = item['updated_at']
+    if 'self_check_in_allowed' in item:
+        ride['selfCheckInAllowed'] = item['self_check_in_allowed']
+    if 'self_quit_riding_allowed' in item:
+        ride['selfQuitRidingAllowed'] = item['self_quit_riding_allowed']
     
     if item.get('started_at'):
         ride['startedAt'] = item['started_at']
@@ -1508,17 +1524,23 @@ def load_to_dynamodb(dynamodb, table_name, items):
     return loaded, failed
 
 
-def update_tour_status(dynamodb, stack_name, tour_id, status):
-    """Update the tour status in TourMaster table."""
+def update_tour_status(dynamodb, stack_name, tour_id, status, self_quit_riding_allowed=None):
+    """Update simulation-controlled tour fields in TourMaster."""
     table = get_table(dynamodb, stack_name, 'TourMaster')
 
     now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    update_expression = 'SET #status = :status, updatedAt = :now'
+    expression_names = {'#status': 'status'}
+    expression_values = {':status': status, ':now': now}
+    if self_quit_riding_allowed is not None:
+        update_expression += ', selfQuitRidingAllowed = :selfQuitRidingAllowed'
+        expression_values[':selfQuitRidingAllowed'] = self_quit_riding_allowed
 
     table.update_item(
         Key={'tourId': tour_id},
-        UpdateExpression='SET #status = :status, updatedAt = :now',
-        ExpressionAttributeNames={'#status': 'status'},
-        ExpressionAttributeValues={':status': status, ':now': now},
+        UpdateExpression=update_expression,
+        ExpressionAttributeNames=expression_names,
+        ExpressionAttributeValues=expression_values,
     )
 
 
@@ -1920,7 +1942,13 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
             target_status = tour_config.get('target_status')
             if target_status:
                 print(f"\n  Updating tour status to {target_status}...")
-                update_tour_status(dynamodb, stack_name, tour_id, target_status)
+                update_tour_status(
+                    dynamodb,
+                    stack_name,
+                    tour_id,
+                    target_status,
+                    tour_config.get('self_quit_riding_allowed'),
+                )
                 print('    Done')
 
     print_summary(tour_riders, rides_data, checkins)
@@ -1933,7 +1961,7 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
 # hardcoded here, only generic defaults for optional config fields)
 # ============================================================================
 
-EVENT_TABLE_TYPES = ['Event', 'EventOccurrence', 'EventActivityLogs', 'Hotel', 'RoomAllocation']
+EVENT_TABLE_TYPES = ['Event', 'EventOccurrence', 'EventActivityLogs', 'EventRegistration', 'Hotel', 'RoomAllocation']
 
 EVENT_OCCURRENCE_STATUS_PLANNED = 'PLANNED'
 EVENT_OCCURRENCE_STATUS_ACTIVE = 'ACTIVE'
@@ -2026,7 +2054,7 @@ def build_room_allocation_items(config, anchor_date, rider_ids):
 def build_activity_item(activity_cfg, context):
     """Convert one scenario-config activity entry into an Event.activities[] item."""
     merged = {**ACTIVITY_CONFIG_DEFAULTS, **activity_cfg}
-    return {
+    item = {
         'activityId': merged['activity_id'],
         'name': merged['name'],
         'sequenceNo': int(merged['sequence_no']),
@@ -2039,6 +2067,9 @@ def build_activity_item(activity_cfg, context):
         'variantOptions': list(merged['variant_options']),
         'notes': merged['notes'],
     }
+    if 'self_service_allowed' in activity_cfg:
+        item['selfServiceAllowed'] = activity_cfg['self_service_allowed']
+    return item
 
 
 def build_event_definition_item(event_cfg, event_index):
@@ -2057,7 +2088,8 @@ def build_event_definition_item(event_cfg, event_index):
         'location': event_cfg['location'],
         'sequenceEnforced': bool(event_cfg['sequence_enforced']),
         'defaultAllowedTypeCodes': list(event_cfg['default_allowed_type_codes']),
-        'allowSelfService': bool(event_cfg.get('allow_self_service', False)),
+        'registrationEnabled': bool(event_cfg.get('registration_enabled', False)),
+        'selfServiceAllowed': bool(event_cfg.get('self_service_allowed', False)),
         'activities': activities,
         'createdAt': now,
         'updatedAt': now,
@@ -2108,7 +2140,6 @@ def build_occurrence_item(event_id, occurrence_cfg, anchor_date, seed_in_progres
         'seq': seq,
         'status': status,
         'activityOverrides': [],
-        'selfServiceEnabled': bool(occurrence_cfg.get('self_service_enabled', False)),
         'restrictToAssignedUsers': bool(occurrence_cfg.get('restrict_to_assigned_users', True)),
         'startedAt': started_at,
         'completedAt': completed_at,
@@ -2116,6 +2147,8 @@ def build_occurrence_item(event_id, occurrence_cfg, anchor_date, seed_in_progres
         'updatedAt': now,
         'updatedBy': 'simulation-script',
     }
+    if 'self_service_allowed' in occurrence_cfg:
+        item['selfServiceAllowed'] = occurrence_cfg['self_service_allowed']
     item = {k: v for k, v in item.items() if v is not None}
 
     meta = {

@@ -7,8 +7,18 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 
-# Runtime-tunable config: seeded once, never overwritten by later deploys.
-INSERT_ONLY_CONFIG_TYPES = {'HOTEL_UPLOAD', 'NOTIFICATION', 'RIDER_PROFILE_SECTION', 'RIDER_PROFILE_ATTRIBUTE', 'LOV'}
+# All seeded configs are insert-only: seeded once, never overwritten if already present.
+INSERT_ONLY_CONFIG_TYPES = {
+    'ARTIFACTS',
+    'HOTEL_CSV_FILE',
+    'HOTEL_UPLOAD',
+    'ID_CODE_FORMAT',
+    'ID_CODE_TYPE',
+    'LOV',
+    'NOTIFICATION',
+    'RIDER_PROFILE_ATTRIBUTE',
+    'RIDER_PROFILE_SECTION',
+}
 FORCE_OVERWRITE_PROFILE_CONFIG_TYPES = {'RIDER_PROFILE_SECTION', 'RIDER_PROFILE_ATTRIBUTE', 'LOV'}
 
 
@@ -668,22 +678,28 @@ def main():
 
     items = build_seed_items(args.updated_by)
 
+    inserted = 0
+    kept = 0
     for item in items:
         try:
             should_force_profile_config = args.force_profile_config and item['configType'] in FORCE_OVERWRITE_PROFILE_CONFIG_TYPES
-            if item['configType'] in INSERT_ONLY_CONFIG_TYPES and not should_force_profile_config:
-                table.put_item(Item=item, ConditionExpression='attribute_not_exists(configType) AND attribute_not_exists(configId)')
-            else:
+            if should_force_profile_config:
                 table.put_item(Item=item)
-            print(f"Upserted {item['configType']} / {item['configId']}")
+                inserted += 1
+                print(f"Upserted {item['configType']} / {item['configId']}")
+            else:
+                table.put_item(Item=item, ConditionExpression='attribute_not_exists(configType) AND attribute_not_exists(configId)')
+                inserted += 1
+                print(f"Inserted {item['configType']} / {item['configId']}")
         except ClientError as exc:
             if exc.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+                kept += 1
                 print(f"Kept existing {item['configType']} / {item['configId']}")
                 continue
-            print(f"Failed to upsert {item['configType']} / {item['configId']}: {exc}")
+            print(f"Failed to insert {item['configType']} / {item['configId']}: {exc}")
             raise
 
-    print(f'Seeded {len(items)} AppConfig items into {args.table_name}')
+    print(f'Seeded {inserted} AppConfig items ({kept} kept existing) into {args.table_name}')
 
 
 if __name__ == '__main__':

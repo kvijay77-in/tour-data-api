@@ -1,5 +1,5 @@
 # Data model
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-01_
 
 ## Table strategy
 
@@ -8,7 +8,7 @@ The backend uses two DynamoDB scopes:
 - **Shared tables** are created and managed by the deployed SAM stack. They hold data shared across tours.
 - **Tour-specific tables** are created at runtime for each tour using the naming pattern `{stack}-{TableType}-{tourId}`. This keeps operational data isolated by tour.
 
-Tour provisioning creates or repairs the complete set of **12** tour-specific table types. The table inventory is defined by `TOUR_TABLE_TYPES` in `src/layers/common/models.py` and the provisioning specifications in `src/layers/common/tour_provisioning.py`.
+Tour provisioning creates or repairs the complete set of **13** tour-specific table types. The table inventory is defined by `TOUR_TABLE_TYPES` in `src/layers/common/models.py` and the provisioning specifications in `src/layers/common/tour_provisioning.py`.
 
 ## Shared tables
 
@@ -41,6 +41,7 @@ The shared table resources and their indexes, billing mode, streams, TTL setting
 | `Event` | Event definitions, including embedded activity definitions |
 | `EventOccurrence` | Dated event instances and occurrence-level overrides |
 | `EventActivityLogs` | Event activity scan and completion records |
+| `EventRegistration` | Occurrence/rider registrations; partition key `occurrenceId`, sort key `riderId`, GSI `RiderIdIndex` |
 | `Hotel` | Tour hotel records |
 | `RoomAllocation` | One rider's room allocation for one stay date |
 
@@ -48,6 +49,6 @@ The stack name and tour ID are part of each physical table name. The tour-specif
 
 ## Provisioning and lifecycle
 
-Tour tables are provisioned by `scripts/provision_tour.py` / `make provision-tour` or by the tour APIs. `PUT /v1/tours/{tourId}/provision` idempotently repairs a provisioned tour by creating missing table types without changing the tour record's `provisionedAt` value. Provisioning and cleanup behavior is implemented in `src/layers/common/tour_provisioning.py`, `scripts/provision_tour.py`, and `scripts/cleanup_tour_tables.py`.
+Tour tables are provisioned by `scripts/provision_tour.py` / `make provision-tour` or by the tour APIs. `PUT /v1/tours/{tourId}/provision` idempotently repairs a provisioned tour by creating missing table types, including `EventRegistration`, without changing the tour record's `provisionedAt` value. Archive export and deletion iterate the same table inventory. Provisioning and cleanup behavior is implemented in `src/layers/common/tour_provisioning.py`, `scripts/provision_tour.py`, and `scripts/cleanup_tour_tables.py`.
 
 See the [API reference](api-reference.md#tours) for provisioning request semantics and the [deployment guide](../guides/deployment.md#after-deployment-provisioning-a-tour) for operator steps.

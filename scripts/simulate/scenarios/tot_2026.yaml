@@ -24,6 +24,7 @@ aws:
 # Tour reference (must already exist in TourMaster table)
 tour:
   tour_id: TOT-2026
+  self_quit_riding_allowed: false
   # Status to set on TourMaster after data generation (optional)
   target_status: ACTIVE
 
@@ -53,11 +54,12 @@ rides:
   # Example: 4 -> START + 2 PIT_STOP + FINISH.
   default_stage_count: 4
   default_stages:
-    - { type: START, name: Start }
-    - { type: PIT_STOP, name: PS1, estimated_open_time: 90, pit_stop_duration: 45 }
-    - { type: PIT_STOP, name: PS2, estimated_open_time: 210, pit_stop_duration: 60 }
-    - { type: PIT_STOP, name: PS3, estimated_open_time: 300, pit_stop_duration: 60 }
-    - { type: FINISH, name: Finish }
+    - { type: START, name: Start, self_check_in_allowed: true, self_not_riding_allowed: false }
+    - { type: PIT_STOP, name: PS1, estimated_open_time: 90, pit_stop_duration: 45, self_check_in_allowed: false }
+    - { type: PIT_STOP, name: PS2, estimated_open_time: 210, pit_stop_duration: 60, self_check_in_allowed: false }
+    - { type: PIT_STOP, name: PS3, estimated_open_time: 300, pit_stop_duration: 60, self_check_in_allowed: false }
+    - { type: FINISH, name: Finish, self_check_in_allowed: true }
+  self_check_in_allowed: true
 
   schedule:
     # -------------------------------------------------------------------------
@@ -133,6 +135,7 @@ rides:
     # -------------------------------------------------------------------------
     - day: 4
       name: "Day 4"
+      self_quit_riding_allowed: true
       pit_stop_distances_from_start:
         PS1: 29
         PS2: 69

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
 
+from botocore.exceptions import ClientError
+
 from dynamodb_utils import batch_get_items, get_tour_item
 from event_engine import (
     _activity_self_service,
@@ -104,7 +106,17 @@ def _register(
     existing = event_registration.get_registration(tour_id, occurrence_id, rider_id)
     if existing:
         return success_response(existing, status_code=200)
-    item = event_registration.put_registration(tour_id, event_id, occurrence_id, rider_id, registered_by, source)
+    try:
+        item = event_registration.put_registration(
+            tour_id, event_id, occurrence_id, rider_id, registered_by, source
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+        existing = event_registration.get_registration(tour_id, occurrence_id, rider_id)
+        if existing:
+            return success_response(existing, status_code=200)
+        raise
     return success_response(item, status_code=201)
 
 

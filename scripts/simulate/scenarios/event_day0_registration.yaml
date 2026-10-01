@@ -62,7 +62,8 @@ events:
     location: "Tour start venue"
     sequence_enforced: true
     default_allowed_type_codes: ["1"]
-    allow_self_service: false
+    registration_enabled: false
+    self_service_allowed: false
     activities:
       - activity_id: ACT-001
         name: "ID Card collection"
@@ -82,6 +83,7 @@ events:
         name: "Nutri-Pack collection"
         sequence_no: 3
         mandatory: false
+        self_service_allowed: true
         allow_opt_out: true
         prerequisite_activity_ids: [ACT-003]
         variant_options: [VEG, NON_VEG]
@@ -109,6 +111,7 @@ events:
       # Left PLANNED with no records unless --include-in-progress is passed.
       - day_offset: 0
         seq: 1
+        self_service_allowed: true
         in_progress:
           status: ACTIVE
           # Riders whose furthest completed activity is the given one.

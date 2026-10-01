@@ -97,7 +97,12 @@ def put_registration(
         'registeredBy': registered_by,
         'source': source,
     }
-    put_tour_item(REGISTRATION_TABLE_TYPE, tour_id, item=item)
+    put_tour_item(
+        REGISTRATION_TABLE_TYPE,
+        tour_id,
+        item=item,
+        condition_expression='attribute_not_exists(occurrenceId) AND attribute_not_exists(riderId)',
+    )
     return item
 
 

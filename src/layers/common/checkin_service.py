@@ -120,12 +120,11 @@ def list_rider_ride_checkins(tour_id: str, ride_id: str, rider_id: str, include_
     items = query_tour_items(
         table_type='CheckIn',
         tour_id=tour_id,
-        key_condition_expression='rideId = :rid AND begins_with(checkInId, :prefix)',
-        expression_values={
-            ':rid': ride_id,
-            ':prefix': f'{rider_id}#'
-        }
+        key_condition_expression='riderId = :riderId',
+        expression_values={':riderId': rider_id},
+        index_name='RiderIdIndex',
     )
+    items = [item for item in items if read_value(item, 'rideId', 'ride_id') == ride_id]
     if include_cancelled:
         return items
     return [item for item in items if not is_cancelled_checkin_item(item)]

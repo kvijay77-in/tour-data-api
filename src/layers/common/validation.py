@@ -665,7 +665,7 @@ def validate_ride_stages(stages: Any) -> List[Dict[str, Any]]:
         validate_required_fields(stage, ['stageId', 'stageNumber', 'type', 'name'])
         validate_stage_id(stage['stageId'])
 
-        if not isinstance(stage['stageNumber'], int):
+        if isinstance(stage['stageNumber'], bool) or not isinstance(stage['stageNumber'], int):
             raise ValidationError(
                 f"stageNumber for stage '{stage['stageId']}' must be an integer",
                 {"field": f"stages[{index}].stageNumber", "value": stage['stageNumber']}
@@ -754,11 +754,11 @@ def validate_ride_stages(stages: Any) -> List[Dict[str, Any]]:
                     {"field": f"stages[{index}].{runtime_field}", "value": stage[runtime_field]}
                 )
 
-        if 'selfCheckInAllowed' in stage and stage['selfCheckInAllowed'] is not None:
+        if 'selfCheckInAllowed' in stage:
             validate_optional_bool(stage['selfCheckInAllowed'], f"stages[{index}].selfCheckInAllowed")
             normalized_stage['selfCheckInAllowed'] = stage['selfCheckInAllowed']
 
-        if 'selfNotRidingAllowed' in stage and stage['selfNotRidingAllowed'] is not None:
+        if 'selfNotRidingAllowed' in stage:
             if stage_type != 'START':
                 raise FieldValueError(
                     f"selfNotRidingAllowed is only applicable to the START stage: {stage_id}",

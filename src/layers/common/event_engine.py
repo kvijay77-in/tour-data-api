@@ -8,6 +8,7 @@ import json
 import os
 import re
 import uuid
+from dataclasses import fields as dataclass_fields
 from datetime import date as calendar_date, timedelta
 from decimal import Decimal
 from io import StringIO
@@ -133,32 +134,23 @@ def _validate_allowed_type_codes_exist(allowed_type_codes: List[str]) -> None:
             )
 
 
-# Removed display-only self-service settings. Values sent by older clients are
-# ignored and values stored before the removal are never read or returned.
-_LEGACY_SELF_SERVICE_FIELDS = (
-    "allowSelfService",
-    "selfServiceEnabled",
-    "allow_self_service",
-    "self_service_enabled",
-)
-
-
-def _strip_legacy_fields(item: Dict[str, Any]) -> Dict[str, Any]:
-    for field_name in _LEGACY_SELF_SERVICE_FIELDS:
-        item.pop(field_name, None)
-    return item
+def _retain_model_fields(item: Dict[str, Any], model: Any) -> Dict[str, Any]:
+    """Return only fields declared by the model, ignoring unknown stored keys."""
+    allowed_fields = {field.name for field in dataclass_fields(model)}
+    return {key: value for key, value in item.items() if key in allowed_fields}
 
 
 def _present_event_definition(item: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Normalise a stored event definition for use and output."""
     if item is None:
         return None
-    _strip_legacy_fields(item)
+    item = _retain_model_fields(item, EventDefinition)
     item["registrationEnabled"] = item.get("registrationEnabled") is True
     item["selfServiceAllowed"] = item.get("selfServiceAllowed") is True
-    for activity in item.get("activities") or []:
-        if isinstance(activity, dict):
-            _strip_legacy_fields(activity)
+    item["activities"] = [
+        _retain_model_fields(activity, ActivityDefinition) if isinstance(activity, dict) else activity
+        for activity in item.get("activities") or []
+    ]
     return item
 
 
@@ -166,10 +158,11 @@ def _present_occurrence(item: Optional[Dict[str, Any]]) -> Optional[Dict[str, An
     """Normalise a stored occurrence (and its activity overrides) for use and output."""
     if item is None:
         return None
-    _strip_legacy_fields(item)
-    for override in item.get("activityOverrides") or []:
-        if isinstance(override, dict):
-            _strip_legacy_fields(override)
+    item = _retain_model_fields(item, EventOccurrence)
+    item["activityOverrides"] = [
+        _retain_model_fields(override, ActivityOverride) if isinstance(override, dict) else override
+        for override in item.get("activityOverrides") or []
+    ]
     return item
 
 
@@ -192,6 +185,16 @@ def _optional_bool(body: Dict[str, Any], field_name: str) -> Optional[bool]:
     if value is None or isinstance(value, bool):
         return value
     raise ValidationError(f"{field_name} must be true, false or null", {"field": field_name, "value": value})
+
+
+def _bool_if_present(body: Dict[str, Any], field_name: str) -> Optional[bool]:
+    """Return an optional boolean; only omission, not null, means unset."""
+    if field_name not in body:
+        return None
+    value = body[field_name]
+    if not isinstance(value, bool):
+        raise ValidationError(f"{field_name} must be true or false", {"field": field_name, "value": value})
+    return value
 
 
 def _required_bool(body: Dict[str, Any], field_name: str, default: bool = False) -> bool:
@@ -259,7 +262,7 @@ def _normalise_activity(activity: Dict[str, Any]) -> ActivityDefinition:
         restrictToAssignedUsers=bool(activity.get("restrictToAssignedUsers", True)),
         variantOptions=activity.get("variantOptions", []) or [],
         notes=activity.get("notes", "") or "",
-        selfServiceAllowed=_optional_bool(activity, "selfServiceAllowed"),
+        selfServiceAllowed=_bool_if_present(activity, "selfServiceAllowed"),
     )
 
 
@@ -632,7 +635,7 @@ def create_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
         seq = int(body["seq"])
         if seq <= 0:
             raise ValidationError("seq must be a positive integer", {"field": "seq", "value": body["seq"]})
-        occurrence_self_service = _optional_bool(body, "selfServiceAllowed")
+        occurrence_self_service = _bool_if_present(body, "selfServiceAllowed")
     except (ValidationError, ValueError) as exc:
         if isinstance(exc, ValidationError):
             return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
@@ -681,7 +684,7 @@ def update_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
         return error_response("OCCURRENCE_CLOSED", "Occurrence is already closed.", status_code=409)
     if "selfServiceAllowed" in body:
         try:
-            self_service_value = _optional_bool(body, "selfServiceAllowed")
+            self_service_value = _bool_if_present(body, "selfServiceAllowed")
         except ValidationError as exc:
             return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
         if self_service_value is None:
@@ -753,7 +756,10 @@ def update_activity_override(event: Dict[str, Any]) -> Dict[str, Any]:
 
     for field in ("enabled", "selfServiceAllowed", "allowedTypeCodes", "note", "skipped"):
         if field in body:
-            matched[field] = body.get(field)
+            if body[field] is None:
+                matched.pop(field, None)
+            else:
+                matched[field] = body[field]
     matched["updatedAt"] = utc_now_iso()
     matched["updatedBy"] = get_claim(event, "sub")
 
@@ -966,10 +972,6 @@ def record_activity(
                 "Self-service is not allowed for this activity.",
                 status_code=403,
             )
-    else:
-        access_denied = _check_event_scan_access(event, tour_id, event_definition, occurrence, activity, rider_id)
-        if access_denied:
-            return access_denied
 
     rider = get_tour_item("TourRider", tour_id, {"riderId": rider_id})
     if not rider:
@@ -983,6 +985,11 @@ def record_activity(
             "The rider is not registered for this event occurrence.",
             status_code=403,
         )
+
+    if not self_service:
+        access_denied = _check_event_scan_access(event, tour_id, event_definition, occurrence, activity, rider_id)
+        if access_denied:
+            return access_denied
 
     if self_service and (
         not _effective_activity_enabled(occurrence, activity)

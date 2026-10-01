@@ -1,5 +1,5 @@
 # Architecture
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-01_
 
 ## Purpose and ownership
 
@@ -38,7 +38,7 @@ The backend uses shared tables for platform-wide records and provisions a separa
 
 - `template.yaml` is the primary AWS SAM/CloudFormation definition.
 - `src/functions/` contains Lambda handlers organized by domain.
-- `src/layers/common/` contains shared Python modules, including `event_engine`, `notification_service`, `ownership`, `profile_schema`, `rbac`, and `tour_provisioning`.
+- `src/layers/common/` contains shared Python modules, including `checkin_service`, `event_engine`, `event_registration`, `event_self_service`, `notification_service`, `ownership`, `profile_schema`, `rbac`, `rider_identity`, `self_checkin_rules`, `self_service_policy`, and `tour_provisioning`.
 - `samconfig.toml`, `Makefile`, `scripts/`, and `.github/workflows/ci-cd.yml` support environment configuration, local development, provisioning, and deployment.
 - AWS service calls use the Python SDK (`boto3`), not the JavaScript AWS SDK.
 

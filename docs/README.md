@@ -1,5 +1,5 @@
 # Documentation index
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-01_
 
 This index links to the current backend requirements, designs, and operating guides.
 
@@ -23,6 +23,7 @@ Requirements are maintained only in `docs/requirements/`. Their implementation c
 |---|---|
 | [Architecture](design/architecture.md) | System boundaries, data flow, and AWS service roles |
 | [Data model](design/data-model.md) | Shared and tour-specific DynamoDB tables |
+| [Check-ins](design/check-ins.md) | Ride check-in policy, Rider self-service, and cancellation safety |
 | [API reference](design/api-reference.md) | Single source of truth for backend API contracts |
 | [RBAC](design/rbac.md) | Permission names, Cognito groups, and authorization rules |
 | [Events and hotel logistics](design/events.md) | Event, baggage, hotel, and allocation design |

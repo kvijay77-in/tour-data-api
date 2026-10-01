@@ -128,7 +128,7 @@ def lambda_handler(event, context):
         try:
             normalized_stages = validate_ride_stages(body['stages'])
             for setting in RIDE_SELF_SERVICE_FIELDS:
-                if body.get(setting) is not None:
+                if setting in body:
                     validate_optional_bool(body[setting], setting)
         except ValidationError as e:
             return validation_exception_response(e)

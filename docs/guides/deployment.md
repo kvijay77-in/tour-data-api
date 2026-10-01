@@ -1,5 +1,5 @@
 # Deployment Guide
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-01_
 
 [← Back to README](../README.md)
 
@@ -335,7 +335,7 @@ make provision-tour \
   ENV=prod
 ```
 
-The script creates the Tour record in the shared TourMaster table and provisions 12 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, NotificationArchive, Artifacts, Event, EventOccurrence, EventActivityLogs, Hotel, RoomAllocation).
+The script creates the Tour record in the shared TourMaster table and provisions 13 tour-specific DynamoDB tables (TourRider, Ride, CheckIn, User, Notification, NotificationArchive, Artifacts, Event, EventOccurrence, EventActivityLogs, EventRegistration, Hotel, RoomAllocation).
 
 It also looks up the stack's `PushSenderFunction` and connects the `Notification-{tourId}` table stream to it so tour notifications are pushed. Your AWS credentials need `cloudformation:DescribeStackResource`, `lambda:ListEventSourceMappings` and `lambda:CreateEventSourceMapping`. If the lookup fails, the script prints a warning; fix it later with `PUT /v1/tours/{tourId}/provision` (see [Notification Push Setup → step 6](#6-connect-existing-tours-to-push-sender)).
 
@@ -357,7 +357,7 @@ curl -X POST https://<api-url>/v1/tours \
   }'
 ```
 
-By default, `POST /v1/tours` creates only the TourMaster record. To provision the 12 tour-specific DynamoDB tables in the same request, include `"provisioning": true`. The `provisioning` request attribute is not stored in TourMaster.
+By default, `POST /v1/tours` creates only the TourMaster record. To provision the 13 tour-specific DynamoDB tables in the same request, include `"provisioning": true`. The `provisioning` request attribute is not stored in TourMaster.
 
 ```bash
 curl -X POST https://<api-url>/v1/tours \

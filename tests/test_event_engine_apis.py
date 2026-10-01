@@ -131,6 +131,25 @@ def event_engine_setup(event_engine_env):
                 ],
             },
             {
+                'TableName': f'test-stack-EventRegistration-{MOCK_TOUR_ID}',
+                'KeySchema': [
+                    {'AttributeName': 'occurrenceId', 'KeyType': 'HASH'},
+                    {'AttributeName': 'riderId', 'KeyType': 'RANGE'},
+                ],
+                'AttributeDefinitions': [
+                    {'AttributeName': 'occurrenceId', 'AttributeType': 'S'},
+                    {'AttributeName': 'riderId', 'AttributeType': 'S'},
+                ],
+                'GlobalSecondaryIndexes': [{
+                    'IndexName': 'RiderIdIndex',
+                    'KeySchema': [
+                        {'AttributeName': 'riderId', 'KeyType': 'HASH'},
+                        {'AttributeName': 'occurrenceId', 'KeyType': 'RANGE'},
+                    ],
+                    'Projection': {'ProjectionType': 'ALL'},
+                }],
+            },
+            {
                 'TableName': f'test-stack-Hotel-{MOCK_TOUR_ID}',
                 'KeySchema': [{'AttributeName': 'hotelId', 'KeyType': 'HASH'}],
                 'AttributeDefinitions': [{'AttributeName': 'hotelId', 'AttributeType': 'S'}],
@@ -249,6 +268,394 @@ def test_create_event_and_occurrence_flow(event_engine_setup):
     assert occurrence_response['statusCode'] == 201
     data = json.loads(occurrence_response['body'])['data']
     assert data['occurrenceId'] == 'EVT-REG#2026-02-10#1'
+
+
+def test_activity_override_null_clears_self_service_value(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from update_activity_overrides import lambda_handler
+
+    dynamodb_utils.get_tour_table('Event', MOCK_TOUR_ID).put_item(Item={
+        'eventId': 'EVT-REG',
+        'eventName': 'Day 0 Registration',
+        'eventType': 'SINGLE',
+        'location': 'Venue',
+        'sequenceEnforced': True,
+        'defaultAllowedTypeCodes': ['1'],
+        'activities': [{'activityId': 'ACT-001', 'name': 'ID Card', 'sequenceNo': 0}],
+    })
+    dynamodb_utils.get_tour_table('EventOccurrence', MOCK_TOUR_ID).put_item(Item={
+        'eventId': 'EVT-REG',
+        'dateSeq': '2026-02-10#1',
+        'occurrenceId': 'EVT-REG#2026-02-10#1',
+        'date': '2026-02-10',
+        'seq': 1,
+        'status': 'PLANNED',
+        'activityOverrides': [{'activityId': 'ACT-001', 'enabled': True, 'selfServiceAllowed': True}],
+    })
+
+    response = lambda_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-REG', 'occurrenceId': 'EVT-REG#2026-02-10#1'},
+            method='PUT',
+            body={'activityId': 'ACT-001', 'selfServiceAllowed': None},
+        ),
+        None,
+    )
+
+    assert response['statusCode'] == 200
+    override = json.loads(response['body'])['data']['items'][0]
+    assert override['enabled'] is True
+    assert 'selfServiceAllowed' not in override
+
+
+def test_event_activity_and_occurrence_flags_reject_null(event_engine_setup):
+    import dynamodb_utils
+    import event_engine
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    with pytest.raises(event_engine.ValidationError):
+        event_engine._normalise_activity({
+            'activityId': 'ACT-001',
+            'name': 'Activity',
+            'sequenceNo': 0,
+            'selfServiceAllowed': None,
+        })
+
+    with pytest.raises(event_engine.ValidationError):
+        event_engine._bool_if_present({'selfServiceAllowed': None}, 'selfServiceAllowed')
+
+
+def test_legacy_event_fields_are_ignored_and_never_returned(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from create_event import lambda_handler as create_event_handler
+    from get_event import lambda_handler as get_event_handler
+    from get_occurrence import lambda_handler as get_occurrence_handler
+
+    create_response = create_event_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID},
+            method='POST',
+            body={
+                'eventId': 'EVT-LEGACY',
+                'eventName': 'Legacy input',
+                'eventType': 'SINGLE',
+                'location': 'Venue',
+                'sequenceEnforced': False,
+                'defaultAllowedTypeCodes': [],
+                'allowSelfService': True,
+                'allow_self_service': True,
+                'activities': [{
+                    'activityId': 'ACT-001',
+                    'name': 'Activity',
+                    'sequenceNo': 0,
+                    'selfServiceEnabled': True,
+                    'self_service_enabled': True,
+                }],
+            },
+        ),
+        None,
+    )
+    assert create_response['statusCode'] == 201
+    created = json.loads(create_response['body'])['data']
+    assert created['registrationEnabled'] is False
+    assert created['selfServiceAllowed'] is False
+    assert 'allowSelfService' not in created
+    assert 'self_service_enabled' not in created['activities'][0]
+
+    event_table = dynamodb_utils.get_tour_table('Event', MOCK_TOUR_ID)
+    event_table.put_item(Item={
+        'eventId': 'EVT-OLDSTORED',
+        'eventName': 'Old stored fields',
+        'eventType': 'SINGLE',
+        'location': 'Venue',
+        'sequenceEnforced': False,
+        'defaultAllowedTypeCodes': [],
+        'allowSelfService': True,
+        'activities': [{
+            'activityId': 'ACT-001',
+            'name': 'Activity',
+            'sequenceNo': 0,
+            'selfServiceEnabled': True,
+        }],
+    })
+    occurrence_table = dynamodb_utils.get_tour_table('EventOccurrence', MOCK_TOUR_ID)
+    occurrence_table.put_item(Item={
+        'eventId': 'EVT-OLDSTORED',
+        'dateSeq': '2026-02-10#1',
+        'occurrenceId': 'EVT-OLDSTORED#2026-02-10#1',
+        'date': '2026-02-10',
+        'seq': 1,
+        'status': 'PLANNED',
+        'selfServiceEnabled': True,
+        'activityOverrides': [{'activityId': 'ACT-001', 'selfServiceEnabled': True}],
+    })
+
+    event_response = get_event_handler(
+            _event(['ADMINISTRATOR'], {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-OLDSTORED'}),
+        None,
+    )
+    occurrence_response = get_occurrence_handler(
+        _event(
+            ['ADMINISTRATOR'],
+            {
+                'tourId': MOCK_TOUR_ID,
+                'eventId': 'EVT-OLDSTORED',
+                'occurrenceId': 'EVT-OLDSTORED#2026-02-10#1',
+            },
+        ),
+        None,
+    )
+    assert event_response['statusCode'] == 200, event_response
+    assert occurrence_response['statusCode'] == 200, occurrence_response
+    event_data = json.loads(event_response['body'])['data']
+    occurrence_data = json.loads(occurrence_response['body'])['data']
+    assert 'allowSelfService' not in event_data
+    assert 'selfServiceEnabled' not in event_data['activities'][0]
+    assert 'selfServiceEnabled' not in occurrence_data
+    assert 'selfServiceEnabled' not in occurrence_data['activityOverrides'][0]
+
+
+def _store_registration_event(dynamodb_utils, registration_enabled=True, occurrence_status='PLANNED'):
+    dynamodb_utils.get_tour_table('Event', MOCK_TOUR_ID).put_item(Item={
+        'eventId': 'EVT-REG',
+        'eventName': 'Registration',
+        'eventType': 'SINGLE',
+        'location': 'Venue',
+        'sequenceEnforced': False,
+        'defaultAllowedTypeCodes': ['1'],
+        'registrationEnabled': registration_enabled,
+        'selfServiceAllowed': True,
+        'activities': [{
+            'activityId': 'ACT-001',
+            'name': 'Check in',
+            'sequenceNo': 0,
+            'restrictToAssignedUsers': False,
+            'selfServiceAllowed': True,
+        }],
+    })
+    dynamodb_utils.get_tour_table('EventOccurrence', MOCK_TOUR_ID).put_item(Item={
+        'eventId': 'EVT-REG',
+        'dateSeq': '2026-02-10#1',
+        'occurrenceId': 'EVT-REG#2026-02-10#1',
+        'date': '2026-02-10',
+        'seq': 1,
+        'status': occurrence_status,
+        'restrictToAssignedUsers': False,
+        'activityOverrides': [],
+    })
+
+
+def _rider_event_request(method='POST', body=None, rider_id=None):
+    path_params = {
+        'tourId': MOCK_TOUR_ID,
+        'eventId': 'EVT-REG',
+        'occurrenceId': 'EVT-REG#2026-02-10#1',
+    }
+    if rider_id:
+        path_params['riderId'] = rider_id
+    return _event(['RIDER'], path_params, method=method, body=body or {})
+
+
+def test_rider_registration_is_idempotent_and_closes_when_occurrence_starts(event_engine_setup, monkeypatch):
+    import dynamodb_utils
+    import event_self_service
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    _store_registration_event(dynamodb_utils)
+    monkeypatch.setattr(
+        event_self_service,
+        'resolve_active_caller_tour_rider',
+        lambda event, tour_id: ({'riderId': 'R1', 'profileId': 'P001', 'tourRider': {'status': 'ACTIVE'}}, None),
+    )
+
+    first = event_self_service.register_self(_rider_event_request())
+    second = event_self_service.register_self(_rider_event_request())
+    first_record = json.loads(first['body'])['data']
+    second_record = json.loads(second['body'])['data']
+
+    assert first['statusCode'] == 201
+    assert second['statusCode'] == 200
+    assert first_record == second_record
+    assert first_record['source'] == 'RIDER'
+    assert first_record['registeredBy'] == 'P001'
+
+    dynamodb_utils.get_tour_table('EventOccurrence', MOCK_TOUR_ID).update_item(
+        Key={'eventId': 'EVT-REG', 'dateSeq': '2026-02-10#1'},
+        UpdateExpression='SET #status = :status',
+        ExpressionAttributeNames={'#status': 'status'},
+        ExpressionAttributeValues={':status': 'ACTIVE'},
+    )
+    closed = event_self_service.register_self(_rider_event_request())
+    assert closed['statusCode'] == 409
+    assert json.loads(closed['body'])['error']['code'] == 'REGISTRATION_CLOSED'
+
+
+def test_registration_disabled_and_unregister_missing_return_contract_errors(event_engine_setup, monkeypatch):
+    import dynamodb_utils
+    import event_self_service
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    _store_registration_event(dynamodb_utils, registration_enabled=False)
+    monkeypatch.setattr(
+        event_self_service,
+        'resolve_active_caller_tour_rider',
+        lambda event, tour_id: ({'riderId': 'R1', 'profileId': 'P001', 'tourRider': {'status': 'ACTIVE'}}, None),
+    )
+
+    disabled = event_self_service.register_self(_rider_event_request())
+    assert disabled['statusCode'] == 409
+    assert json.loads(disabled['body'])['error']['code'] == 'REGISTRATION_NOT_ENABLED'
+
+    _store_registration_event(dynamodb_utils, registration_enabled=True)
+    missing = event_self_service.unregister_self(_rider_event_request(method='DELETE'))
+    assert missing['statusCode'] == 404
+    assert json.loads(missing['body'])['error']['code'] == 'REGISTRATION_NOT_FOUND'
+
+
+def test_staff_registration_list_register_and_unregister(event_engine_setup):
+    import dynamodb_utils
+    import event_self_service
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    _store_registration_event(dynamodb_utils)
+
+    staff_event = _event(
+        ['ADMINISTRATOR'],
+        {
+            'tourId': MOCK_TOUR_ID,
+            'eventId': 'EVT-REG',
+            'occurrenceId': 'EVT-REG#2026-02-10#1',
+            'riderId': 'R1',
+        },
+        method='PUT',
+    )
+    registered = event_self_service.staff_register(staff_event)
+    listed = event_self_service.list_registrations(_event(
+        ['ADMINISTRATOR'],
+        {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-REG', 'occurrenceId': 'EVT-REG#2026-02-10#1'},
+    ))
+    unregistered = event_self_service.staff_unregister(_event(
+        ['ADMINISTRATOR'],
+        {
+            'tourId': MOCK_TOUR_ID,
+            'eventId': 'EVT-REG',
+            'occurrenceId': 'EVT-REG#2026-02-10#1',
+            'riderId': 'R1',
+        },
+        method='DELETE',
+    ))
+
+    assert registered['statusCode'] == 201
+    assert json.loads(registered['body'])['data']['source'] == 'STAFF'
+    list_data = json.loads(listed['body'])['data']
+    assert list_data['registrationEnabled'] is True
+    assert list_data['count'] == 1
+    assert list_data['items'][0]['name'] == 'John Doe'
+    assert unregistered['statusCode'] == 200
+
+
+def test_staff_and_rider_activity_records_require_registration(event_engine_setup, monkeypatch):
+    import dynamodb_utils
+    import event_engine
+    import event_self_service
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    _store_registration_event(dynamodb_utils, occurrence_status='ACTIVE')
+    monkeypatch.setattr(
+        event_self_service,
+        'resolve_active_caller_tour_rider',
+        lambda event, tour_id: ({'riderId': 'R1', 'profileId': 'P001', 'tourRider': {'status': 'ACTIVE'}}, None),
+    )
+    self_record = event_self_service.create_self_record(_rider_event_request(body={
+        'activityId': 'ACT-001',
+        'timestamp': '2026-02-10T06:00:00Z',
+    }))
+    staff_record = event_engine.create_activity_record(
+        _event(
+            ['ADMINISTRATOR'],
+            {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-REG', 'occurrenceId': 'EVT-REG#2026-02-10#1'},
+            method='POST',
+            body={
+                'activityId': 'ACT-001',
+                'riderId': 'R1',
+                'typeCode': '1',
+                'method': 'QR_SCAN',
+                'timestamp': '2026-02-10T06:01:00Z',
+            },
+        ),
+    )
+
+    for response in (self_record, staff_record):
+        assert response['statusCode'] == 403
+        assert json.loads(response['body'])['error']['code'] == 'RIDER_NOT_REGISTERED_FOR_EVENT'
+
+
+def test_rider_self_record_create_cancel_and_occurrence_status(event_engine_setup, monkeypatch):
+    import dynamodb_utils
+    import event_self_service
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    _store_registration_event(dynamodb_utils, occurrence_status='ACTIVE')
+    dynamodb_utils.get_tour_table('EventRegistration', MOCK_TOUR_ID).put_item(Item={
+        'occurrenceId': 'EVT-REG#2026-02-10#1',
+        'riderId': 'R1',
+        'eventId': 'EVT-REG',
+        'registeredAt': '2026-02-09T12:00:00Z',
+        'registeredBy': 'P001',
+        'source': 'RIDER',
+    })
+    identity = {'riderId': 'R1', 'profileId': 'P001', 'tourRider': {'status': 'ACTIVE'}}
+    monkeypatch.setattr(
+        event_self_service,
+        'resolve_active_caller_tour_rider',
+        lambda event, tour_id: (identity, None),
+    )
+
+    created = event_self_service.create_self_record(_rider_event_request(body={
+        'activityId': 'ACT-001',
+        'timestamp': '2026-02-10T06:00:00Z',
+    }))
+    record = json.loads(created['body'])['data']
+    assert created['statusCode'] == 201
+    assert record['method'] == 'SELF_SERVICE'
+    assert 'typeCode' not in record
+    assert record['riderId'] == 'R1'
+
+    cancel_event = _rider_event_request(method='POST', body={}, rider_id=None)
+    cancel_event['pathParameters']['recordId'] = record['recordId']
+    cancelled = event_self_service.cancel_self_record(cancel_event)
+    assert cancelled['statusCode'] == 200
+    assert json.loads(cancelled['body'])['data']['cancelledBy'] == 'P001'
+
+    identity['riderId'] = 'R2'
+    identity['profileId'] = 'P002'
+    not_owner = event_self_service.cancel_self_record(cancel_event)
+    assert not_owner['statusCode'] == 403
+    assert json.loads(not_owner['body'])['error']['code'] == 'NOT_OWN_RECORD'
+
+    dynamodb_utils.get_tour_table('EventOccurrence', MOCK_TOUR_ID).update_item(
+        Key={'eventId': 'EVT-REG', 'dateSeq': '2026-02-10#1'},
+        UpdateExpression='SET #status = :status',
+        ExpressionAttributeNames={'#status': 'status'},
+        ExpressionAttributeValues={':status': 'PLANNED'},
+    )
+    identity['riderId'] = 'R1'
+    identity['profileId'] = 'P001'
+    inactive = event_self_service.create_self_record(_rider_event_request(body={
+        'activityId': 'ACT-001',
+        'timestamp': '2026-02-10T06:05:00Z',
+    }))
+    assert inactive['statusCode'] == 409
+    assert json.loads(inactive['body'])['error']['code'] == 'OCCURRENCE_NOT_ACTIVE'
 
 
 def test_create_hotel_and_tour_user(event_engine_setup):

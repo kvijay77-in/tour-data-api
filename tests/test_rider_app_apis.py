@@ -199,6 +199,13 @@ def dynamodb_full_mock(aws_credentials):
         for rider in MOCK_TOUR_RIDERS:
             tour_rider_table.put_item(Item=rider)
 
+        # Imported lazily (after mock_aws is active) to avoid binding
+        # dynamodb_utils' module-level boto3 resource to a real AWS session
+        # during collection; also clears any stale schema cached by another
+        # test's AppConfig fixture before it can leak into these tests.
+        from profile_schema import clear_schema_cache
+        clear_schema_cache()
+
         # Create tour-specific Ride table
         ride_table = dynamodb.create_table(
             TableName=f'test-stack-Ride-{MOCK_TOUR_ID}',
@@ -750,7 +757,7 @@ class TestGetAndUpdateRiderProfile:
         )
 
         response = lambda_handler(event, None)
-        assert response['statusCode'] == 400
+        assert response['statusCode'] == 422
 
 
 # ============================================================================
@@ -917,7 +924,11 @@ class TestGetRiderTourParticipation:
         assert response['statusCode'] == 400
 
     def test_update_profile_requires_all_mandatory_fields(self, dynamodb_full_mock):
-        """Update fails when mandatory profile fields are omitted"""
+        """Update fails when mandatory fields are missing from both the
+        existing profile and the submitted payload (merge still enforces
+        required attributes on the merged result). P002 lacks dateOfBirth,
+        gender, and address in the mock data, so omitting them here leaves
+        the merged profile incomplete."""
         import dynamodb_utils
         dynamodb_utils.TABLES = {}
         dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
@@ -926,16 +937,16 @@ class TestGetRiderTourParticipation:
 
         event = _make_event(
             method='PUT',
-            path='/v1/riders/profile/P001',
-            path_params={'profileId': 'P001'},
+            path='/v1/riders/profile/P002',
+            path_params={'profileId': 'P002'},
             body={
                 'name': 'Partial Update',
-                'email': 'john.doe@example.com'
+                'email': 'jane.smith@example.com'
             }
         )
 
         response = lambda_handler(event, None)
-        assert response['statusCode'] == 400
+        assert response['statusCode'] == 422
 
 
 # ============================================================================
