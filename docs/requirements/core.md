@@ -17,7 +17,7 @@ This document is the source of truth for the backend's core tour, ride, check-in
 - A tour must be provisioned before tour-specific operations are available. Repair provisioning must be safe for already-provisioned tours and must not change their existing `provisionedAt` timestamp.
 - A ride belongs to one tour and has a date, schedule, distance, status, and ordered stages.
 - Stage numbering starts at zero. Stage `0` is `START`; the final stage is `FINISH`; intermediate pit-stop stages are `PIT_STOP`.
-- Tour `selfQuitRidingAllowed` defaults to `false`; a ride-level value overrides it. Ride and stage `selfCheckInAllowed` values inherit stage → ride → stage-type defaults (`START=true`, `FINISH=true`, `PIT_STOP=false`). Only START may set `selfNotRidingAllowed`, which defaults to `false`.
+- Tour `selfQuitRidingAllowed` defaults to `false`; a ride-level value overrides it. Ride and stage `selfCheckInAllowed` values inherit stage → ride → stage-type defaults (`START=true`, `FINISH=true`, `PIT_STOP=false`). Ride-level `selfCheckInAllowed` and `selfQuitRidingAllowed` may be set to `null` on create/update to leave them unset and inherit the defaults. Only START may set `selfNotRidingAllowed`, which defaults to `false`.
 - Ride create/update requests containing stages require exactly one START first and one FINISH last; all intervening stages are PIT_STOP. Older rides without these settings continue to use the defaults.
 - Ride status and stage runtime state are controlled through the backend API. Only applicable pit-stop stages may be opened or closed, and only while the ride is started.
 

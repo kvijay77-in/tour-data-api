@@ -726,6 +726,29 @@ class TestProvisionTourRBAC:
 # ---------------------------------------------------------------------------
 
 class TestCreateRideRBAC:
+    def test_null_ride_policy_uses_defaults(self, rbac_dynamodb):
+        create_ride = _load_handler('rides', 'create_ride')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID},
+            body={
+                'rideId': 'RIDE002', 'date': '2026-02-12', 'rideNo': 2,
+                'name': 'Ride 2', 'startLocation': 'City B', 'finishLocation': 'City C',
+                'totalDistance': 80, 'flagOffTime': '08:00',
+                'stages': [
+                    {'stageId': 'S000', 'stageNumber': 0, 'type': 'START', 'name': 'Start'},
+                    {'stageId': 'S001', 'stageNumber': 1, 'type': 'FINISH', 'name': 'Finish'},
+                ],
+                'selfCheckInAllowed': None, 'selfQuitRidingAllowed': None,
+            },
+            method='POST'
+        )
+        response = create_ride.lambda_handler(event, None)
+        assert response['statusCode'] == 201
+        ride = json.loads(response['body'])['data']
+        assert 'selfCheckInAllowed' not in ride
+        assert 'selfQuitRidingAllowed' not in ride
+
     def test_administrator_allowed(self, rbac_dynamodb):
         create_ride = _load_handler('rides', 'create_ride')
         event = _make_event(
@@ -816,6 +839,26 @@ class TestCreateRideRBAC:
 # ---------------------------------------------------------------------------
 
 class TestUpdateRideRBAC:
+    def test_null_clears_ride_self_service_overrides(self, rbac_dynamodb):
+        update_ride = _load_handler('rides', 'update_ride')
+        event = _make_event(
+            groups=['ADMINISTRATOR'],
+            path_params={'tourId': MOCK_TOUR_ID, 'rideId': 'RIDE001'},
+            body={'selfCheckInAllowed': True, 'selfQuitRidingAllowed': False},
+            method='PUT'
+        )
+        assert update_ride.lambda_handler(event, None)['statusCode'] == 200
+
+        event['body'] = json.dumps({'selfCheckInAllowed': None, 'selfQuitRidingAllowed': None})
+        response = update_ride.lambda_handler(event, None)
+        assert response['statusCode'] == 200
+        ride = json.loads(response['body'])['data']
+        assert 'selfCheckInAllowed' not in ride
+        assert 'selfQuitRidingAllowed' not in ride
+
+        event['body'] = json.dumps({'selfCheckInAllowed': 'true'})
+        assert update_ride.lambda_handler(event, None)['statusCode'] == 400
+
     def test_administrator_allowed(self, rbac_dynamodb):
         update_ride = _load_handler('rides', 'update_ride')
         event = _make_event(

@@ -152,7 +152,7 @@ def lambda_handler(event, context):
 
         try:
             for setting in RIDE_SELF_SERVICE_FIELDS:
-                if setting in updates:
+                if setting in updates and updates[setting] is not None:
                     validate_optional_bool(updates[setting], setting)
         except ValidationError as e:
             return validation_exception_response(e)

@@ -17,7 +17,7 @@ An event definition is stored in `Event-{tourId}`. Its ordered activities are em
 
 - Event and activity definitions are editable as tour data. Initial event definitions are not required by the backend schema; event content is configured for a tour.
 - Event definitions include `registrationEnabled` and `selfServiceAllowed`, both defaulting to `false`. With registration disabled, every rider on the tour except `EXITED`/`WITHDRAWN` is considered registered; when enabled, riders register while the occurrence is `PLANNED`.
-- Self-service permission resolves per activity by occurrence activity override → occurrence → activity → event → `false`. An explicit `null` activity override clears that level and resumes inheritance.
+- Self-service permission resolves per activity by occurrence activity override → occurrence → activity → event → `false`. An explicit `null` for occurrence `selfServiceAllowed` on create/update leaves it unset or removes the existing value; `null` for an activity override also clears that level and resumes inheritance.
 - Scan types are configured through `AppConfig` `ID_CODE_TYPE` values. Event-level defaults may be narrowed by each activity's `allowedTypeCodes`.
 - Occurrences support `selfServiceAllowed` plus per-activity overrides for enabled state, self-service, allowed type codes, skip state, and an explanatory note.
 - Activity records preserve the event/activity identity and scan-time details for history. Sequence, prerequisite, assignment, and allowed-type rules are enforced by the backend.

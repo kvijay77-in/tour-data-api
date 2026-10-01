@@ -3,7 +3,7 @@ _Last updated: 2026-10-01_
 
 ## Stored policy
 
-Tour `selfQuitRidingAllowed` is a boolean that defaults to `false`. A ride may override it; an absent ride setting inherits the tour value. A ride-wide `selfCheckInAllowed` controls all stages unless a stage overrides it. When neither level is set, stage defaults are `START=true`, `FINISH=true`, and `PIT_STOP=false`. Only a START stage may set `selfNotRidingAllowed`; its default is `false`.
+Tour `selfQuitRidingAllowed` is a boolean that defaults to `false`. A ride may override it; an absent ride setting inherits the tour value. A ride-wide `selfCheckInAllowed` controls all stages unless a stage overrides it. When neither level is set, stage defaults are `START=true`, `FINISH=true`, and `PIT_STOP=false`. Sending `null` for either ride-level setting on create/update leaves it absent (or removes an existing override on update), restoring inheritance. Only a START stage may set `selfNotRidingAllowed`; its default is `false`.
 
 Ride responses expose the calculated configuration as `selfService`:
 

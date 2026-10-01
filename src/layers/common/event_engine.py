@@ -635,7 +635,7 @@ def create_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
         seq = int(body["seq"])
         if seq <= 0:
             raise ValidationError("seq must be a positive integer", {"field": "seq", "value": body["seq"]})
-        occurrence_self_service = _bool_if_present(body, "selfServiceAllowed")
+        occurrence_self_service = _optional_bool(body, "selfServiceAllowed")
     except (ValidationError, ValueError) as exc:
         if isinstance(exc, ValidationError):
             return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
@@ -684,7 +684,7 @@ def update_occurrence(event: Dict[str, Any]) -> Dict[str, Any]:
         return error_response("OCCURRENCE_CLOSED", "Occurrence is already closed.", status_code=409)
     if "selfServiceAllowed" in body:
         try:
-            self_service_value = _bool_if_present(body, "selfServiceAllowed")
+            self_service_value = _optional_bool(body, "selfServiceAllowed")
         except ValidationError as exc:
             return error_response("VALIDATION_ERROR", exc.message, status_code=400, details=exc.details)
         if self_service_value is None:

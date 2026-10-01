@@ -11,7 +11,7 @@ This document is the source of truth for backend requirements for non-ride event
 - Organizers must be able to adjust applicable activity settings for an individual occurrence without changing the shared event definition.
 - Event scans must resolve to the existing rider identity using configured ID-code types; the backend must not introduce a separate baggage ID or allocation identity.
 - Event definition, occurrence, and scan operations must be independently authorized. See the authoritative [RBAC design](../design/rbac.md).
-- Event definitions support `registrationEnabled` and `selfServiceAllowed`, both defaulting to `false`; self-service permission resolves override → occurrence → activity → event → false.
+- Event definitions support `registrationEnabled` and `selfServiceAllowed`, both defaulting to `false`; self-service permission resolves override → occurrence → activity → event → false. Occurrence `selfServiceAllowed` may be set to `null` on create/update to leave it unset and inherit from the activity or event.
 - With registration enabled, riders register for a PLANNED occurrence and staff/rider recording is blocked for unregistered riders. With registration disabled, on-tour riders except `EXITED`/`WITHDRAWN` count as registered.
 - Rider registration and self-record APIs derive identity from the signed-in Rider API caller. Self-records omit QR/type-code data and reuse shared sequence, prerequisite, opt-out, variant, duplicate, and cancel rules.
 

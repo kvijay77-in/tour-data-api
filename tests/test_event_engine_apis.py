@@ -312,7 +312,48 @@ def test_activity_override_null_clears_self_service_value(event_engine_setup):
     assert 'selfServiceAllowed' not in override
 
 
-def test_event_activity_and_occurrence_flags_reject_null(event_engine_setup):
+def test_occurrence_null_clears_self_service_value(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from create_occurrence import lambda_handler as create_occurrence_handler
+    from update_occurrence import lambda_handler as update_occurrence_handler
+
+    dynamodb_utils.get_tour_table('Event', MOCK_TOUR_ID).put_item(Item={
+        'eventId': 'EVT-REG', 'selfServiceAllowed': True,
+    })
+    params = {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-REG'}
+    create_response = create_occurrence_handler(
+        _event(['ADMINISTRATOR'], params, method='POST',
+               body={'date': '2026-02-10', 'seq': 1, 'selfServiceAllowed': None}), None,
+    )
+    assert create_response['statusCode'] == 201
+    assert 'selfServiceAllowed' not in json.loads(create_response['body'])['data']
+
+    params['occurrenceId'] = 'EVT-REG#2026-02-10#1'
+    for value in (False, None):
+        response = update_occurrence_handler(
+            _event(['ADMINISTRATOR'], params, method='PUT', body={'selfServiceAllowed': value}), None,
+        )
+        assert response['statusCode'] == 200
+        occurrence = json.loads(response['body'])['data']
+        if value is None:
+            assert 'selfServiceAllowed' not in occurrence
+        else:
+            assert occurrence['selfServiceAllowed'] is False
+    stored = dynamodb_utils.get_tour_table('EventOccurrence', MOCK_TOUR_ID).get_item(
+        Key={'eventId': 'EVT-REG', 'dateSeq': '2026-02-10#1'},
+    )['Item']
+    assert 'selfServiceAllowed' not in stored
+
+    invalid_response = update_occurrence_handler(
+        _event(['ADMINISTRATOR'], params, method='PUT', body={'selfServiceAllowed': 'false'}), None,
+    )
+    assert invalid_response['statusCode'] == 400
+
+
+def test_event_activity_flags_reject_null(event_engine_setup):
     import dynamodb_utils
     import event_engine
     dynamodb_utils.TABLES = {}
