@@ -8,6 +8,7 @@ import boto3
 from dynamodb_utils import get_item
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
+from self_service_policy import apply_tour_defaults
 from response import bad_request_response, internal_error_response, not_found_response, success_response
 from tour_provisioning import provision_tour_tables
 from validation import ValidationError, validate_tour_id
@@ -54,7 +55,7 @@ def lambda_handler(event, context):
             f"Tour {tour_id} re-provisioning completed with {len(provisioned_tables)} tables"
         )
         return success_response({
-            'tour': tour,
+            'tour': apply_tour_defaults(tour),
             'provisionedTables': provisioned_tables,
         })
     except Exception as e:

@@ -19,6 +19,8 @@ from models import is_cancelled_checkin_item
 from validation import validate_tour_id, validate_rider_id, ValidationError
 from dynamodb_utils import get_tour_item, query_tour_items
 from rbac import Permission, require_permission
+from rider_identity import require_own_rider_data
+from botocore.exceptions import ClientError
 
 logger = get_logger(__name__)
 
@@ -42,6 +44,11 @@ def lambda_handler(event, context):
             validate_rider_id(rider_id)
         except ValidationError as e:
             return bad_request_response(str(e))
+
+        # Rider API: a rider may only read their own check-ins (403 NOT_OWN_DATA)
+        deny = require_own_rider_data(event, tour_id, rider_id)
+        if deny:
+            return deny
 
         tour_rider = get_tour_item(
             table_type='TourRider',
@@ -73,6 +80,21 @@ def lambda_handler(event, context):
             'count': len(checkins),
         })
 
+    except ClientError as e:
+        if e.response.get('Error', {}).get('Code') == 'ResourceNotFoundException':
+            # No check-in data exists for this tour yet: return an empty list, not an error.
+            path_params = event.get('pathParameters') or {}
+            empty = {
+                'tourId': path_params.get('tourId'),
+                'riderId': path_params.get('riderId'),
+                'checkIns': [],
+                'count': 0,
+            }
+            if 'rideNo' in path_params:
+                empty['rideNo'] = int(path_params['rideNo'])
+            return success_response(empty)
+        logger.error(f"Error getting rider check-ins: {str(e)}", exc_info=True)
+        return internal_error_response("Failed to get rider check-ins")
     except Exception as e:
         logger.error(f"Error getting rider check-ins: {str(e)}", exc_info=True)
         return internal_error_response("Failed to get rider check-ins")

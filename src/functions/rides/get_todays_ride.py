@@ -12,7 +12,8 @@ sys.path.insert(0, '/opt/python')
 from logger import get_logger
 from response import success_response, not_found_response, error_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, ValidationError
-from dynamodb_utils import query_tour_items
+from dynamodb_utils import get_item, query_tour_items
+from self_service_policy import build_ride_self_service
 from models import utc_today_iso
 
 logger = get_logger(__name__)
@@ -25,7 +26,7 @@ def lambda_handler(event, context):
     Path parameter: tourId (e.g., TOT-2026)
     
     Returns:
-    - 200: Today's ride found
+    - 200: Today's ride found, with the calculated read-only ``selfService`` permissions
     - 400: Invalid tour ID
     - 404: No ride scheduled for today
     - 500: Server error
@@ -67,6 +68,8 @@ def lambda_handler(event, context):
         
         # Return first ride for today
         todays_ride = rides[0]
+        tour = get_item(table_name_env='TOUR_MASTER_TABLE', key={'tourId': tour_id})
+        todays_ride['selfService'] = build_ride_self_service(todays_ride, tour)
         
         logger.info(f"Successfully retrieved today's ride: {todays_ride.get('rideId')}")
         return success_response(todays_ride)

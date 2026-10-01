@@ -103,6 +103,8 @@ Some specific or explicit instructions that must be followed. Same will be updat
 
 ## Don'ts
 - Never add testing or debugging code in the production codebase.
+- Do not run full test suite for small changes; instead, run targeted tests to save time and resources.
+- Do not run test case repeatedly without making necessary changes or fixes. Results in wasted time and resources.
 
 
 ## Miscellaneous

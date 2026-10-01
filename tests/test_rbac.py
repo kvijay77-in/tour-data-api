@@ -9,6 +9,7 @@ Tests cover:
 """
 
 import importlib
+import importlib.util
 import os
 import json
 import pytest
@@ -60,17 +61,18 @@ def _make_event(groups=None, path_params=None, query_params=None, body=None,
 
 def _load_handler(src_subpath: str, module_name: str):
     """
-    Import (or reload) a Lambda handler module from src_subpath.
+    Load a Lambda handler module from its known source file.
 
-    Inserts the source directory into sys.path once and then reloads the
-    module to pick up the current mocked environment.  Returns the module
-    so callers can invoke ``module.lambda_handler``.
+    Uses an explicit file path (instead of a bare module-name import) so the
+    intended Lambda handler under src/functions/<src_subpath> is always
+    loaded, even when another test module has inserted a same-named script
+    (e.g. scripts/provision_tour.py) earlier in sys.path.
     """
-    path = f'src/functions/{src_subpath}'
-    if path not in sys.path:
-        sys.path.insert(0, path)
-    mod = importlib.import_module(module_name)
-    importlib.reload(mod)
+    file_path = os.path.join('src', 'functions', src_subpath, f'{module_name}.py')
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = mod
+    spec.loader.exec_module(mod)
     return mod
 
 
@@ -248,7 +250,17 @@ class TestGroupPermissionsMapping:
     def test_administrator_has_all_permissions(self):
         from rbac import GROUP_PERMISSIONS, Permission
         admin_perms = set(GROUP_PERMISSIONS['ADMINISTRATOR'])
-        assert admin_perms == set(Permission)
+        assert admin_perms == set(Permission) - {Permission.SELF_CHECKIN}
+
+    def test_self_checkin_is_rider_only(self):
+        from rbac import GROUP_PERMISSIONS, Permission
+
+        assert Permission.SELF_CHECKIN in GROUP_PERMISSIONS['RIDER']
+        assert all(
+            Permission.SELF_CHECKIN not in permissions
+            for group, permissions in GROUP_PERMISSIONS.items()
+            if group != 'RIDER'
+        )
 
     def test_guest_only_read_and_dashboard(self):
         from rbac import GROUP_PERMISSIONS, Permission
@@ -292,7 +304,7 @@ class TestGetUserPermissions:
         from rbac import get_user_permissions, Permission
         event = _make_event(groups=['ADMINISTRATOR'])
         perms = get_user_permissions(event)
-        assert perms == set(Permission)
+        assert perms == set(Permission) - {Permission.SELF_CHECKIN}
 
     def test_super_user_gets_pit_stop_manage(self):
         from rbac import get_user_permissions, Permission

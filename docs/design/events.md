@@ -1,5 +1,5 @@
 # Events and hotel logistics
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-01_
 
 The backend event engine extends ride check-ins to non-ride tour activities. It is configuration-driven: event and activity labels, ordering, scan types, optional variants, prerequisites, and occurrence-specific adjustments are data rather than hard-coded workflow branches.
 
@@ -16,9 +16,13 @@ An event definition is stored in `Event-{tourId}`. Its ordered activities are em
 ## Configuration and behavior
 
 - Event and activity definitions are editable as tour data. Initial event definitions are not required by the backend schema; event content is configured for a tour.
+- Event definitions include `registrationEnabled` and `selfServiceAllowed`, both defaulting to `false`. With registration disabled, every rider on the tour except `EXITED`/`WITHDRAWN` is considered registered; when enabled, riders register while the occurrence is `PLANNED`.
+- Self-service permission resolves per activity by occurrence activity override → occurrence → activity → event → `false`. An explicit `null` activity override clears that level and resumes inheritance.
 - Scan types are configured through `AppConfig` `ID_CODE_TYPE` values. Event-level defaults may be narrowed by each activity's `allowedTypeCodes`.
-- Occurrences support per-activity overrides for enabled state, self-service, allowed type codes, skip state, and an explanatory note.
+- Occurrences support `selfServiceAllowed` plus per-activity overrides for enabled state, self-service, allowed type codes, skip state, and an explanatory note.
 - Activity records preserve the event/activity identity and scan-time details for history. Sequence, prerequisite, assignment, and allowed-type rules are enforced by the backend.
+- Rider self-records use method `SELF_SERVICE`, derive rider identity from the Rider API login, omit `typeCode`, and reuse shared record validation/cancellation logic. Registration blocks staff and rider activity recording when enabled and the rider is unregistered.
+- `EventRegistration-{tourId}` stores occurrence/rider registrations with timestamp, actor, and `RIDER`/`STAFF` source. It is provisioned, archived, and deleted with the tour.
 - Event activity records use the existing rider personal-code/ID-code lookup model; a separate baggage identity is not introduced.
 - Hotel master records are in `Hotel-{tourId}`. `RoomAllocation-{tourId}` stores one rider allocation per stay date, including room-sharing information.
 - Hotel allocation CSV files are uploaded through a presigned S3 URL and processed asynchronously. The processor validates the entire file before applying changes; invalid files are rejected without partial allocation writes. Clients can check processing state through the upload-status API.
@@ -28,7 +32,7 @@ The `/v1/tours/{tourId}/events/bootstrap` endpoint supplies event-related data f
 
 ## Authorization
 
-The backend permissions are `EVENT_MANAGE`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_SCAN`, and `HOTEL_ALLOC_MANAGE`. The exact permission-to-group mapping and additional assignment checks are defined in [RBAC](rbac.md) and enforced in `src/layers/common/rbac.py`.
+The backend permissions are `EVENT_MANAGE`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_REGISTRATION_MANAGE`, `EVENT_SCAN`, `SELF_CHECKIN`, and `HOTEL_ALLOC_MANAGE`. `SELF_CHECKIN` is Rider API only; the permission-to-group mapping and assignment checks are defined in [RBAC](rbac.md) and enforced in `src/layers/common/rbac.py`.
 
 ## Related contracts
 

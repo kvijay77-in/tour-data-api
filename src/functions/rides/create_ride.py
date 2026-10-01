@@ -13,18 +13,21 @@ sys.path.insert(0, '/opt/python')
 from logger import get_logger
 from response import (
     success_response, bad_request_response, conflict_response,
-    not_found_response, internal_error_response
+    not_found_response, internal_error_response, validation_exception_response
 )
 from validation import (
     validate_tour_id, validate_ride_id, validate_required_fields,
     validate_iso_date, validate_time_hhmm, validate_ride_stages, validate_ride_floats,
-    ValidationError
+    validate_optional_bool, ValidationError
 )
 from dynamodb_utils import get_item, get_tour_item, put_tour_item
 from models import RideStatus, TourStatus, utc_now_iso
 from rbac import require_permission, Permission
 
 logger = get_logger(__name__)
+
+# Optional ride-level self check-in settings; absent means "follow the default".
+RIDE_SELF_SERVICE_FIELDS = ('selfCheckInAllowed', 'selfQuitRidingAllowed')
 
 
 def lambda_handler(event, context):
@@ -43,7 +46,9 @@ def lambda_handler(event, context):
         "totalDistance": 65.5,
         "flagOffTime": "08:00",
         "stages": [...],
-        "description": "Optional description"
+        "description": "Optional description",
+        "selfCheckInAllowed": true,        # optional ride-wide stage default
+        "selfQuitRidingAllowed": false     # optional, overrides the tour setting
     }
     
     Returns:
@@ -122,8 +127,11 @@ def lambda_handler(event, context):
         
         try:
             normalized_stages = validate_ride_stages(body['stages'])
+            for setting in RIDE_SELF_SERVICE_FIELDS:
+                if setting in body:
+                    validate_optional_bool(body[setting], setting)
         except ValidationError as e:
-            return bad_request_response(str(e))
+            return validation_exception_response(e)
 
         normalized_floats = None
         if 'floats' in body:
@@ -178,6 +186,8 @@ def lambda_handler(event, context):
             'openTime': body.get('openTime'),
             'closeTime': body.get('closeTime'),
             'description': body.get('description'),
+            'selfCheckInAllowed': body.get('selfCheckInAllowed'),
+            'selfQuitRidingAllowed': body.get('selfQuitRidingAllowed'),
             'createdAt': now,
             'updatedAt': now
         }

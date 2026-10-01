@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0, '/opt/python')
 
 from logger import get_logger, log_event
+from self_service_policy import apply_tour_defaults
 from response import (
     success_response, not_found_response, error_response,
     bad_request_response, internal_error_response
@@ -50,7 +51,7 @@ def lambda_handler(event, context):
             return not_found_response("Tour", tour_id)
         
         logger.info(f"Found tour: {tour_id}")
-        return success_response(tour)
+        return success_response(apply_tour_defaults(tour))
     
     except Exception as e:
         logger.error(f"Error getting tour: {str(e)}", exc_info=True)

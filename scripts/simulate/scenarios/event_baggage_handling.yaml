@@ -84,11 +84,13 @@ events:
     location: "Origin hotel"
     sequence_enforced: true
     default_allowed_type_codes: ["3", "4", "5", "6", "7", "8"]
-    allow_self_service: true
+    registration_enabled: false
+    self_service_allowed: true
     activities:
       - activity_id: ACT-001
         name: "Room pickup"
         sequence_no: 0
+        self_service_allowed: false
       - activity_id: ACT-002
         name: "Handover for loading"
         sequence_no: 1
@@ -110,6 +112,7 @@ events:
       - day_offset: 0
         seq: 1
         linked_event_id: EVT-BAGUNLOAD
+        self_service_allowed: true
         in_progress:
           status: ACTIVE
           activity_distribution:
@@ -123,7 +126,8 @@ events:
     location: "Destination hotel"
     sequence_enforced: true
     default_allowed_type_codes: ["3", "4", "5", "6", "7", "8"]
-    allow_self_service: true
+    registration_enabled: false
+    self_service_allowed: true
     activities:
       - activity_id: ACT-001
         name: "Unloaded from truck"
@@ -149,6 +153,7 @@ events:
       - day_offset: 0
         seq: 1
         linked_event_id: EVT-BAGLOAD
+        self_service_allowed: true
         in_progress:
           status: ACTIVE
           activity_distribution:

@@ -9,6 +9,7 @@ Tests the Lambda functions with the hybrid table strategy:
 import os
 import json
 import importlib
+import importlib.util
 import pytest
 import boto3
 from moto import mock_aws
@@ -45,9 +46,19 @@ def _make_auth_event(method='GET', body=None, path_params=None, groups=None):
 
 
 def _load_tours_handler(module_name):
-    """Load a tours Lambda handler after moto/env setup."""
-    module = importlib.import_module(module_name)
-    return importlib.reload(module)
+    """Load a tours Lambda handler from its known source file.
+
+    Uses an explicit file path (instead of a bare module-name import) so the
+    Lambda handler in src/functions/tours is always loaded, even when other
+    test modules insert a same-named script (e.g. scripts/provision_tour.py)
+    earlier in sys.path.
+    """
+    file_path = os.path.join('src', 'functions', 'tours', f'{module_name}.py')
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.fixture
@@ -304,7 +315,7 @@ def test_update_tour_updates_master_and_provisions_tables(dynamodb_mock):
     assert body['data']['tour']['name'] == 'Updated Test Tour'
     assert body['data']['tour']['status'] == TourStatus.PLANNING.value
     assert 'provisionedAt' in body['data']['tour']
-    assert len(body['data']['provisionedTables']) == 11
+    assert len(body['data']['provisionedTables']) == 13
 
     saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
     assert saved['name'] == 'Updated Test Tour'
@@ -390,8 +401,7 @@ def test_provision_tour_reruns_without_changing_provisioned_at(dynamodb_mock):
     assert body['success'] is True
     assert body['data']['tour']['name'] == MOCK_TOURS[0]['name']
     assert body['data']['tour']['provisionedAt'] == original_timestamp
-    assert len(body['data']['provisionedTables']) == 11
-
+    assert len(body['data']['provisionedTables']) == 13
     table = dynamodb_mock.Table('test-tour-master-table')
     saved = table.get_item(Key={'tourId': MOCK_TOUR_ID})['Item']
     assert saved == MOCK_TOURS[0]

@@ -7,7 +7,9 @@ and returned by the API endpoints.
 Table Strategy (Hybrid):
 - Shared tables (SAM-managed): RiderProfile, RiderCognitoUser, TourMaster
 - Tour-specific tables (runtime-provisioned): TourRider-{tourId}, Ride-{tourId},
-    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId}
+    CheckIn-{tourId}, User-{tourId}, Notification-{tourId}, Artifacts-{tourId},
+    Event-{tourId}, EventOccurrence-{tourId}, EventActivityLogs-{tourId},
+    EventRegistration-{tourId}, Hotel-{tourId}, RoomAllocation-{tourId}
 """
 
 from typing import Optional, List, Dict, Any
@@ -81,6 +83,12 @@ class CheckInMethod(str, Enum):
     QR_SCAN = "QR_SCAN"
     MANUAL = "MANUAL"
     FALLBACK = "FALLBACK"
+    SELF_SERVICE = "SELF_SERVICE"
+
+
+# Method value stored on rider-made check-ins and event activity records.
+# Only the Rider API self-service endpoints may write it.
+SELF_SERVICE_METHOD = CheckInMethod.SELF_SERVICE.value
 
 
 class CheckInStatus(str, Enum):
@@ -192,6 +200,7 @@ TOUR_TABLE_TYPES = [
     'Event',
     'EventOccurrence',
     'EventActivityLogs',
+    'EventRegistration',
     'Hotel',
     'RoomAllocation',
 ]
@@ -548,9 +557,13 @@ class ActivityDefinition:
     restrictToAssignedUsers: bool = True
     variantOptions: List[str] = field(default_factory=list)
     notes: str = ""
+    selfServiceAllowed: Optional[bool] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        if data.get('selfServiceAllowed') is None:
+            data.pop('selfServiceAllowed', None)
+        return data
 
 
 @dataclass
@@ -562,7 +575,8 @@ class EventDefinition:
     location: str
     sequenceEnforced: bool
     defaultAllowedTypeCodes: List[str]
-    allowSelfService: bool = False
+    registrationEnabled: bool = False
+    selfServiceAllowed: bool = False
     notificationConfig: Optional[Dict[str, Any]] = None
     activities: List[ActivityDefinition] = field(default_factory=list)
     createdAt: str = field(default_factory=utc_now_iso)
@@ -581,7 +595,7 @@ class ActivityOverride:
     """Per-activity occurrence override."""
     activityId: str
     enabled: Optional[bool] = None
-    selfServiceEnabled: Optional[bool] = None
+    selfServiceAllowed: Optional[bool] = None
     skipped: Optional[bool] = None
     allowedTypeCodes: Optional[List[str]] = None
     note: Optional[str] = None
@@ -602,7 +616,7 @@ class EventOccurrence:
     seq: int
     status: EventOccurrenceStatus = EventOccurrenceStatus.PLANNED
     activityOverrides: List[ActivityOverride] = field(default_factory=list)
-    selfServiceEnabled: bool = False
+    selfServiceAllowed: Optional[bool] = None
     linkedOccurrenceRef: Optional[str] = None
     restrictToAssignedUsers: bool = True
     startedAt: Optional[str] = None

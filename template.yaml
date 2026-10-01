@@ -1782,6 +1782,8 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
         - Statement:
             - Effect: Allow
               Action:
@@ -1789,6 +1791,8 @@ Resources:
                 - dynamodb:GetItem
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-CheckIn-*/index/*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -1812,6 +1816,8 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
         - Statement:
             - Effect: Allow
               Action:
@@ -1820,15 +1826,8 @@ Resources:
                 - dynamodb:Scan
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
-        - Statement:
-            - Effect: Allow
-              Action:
-                - cognito-idp:ListUsers
-              Resource:
-                - !If
-                  - CreateCognito
-                  - !GetAtt CognitoUserPool.Arn
-                  - !Ref CognitoUserPoolArn
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-CheckIn-*/index/*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -1866,6 +1865,78 @@ Resources:
           Properties:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel
+            Method: POST
+
+  SelfCheckInFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: self_checkin.lambda_handler
+      Description: Create a check-in for the authenticated rider
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourMasterTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref NotificationRuleTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-CheckIn-*/index/*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/self-checkins
+            Method: POST
+
+  CancelSelfCheckInFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/checkins/
+      Handler: cancel_self_checkin.lambda_handler
+      Description: Cancel an eligible check-in owned by the authenticated rider
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref TourMasterTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref NotificationRuleTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-CheckIn-*/index/*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/rides/{rideId}/self-checkins/{checkInId}/cancel
             Method: POST
 
   GetDashboardDataFunction:
@@ -1949,6 +2020,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/events
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events
+            Method: GET
 
   GetEventFunction:
     Type: AWS::Serverless::Function
@@ -1970,6 +2047,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/events/{eventId}
             Method: GET
 
@@ -2053,6 +2136,12 @@ Resources:
             ApiId: !Ref TourDataApi
             Path: /v1/tours/{tourId}/events/{eventId}/occurrences
             Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences
+            Method: GET
 
   GetEventOccurrenceFunction:
     Type: AWS::Serverless::Function
@@ -2074,6 +2163,12 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}
             Method: GET
 
@@ -2222,6 +2317,7 @@ Resources:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
       Events:
         HttpApi:
@@ -2278,6 +2374,7 @@ Resources:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-User-*'
@@ -2316,6 +2413,207 @@ Resources:
             Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/records/{recordId}/cancel
             Method: POST
 
+  CreateSelfEventRecordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: create_self_record.lambda_handler
+      Description: Create an event activity record for the authenticated rider
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref AppConfigTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref NotificationRuleTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*/index/*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records
+            Method: POST
+
+  CancelSelfEventRecordFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: cancel_self_record.lambda_handler
+      Description: Cancel an event record for the authenticated rider
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records/{recordId}/cancel
+            Method: POST
+
+  RegisterForEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: register_self.lambda_handler
+      Description: Register the authenticated rider for an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration
+            Method: POST
+
+  UnregisterFromEventFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: unregister_self.lambda_handler
+      Description: Unregister the authenticated rider from an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DeleteItem
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+      Events:
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registration
+            Method: DELETE
+
+  ListEventRegistrationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: list_registrations.lambda_handler
+      Description: List event occurrence registrations
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderProfileTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations
+            Method: GET
+
+  StaffRegisterEventRiderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: staff_register_rider.lambda_handler
+      Description: Register a tour rider for an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}
+            Method: PUT
+
+  StaffUnregisterEventRiderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/events/
+      Handler: staff_unregister_rider.lambda_handler
+      Description: Unregister a tour rider from an event occurrence
+      Layers:
+        - !Ref CommonLayer
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:DeleteItem
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+      Events:
+        HttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}
+            Method: DELETE
+
   GetEventDashboardFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -2335,6 +2633,7 @@ Resources:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
       Events:
         HttpApi:
@@ -2363,6 +2662,7 @@ Resources:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
       Events:
         HttpApi:
@@ -2381,12 +2681,18 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
         - Statement:
             - Effect: Allow
               Action:
                 - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:Scan
               Resource:
-                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*/index/*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*/index/*'
       Events:
         HttpApi:
@@ -2436,21 +2742,33 @@ Resources:
       Layers:
         - !Ref CommonLayer
       Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiderCognitoUserTable
         - Statement:
             - Effect: Allow
               Action:
                 - dynamodb:Scan
                 - dynamodb:Query
+                - dynamodb:GetItem
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-RoomAllocation-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-TourRider-*/index/*'
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventRegistration-*/index/*'
       Events:
         HttpApi:
           Type: HttpApi
           Properties:
             ApiId: !Ref TourDataApi
+            Path: /v1/tours/{tourId}/events/bootstrap
+            Method: GET
+        RiderHttpApi:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref RiderApi
             Path: /v1/tours/{tourId}/events/bootstrap
             Method: GET
 

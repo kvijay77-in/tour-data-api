@@ -1,5 +1,5 @@
 # Role-based access control
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-01_
 
 ## Source of truth
 
@@ -9,20 +9,22 @@ _Last updated: 2026-09-29_
 
 Use these exact permission values from the `Permission` enum:
 
-`READ`, `CHECKIN`, `CHECKIN_MANUAL`, `RIDE_MANAGE`, `PIT_STOP_MANAGE`, `TOUR_MANAGE`, `USER_LIST`, `DASHBOARD`, `NOTIFICATION_MANAGE`, `RIDER_EXIT`, `ARTIFACT_MANAGE`, `RIDER_SELF_UPDATE`, `EVENT_MANAGE`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_SCAN`, `HOTEL_ALLOC_MANAGE`, and `USER_MANAGE`.
+`READ`, `CHECKIN`, `CHECKIN_MANUAL`, `RIDE_MANAGE`, `PIT_STOP_MANAGE`, `TOUR_MANAGE`, `USER_LIST`, `DASHBOARD`, `NOTIFICATION_MANAGE`, `RIDER_EXIT`, `ARTIFACT_MANAGE`, `RIDER_SELF_UPDATE`, `EVENT_MANAGE`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_REGISTRATION_MANAGE`, `EVENT_SCAN`, `SELF_CHECKIN`, `HOTEL_ALLOC_MANAGE`, and `USER_MANAGE`.
 
 ## Default group mapping
 
 | Cognito group | Permissions |
 |---|---|
-| `ADMINISTRATOR` | All permissions listed above |
-| `SUPER_USER` | `READ`, `CHECKIN`, `CHECKIN_MANUAL`, `PIT_STOP_MANAGE`, `USER_LIST`, `DASHBOARD`, `RIDER_EXIT`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_SCAN`, `HOTEL_ALLOC_MANAGE` |
+| `ADMINISTRATOR` | All management permissions listed above; not Rider-only `SELF_CHECKIN` |
+| `SUPER_USER` | `READ`, `CHECKIN`, `CHECKIN_MANUAL`, `PIT_STOP_MANAGE`, `USER_LIST`, `DASHBOARD`, `RIDER_EXIT`, `EVENT_OCCURRENCE_MANAGE`, `EVENT_REGISTRATION_MANAGE`, `EVENT_SCAN`, `HOTEL_ALLOC_MANAGE` |
 | `PS_<n>_USER` | `READ`, `CHECKIN`, `PIT_STOP_MANAGE`, `DASHBOARD`, `EVENT_SCAN` |
 | `HOTEL_STAFF` | `READ`, `CHECKIN`, `EVENT_SCAN` |
 | `GUEST` | `READ`, `DASHBOARD` |
-| `RIDER` | `READ`, `RIDER_SELF_UPDATE` |
+| `RIDER` | `READ`, `RIDER_SELF_UPDATE`, `SELF_CHECKIN` |
 
 `PS_<n>_USER` is a dynamic group-name pattern. The deployment currently creates `PS_1_USER` through `PS_5_USER`; backend permission resolution recognizes valid numeric suffixes without code changes.
+
+`EVENT_REGISTRATION_MANAGE` is granted to `ADMINISTRATOR` and `SUPER_USER`, the groups that hold `EVENT_OCCURRENCE_MANAGE`. `SELF_CHECKIN` is granted only to `RIDER`.
 
 ## Pit-stop stage restrictions
 
@@ -31,6 +33,8 @@ For regular check-ins and pit-stop open/close actions, a `PS_<n>_USER` is restri
 ## Permission resolution
 
 The default effective-group priority is `ADMINISTRATOR`, `SUPER_USER`, the first pit-stop group in the claims, `HOTEL_STAFF`, then `GUEST`. When none of these priority groups is present, mapped non-priority groups use the compatibility union behavior in `get_user_permissions()`. Event scans may also be subject to tour assignment, assigned-activity, and hotel-match checks implemented by `require_event_assignment_access()`.
+
+On Rider API check-in lists and event-progress reads, path `riderId` must match the caller's login-resolved TourRider row. Mismatches or unresolved identities return `403 NOT_OWN_DATA`. Rider self-service create/cancel operations never accept a client-supplied `riderId`.
 
 ## Cognito ownership
 
