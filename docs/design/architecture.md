@@ -1,11 +1,13 @@
 # Architecture
-_Last updated: 2026-10-01_
+_Last updated: 2026-10-04_
 
 ## Purpose and ownership
 
-`tour-data-api` is the serverless backend for the Cycling Tour Management Platform. It is the source of truth for API contracts, authorization, data storage, and AWS infrastructure for the entire platform. This includes both the management and rider Amazon Cognito user pools and the AWS resources used by the management and rider apps.
+`tour-data-api` is the serverless backend for the Cycling Tour Management Platform. It is the source of truth for API contracts, authorization, data storage, and backend AWS infrastructure used by the management and rider apps, including both Amazon Cognito user pools. The management app repository separately owns the management-web static hosting stack and its bootstrap, infrastructure, and publisher identities; this repository does not provision that hosting stack.
 
 Deployments are isolated by AWS account and environment. The backend exposes authenticated API Gateway **HTTP APIs**; Lambda functions implement the business logic, DynamoDB stores structured data, and S3 stores private files.
+
+Both repositories use SAM for their own independent resource lifecycles. Before management-web CORS is enabled, the backend deployment helper reads the app hosting stack's `SiteUrl` output using read-only CloudFormation access and passes the validated origin list into the backend stack; no resources or stack ownership are shared.
 
 ## Request and event flow
 

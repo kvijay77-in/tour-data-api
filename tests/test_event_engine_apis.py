@@ -804,6 +804,28 @@ def test_event_read_endpoints_require_read_permission(event_engine_setup):
         assert response['statusCode'] == 403
 
 
+def test_event_bootstrap_supports_conditional_requests(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from get_bootstrap import lambda_handler as get_bootstrap_handler
+
+    event = _event(['ADMINISTRATOR'], {'tourId': MOCK_TOUR_ID})
+    response = get_bootstrap_handler(event, None)
+
+    assert response['statusCode'] == 200
+    etag = response['headers']['ETag']
+    assert etag
+
+    conditional_event = _event(['ADMINISTRATOR'], {'tourId': MOCK_TOUR_ID})
+    conditional_event['headers'] = {'if-none-match': etag}
+    not_modified = get_bootstrap_handler(conditional_event, None)
+
+    assert not_modified['statusCode'] == 304
+    assert not_modified['body'] == ''
+
+
 def test_create_activity_record_allows_opt_out_without_type_code(event_engine_setup):
     import dynamodb_utils
     dynamodb_utils.TABLES = {}

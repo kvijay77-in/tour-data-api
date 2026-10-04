@@ -1,11 +1,15 @@
 # Infrastructure guide
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-04_
 
 ## Ownership
 
-This repository owns and manages **all AWS infrastructure for the entire Cycling Tour Management Platform**, including resources used by both the management and rider apps. This includes both Cognito user pools, API Gateway HTTP APIs, Lambda functions and layers, DynamoDB tables, S3 buckets, EventBridge rules, SQS dead-letter queues, IAM roles, and CloudWatch monitoring. App repositories do not own platform AWS infrastructure.
+This repository owns the backend AWS infrastructure for the Cycling Tour Management Platform, including both Cognito user pools, API Gateway HTTP APIs, Lambda functions and layers, DynamoDB tables, private file buckets, EventBridge rules, SQS dead-letter queues, backend IAM roles, and CloudWatch monitoring. The management app repository owns its separate SAM static web-hosting stack and distinct bootstrap, infrastructure, and publisher identities. The existing account-level GitHub OIDC provider remains under its current stack ownership; the app publisher uses a separate scoped role. The app hosting stack does not replace or own backend resources.
 
 The primary infrastructure definition is `/template.yaml`; the GitHub OIDC bootstrap is `cloudformation/github-oidc.yaml`. Runtime tour-table creation and cleanup are managed by `src/layers/common/tour_provisioning.py` and the scripts in `scripts/`.
+
+### Management web origin inputs
+
+`ManagementWebAllowedOrigins` is an optional comma-separated list of complete browser origins. `scripts/deploy_backend.py` resolves the hosting stack's `SiteUrl` read-only and combines it with explicitly approved additions and origins already stored on the backend stack. Its inputs are the app stack name and region, expected backend account/region, enable/disable approval, and optional additional origins; the default hosting stack names are `tour-mgmt-web-dev` and `tour-mgmt-web-prod`. The `Project` and `Environment` tags and stable stack status are validated before SAM deployment. Origins are scheme/host/port only; paths, wildcards, malformed values, insecure Production origins, and unapproved localhost values are rejected. Empty configuration preserves the existing management API wildcard behavior and does not configure S3 CORS. Enabled configuration applies separately to `TourDataApi` and the private artifact bucket; it does not narrow `RiderApi` or grant API/S3 authorization.
 
 ## Tagging
 

@@ -1,5 +1,5 @@
 # Notifications design
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-04_
 
 This document defines the approved notification framework for `tour-data-api`. It is the backend source of truth for notification data model, routing, APIs, and push delivery.
 
@@ -291,7 +291,7 @@ Design remains low cost (DynamoDB on-demand + Lambda + API Gateway + Expo push),
 Push delivery requires post-deploy setup beyond table/function creation:
 
 1. Set Expo access tokens into SSM SecureString parameters used by push sender.
-2. Seed `NotificationRule` and `AppConfig` defaults (`NOTIFICATION/LIMITS`). `make deploy` does this automatically; other deploy paths (CI, `make deploy-test/prod`, plain `sam deploy`) require running the seed targets.
+2. Seed `NotificationRule` and `AppConfig` defaults (`NOTIFICATION/LIMITS`). `make deploy` does this automatically; other deploy paths (CI and `make deploy-test/prod`) require running the seed targets.
 3. Ensure each tour's `Notification-{tourId}` stream is connected to the push sender. Tour provisioning (API and CLI) does this automatically; tours provisioned before push setup need `PUT /v1/tours/{tourId}/provision` once.
 4. Ensure client delivery credentials are configured in mobile delivery stack:
    - Apple APNs for iOS builds,

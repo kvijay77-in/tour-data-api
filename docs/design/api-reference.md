@@ -1,5 +1,5 @@
 # API reference
-_Last updated: 2026-10-01_
+_Last updated: 2026-10-04_
 
 [← Architecture](architecture.md)
 
@@ -14,6 +14,14 @@ This is the single source of truth for backend HTTP paths and request/response c
 **Authentication:** JWT tokens from Cognito User Pool
 
 **Authorization:** Role-based access control (RBAC) enforced in Lambda
+
+## Management Browser Integration
+
+The management web client uses the existing management Cognito public app client and authenticated management HTTP API. The checked-in template's generated client has no secret and permits `USER_PASSWORD_AUTH` and refresh-token auth; deployments that supply an existing pool/client must be checked separately. CORS does not replace Cognito JWT validation or Lambda RBAC.
+
+With `ManagementWebAllowedOrigins` empty, the checked-in `TourDataApi` retains its existing wildcard origin/header behavior, methods, and 600-second preflight cache; the artifact bucket has no CORS rule. With the parameter populated, `TourDataApi` uses the complete comma-separated origin list, permits `Authorization`, `Content-Type`, and `If-None-Match`, retains its methods/cache, and exposes `ETag` when a response includes it. The event API's handler returns an ETag on successful responses and on matching conditional requests as a 304; the template change makes that header readable to an allowed browser origin. The separately configured `RiderApi` is unchanged. These are checked-in template/handler facts, not verification of the deployed Dev stack. The Dev region has been confirmed by the owner as `ap-south-1`; the account, stack, API stage, deployed CORS, and deployed pool/client remain unverified.
+
+The backend deployment helper discovers and validates the exact HTTPS origin from the app hosting stack's `SiteUrl` output and merges only approved additional origins and any existing backend allowlist. Calls without an `Origin` header and existing native clients retain their HTTP/auth contracts. An explicit browser allowlist changes browser response access only; it does not grant API or S3 permissions. The private artifact bucket gets a separate CORS rule for presigned browser `PUT` requests with the signed `Content-Type`; it does not add public access or an API bearer header. No management-web photo fetch flow has been established, so photo-bucket CORS remains unchanged.
 
 ## Core Principles
 
@@ -358,7 +366,7 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 - **Headers:** every request needs `Authorization: Bearer <Cognito JWT>`. Requests with a body also need `Content-Type: application/json`.
 - **Responses:** examples show only the `data` value of the success envelope (`{"success": true, "data": ..., "timestamp": ...}`) along with the HTTP status. Fields that hold `null` in DynamoDB come back as `null`. Optional fields that were never set are left out.
 - **IDs containing `#`:** `occurrenceId` and event `recordId` must be URL-encoded (`#` → `%23`) when used as path parameters. Check-in IDs are server-generated UUIDs and do not require encoding. For example, `EVT-BAGLOAD#2026-02-12#1` becomes `EVT-BAGLOAD%232026-02-12%231`.
-- **Conditional GETs:** endpoints that return an `ETag` header (config, ride dashboard, dashboard progress, rider ride details, event bootstrap) accept `If-None-Match: <ETag>`. If the ETag matches, they return `304 Not Modified` with an empty body.
+- **Conditional GETs:** endpoints that return an `ETag` header (config, ride dashboard, dashboard progress, rider ride details, event bootstrap) accept `If-None-Match: <ETag>`. If the ETag matches, they return `304 Not Modified` with an empty body. The event bootstrap implementation and a regression test cover the `200`/`ETag` then matching `304` behavior. Browser clients must be allowed to send `If-None-Match` and the management API CORS response must expose `ETag` for JavaScript to read it; the checked-in management API CORS configuration currently does not expose that header.
 - **Presigned URLs** are shortened with `...`. When uploading, send the same `Content-Type` that was used to sign the URL.
 - **`{ ... }` placeholders** stand for an object shown in full in another example. The linked example is noted next to it.
 

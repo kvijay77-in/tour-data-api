@@ -1,5 +1,5 @@
 # Tour artifact design
-_Last updated: 2026-10-01_
+_Last updated: 2026-10-04_
 
 ## Storage model
 
@@ -33,6 +33,8 @@ sequenceDiagram
 ```
 
 The API validates the tour, ride (when applicable), configured artifact category, and supported content type before issuing a presigned URL. Artifact deletion removes the S3 object and the corresponding metadata item. Read endpoints can filter by `artifactId` and accept an expiry duration within the API's supported range.
+
+The management web upload flow uses a browser `PUT` to the presigned URL with the same `Content-Type` used to sign it; it does not send the API `Authorization` header to S3. A valid presigned URL authorizes the object operation but does not satisfy browser CORS, which is configured separately on the private artifact bucket. When the backend's `ManagementWebAllowedOrigins` parameter is populated, the template enables only `PUT` for those origins and `Content-Type`, with a 600-second preflight cache. The empty parameter leaves the existing bucket CORS configuration absent. The deployed setting has not been verified. The app handoff identifies no photo-bucket fetch/upload flow, so photo CORS is not assumed to be required.
 
 Rider API reads use the same `READ` permission and presigned URL behavior as management reads. Each manifest entry returns `artifactId`, `s3Key`, `contentType`, `version`, `title`, `downloadUrl`, `expiresIn`, `createdAt`, and `updatedAt`. `title` is the configured display name/description; category is implied by the tour or ride endpoint, and file name is the final path component of `s3Key` (there are no separate `category` or `fileName` response properties).
 

@@ -28,20 +28,20 @@ validate: ## Validate SAM template
 	sam validate --lint
 
 deploy: build ## Build and deploy to default environment
-	sam deploy; RC=$$?; if [ $$RC -eq 0 ] || [ $$RC -eq 1 ]; then $(MAKE) seed-app-config; $(MAKE) seed-notification-rules; else exit $$RC; fi
+	$(PYTHON) scripts/deploy_backend.py --config-env default --no-fail-on-empty-changeset && $(MAKE) seed-app-config && $(MAKE) seed-notification-rules
 
 deploy-dev: build ## Deploy to development environment
-	sam deploy --config-env default
+	$(PYTHON) scripts/deploy_backend.py --config-env default --no-fail-on-empty-changeset
 
 deploy-test: build ## Deploy to test environment
-	sam deploy --config-env test
+	$(PYTHON) scripts/deploy_backend.py --config-env test --no-fail-on-empty-changeset
 
 deploy-prod: build ## Deploy to production environment (with confirmation)
 	@echo "WARNING: Deploying to PRODUCTION!"
 	@read -p "Are you sure? [y/N] " -n 1 -r; \
 	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		sam deploy --config-env prod; \
+	if [ "$$REPLY" = "y" ] || [ "$$REPLY" = "Y" ]; then \
+		$(PYTHON) scripts/deploy_backend.py --config-env prod --no-fail-on-empty-changeset; \
 	fi
 
 local-api: build ## Start API locally
@@ -100,12 +100,12 @@ cleanup-tour-tables: ## Delete tour-specific DynamoDB tables (dry run by default
 seed-app-config: ## Seed AppConfig table defaults (usage: make seed-app-config [STACK_NAME=dev] [REGION=ap-south-1])
 	$(PYTHON) scripts/seed_app_config.py \
 		--table-name $(or $(STACK_NAME),dev)-AppConfig \
-		--region $(or $(REGION),ap-south-1)
+		--region $(or $(REGION),$(AWS_REGION),ap-south-1)
 
 seed-notification-rules: ## Seed NotificationRule table defaults
 	$(PYTHON) scripts/seed_notification_rules.py \
 		--table-name $(or $(STACK_NAME),dev)-NotificationRule \
-		--region $(or $(REGION),ap-south-1)
+		--region $(or $(REGION),$(AWS_REGION),ap-south-1)
 
 setup-notification-push: ## Configure SSM Expo tokens and optional notification seeds
 	$(PYTHON) scripts/setup_notification_push.py \
