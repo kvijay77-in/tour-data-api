@@ -14,6 +14,7 @@ on:
           - prod
 
 env:
+  AWS_REGION: us-east-1
   SAM_CLI_VERSION: 1.105.0
 
 jobs:
@@ -97,31 +98,10 @@ jobs:
     environment:
       name: development
       url: ${{ steps.deploy.outputs.api_endpoint }}
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION_DEV }}
-      EXPECTED_BACKEND_REGION: ${{ vars.EXPECTED_BACKEND_REGION_DEV }}
-      EXPECTED_AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID_DEV }}
-      MANAGEMENT_WEB_ENABLED: ${{ vars.MANAGEMENT_WEB_ENABLED_DEV || 'false' }}
-      MANAGEMENT_WEB_STACK_NAME: ${{ vars.MANAGEMENT_WEB_STACK_NAME_DEV || 'tour-mgmt-web-dev' }}
-      MANAGEMENT_WEB_STACK_REGION: ${{ vars.MANAGEMENT_WEB_STACK_REGION_DEV || vars.AWS_REGION_DEV }}
-      MANAGEMENT_WEB_ADDITIONAL_ORIGINS: ${{ vars.MANAGEMENT_WEB_ADDITIONAL_ORIGINS_DEV }}
-      MANAGEMENT_WEB_PROJECT_TAG: ${{ vars.MANAGEMENT_WEB_PROJECT_TAG || 'tour-mgmt-app' }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Validate deployment target configuration
-        run: |
-          test -n "$AWS_REGION" || { echo "AWS_REGION_DEV must be configured"; exit 1; }
-          test -n "$EXPECTED_BACKEND_REGION" || { echo "EXPECTED_BACKEND_REGION_DEV must be configured"; exit 1; }
-          test -n "$EXPECTED_AWS_ACCOUNT_ID" || { echo "AWS_ACCOUNT_ID_DEV must be configured"; exit 1; }
-          test "$AWS_REGION" = "$EXPECTED_BACKEND_REGION" || { echo "Backend region configuration mismatch"; exit 1; }
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -139,8 +119,8 @@ jobs:
         id: deploy
         run: |
           sam build
-          python scripts/deploy_backend.py --config-env default --no-confirm-changeset --no-fail-on-empty-changeset
-          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name dev --region "$AWS_REGION" --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
+          sam deploy --config-env default --no-confirm-changeset --no-fail-on-empty-changeset
+          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name dev --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "api_endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
       
       - name: Run smoke tests
@@ -159,31 +139,10 @@ jobs:
     environment:
       name: test
       url: ${{ steps.deploy.outputs.api_endpoint }}
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION_TEST }}
-      EXPECTED_BACKEND_REGION: ${{ vars.EXPECTED_BACKEND_REGION_TEST }}
-      EXPECTED_AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID_TEST }}
-      MANAGEMENT_WEB_ENABLED: ${{ vars.MANAGEMENT_WEB_ENABLED_TEST || 'false' }}
-      MANAGEMENT_WEB_STACK_NAME: ${{ vars.MANAGEMENT_WEB_STACK_NAME_TEST || 'tour-mgmt-web-test' }}
-      MANAGEMENT_WEB_STACK_REGION: ${{ vars.MANAGEMENT_WEB_STACK_REGION_TEST || vars.AWS_REGION_TEST }}
-      MANAGEMENT_WEB_ADDITIONAL_ORIGINS: ${{ vars.MANAGEMENT_WEB_ADDITIONAL_ORIGINS_TEST }}
-      MANAGEMENT_WEB_PROJECT_TAG: ${{ vars.MANAGEMENT_WEB_PROJECT_TAG || 'tour-mgmt-app' }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Validate deployment target configuration
-        run: |
-          test -n "$AWS_REGION" || { echo "AWS_REGION_TEST must be configured"; exit 1; }
-          test -n "$EXPECTED_BACKEND_REGION" || { echo "EXPECTED_BACKEND_REGION_TEST must be configured"; exit 1; }
-          test -n "$EXPECTED_AWS_ACCOUNT_ID" || { echo "AWS_ACCOUNT_ID_TEST must be configured"; exit 1; }
-          test "$AWS_REGION" = "$EXPECTED_BACKEND_REGION" || { echo "Backend region configuration mismatch"; exit 1; }
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -201,8 +160,8 @@ jobs:
         id: deploy
         run: |
           sam build
-          python scripts/deploy_backend.py --config-env test --no-confirm-changeset --no-fail-on-empty-changeset
-          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name test --region "$AWS_REGION" --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
+          sam deploy --config-env test --no-confirm-changeset --no-fail-on-empty-changeset
+          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name test --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "api_endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
       
       - name: Run integration tests
@@ -221,31 +180,10 @@ jobs:
     environment:
       name: production
       url: ${{ steps.deploy.outputs.api_endpoint }}
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION_PROD }}
-      EXPECTED_BACKEND_REGION: ${{ vars.EXPECTED_BACKEND_REGION_PROD }}
-      EXPECTED_AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID_PROD }}
-      MANAGEMENT_WEB_ENABLED: ${{ vars.MANAGEMENT_WEB_ENABLED_PROD || 'false' }}
-      MANAGEMENT_WEB_STACK_NAME: ${{ vars.MANAGEMENT_WEB_STACK_NAME_PROD || 'tour-mgmt-web-prod' }}
-      MANAGEMENT_WEB_STACK_REGION: ${{ vars.MANAGEMENT_WEB_STACK_REGION_PROD || vars.AWS_REGION_PROD }}
-      MANAGEMENT_WEB_ADDITIONAL_ORIGINS: ${{ vars.MANAGEMENT_WEB_ADDITIONAL_ORIGINS_PROD }}
-      MANAGEMENT_WEB_PROJECT_TAG: ${{ vars.MANAGEMENT_WEB_PROJECT_TAG || 'tour-mgmt-app' }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Validate deployment target configuration
-        run: |
-          test -n "$AWS_REGION" || { echo "AWS_REGION_PROD must be configured"; exit 1; }
-          test -n "$EXPECTED_BACKEND_REGION" || { echo "EXPECTED_BACKEND_REGION_PROD must be configured"; exit 1; }
-          test -n "$EXPECTED_AWS_ACCOUNT_ID" || { echo "AWS_ACCOUNT_ID_PROD must be configured"; exit 1; }
-          test "$AWS_REGION" = "$EXPECTED_BACKEND_REGION" || { echo "Backend region configuration mismatch"; exit 1; }
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -263,8 +201,8 @@ jobs:
         id: deploy
         run: |
           sam build
-          python scripts/deploy_backend.py --config-env prod --no-confirm-changeset --no-fail-on-empty-changeset
-          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name prod --region "$AWS_REGION" --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
+          sam deploy --config-env prod --no-confirm-changeset --no-fail-on-empty-changeset
+          API_ENDPOINT=$(aws cloudformation describe-stacks --stack-name prod --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" --output text)
           echo "api_endpoint=$API_ENDPOINT" >> $GITHUB_OUTPUT
       
       - name: Run smoke tests

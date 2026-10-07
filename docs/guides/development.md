@@ -94,10 +94,12 @@ make build
 ### Deploy
 
 ```bash
-make deploy-dev
+sam deploy
+# or
+make deploy
 ```
 
-Before deployment, set `AWS_REGION`, `EXPECTED_BACKEND_REGION`, and `EXPECTED_AWS_ACCOUNT_ID` for the approved Dev account. `make deploy-dev` builds and runs the shared origin/account preflight before SAM; see [Management web backend pairing](deployment.md#management-web-backend-pairing) for optional web CORS configuration. Use the Make wrapper rather than raw `sam deploy` so stored management origins and all configured SAM parameters are preserved.
+SAM shows a summary of resources to be created/updated and asks for confirmation. Type `y` to proceed.
 
 > **First deployment** creates everything from scratch and takes slightly longer (~5-10 min). Subsequent deployments only update what changed.
 

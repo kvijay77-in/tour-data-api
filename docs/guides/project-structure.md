@@ -1,5 +1,5 @@
 # Project structure
-_Last updated: 2026-10-04_
+_Last updated: 2026-10-01_
 
 The main source folders and application entry points are:
 
@@ -18,7 +18,6 @@ tour-data-api/
 │   └── requirements/
 ├── events/
 ├── scripts/
-│   ├── deploy_backend.py
 │   └── simulate/
 ├── src/
 │   ├── functions/
@@ -49,7 +48,7 @@ tour-data-api/
 - `src/layers/common/` contains shared Python modules, including `checkin_service.py`, `event_engine.py`, `event_registration.py`, `event_self_service.py`, `notification_service.py`, `ownership.py`, `profile_schema.py`, `rbac.py`, `rider_identity.py`, `self_checkin_rules.py`, `self_service_policy.py`, and `tour_provisioning.py`.
 - `template.yaml` defines the API Gateway HTTP APIs, Lambda functions, shared DynamoDB resources, both Cognito pools, S3 buckets, IAM roles, and event-driven processing infrastructure.
 - `src/layers/common/tour_provisioning.py` defines tour-specific DynamoDB table schemas; `scripts/provision_tour.py` and the tour API use that shared table specification.
-- `events/` contains sample payloads for local Lambda invocation. `scripts/deploy_backend.py` validates deployment account/region and resolves management-web CORS origins before SAM deploys; `scripts/simulate/` contains data-generation tools and scenario files.
+- `events/` contains sample payloads for local Lambda invocation. `scripts/simulate/` contains data-generation tools and scenario files.
 - `tests/` contains pytest tests and shared fixtures. See [Testing](../../tests/README.md).
 - `docs/` is organized by documentation type. `docs/README.md` is the documentation index; requirements, design, and guides are kept in their respective folders. `docs/misc/` contains historical reference material only.
 

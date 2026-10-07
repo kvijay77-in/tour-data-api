@@ -1,5 +1,5 @@
 # Deployment Guide
-_Last updated: 2026-10-04_
+_Last updated: 2026-10-01_
 
 [← Back to README](../README.md)
 
@@ -113,11 +113,24 @@ After successful deployment, the API endpoint URL appears in the deploy job outp
 For deploying test and prod environments from your terminal. Dev environment deployment is covered in the [Development Guide](development.md#deploy-to-dev-environment).
 
 ```bash
+# Build first
+sam build
+
+# Deploy to test
+sam deploy --config-env test
+
+# Deploy to production
+sam deploy --config-env prod
+```
+
+Using Make shortcuts:
+
+```bash
 make deploy-test     # Build and deploy to test
 make deploy-prod     # Build and deploy to prod (asks for confirmation)
 ```
 
-Set `AWS_REGION`, `EXPECTED_BACKEND_REGION`, and `EXPECTED_AWS_ACCOUNT_ID` for the selected target before invoking Make. These wrappers use the same fail-closed origin discovery and complete parameter merge as CI; direct `sam deploy` is not the supported origin-aware release path. See [AWS credentials and region](#aws-credentials-and-region) and [Management web backend pairing](#management-web-backend-pairing).
+> **Prerequisites**: AWS CLI configured for the target account and region with permission to deploy. See [AWS credentials and region](#aws-credentials-and-region).
 
 ---
 
@@ -152,37 +165,7 @@ aws sts get-caller-identity --profile <profile-name>
 
 For temporary credentials from an assumed role, set the returned `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` in the current shell. Do not commit credentials or place secrets directly in command history. GitHub deployments should use OIDC rather than long-lived keys.
 
-Set `AWS_REGION`, `EXPECTED_BACKEND_REGION`, and `EXPECTED_AWS_ACCOUNT_ID` for the target backend environment before using a Make deployment target. The deployment preflight verifies that the configured region agrees and that the active AWS identity has the expected account ID. GitHub Actions reads environment-specific `AWS_REGION_*`, `EXPECTED_BACKEND_REGION_*`, and `AWS_ACCOUNT_ID_*` repository variables; it no longer hardcodes a backend region. Notification Make targets use the deployment region when provided, otherwise retain their `ap-south-1` default.
-
-## Management web backend pairing
-
-The management web site is hosted by the management app repository, which owns its separate SAM hosting/publishing stacks. This backend continues to own the management Cognito pool/client, HTTP API, and private file buckets. The repositories deploy independently: the backend reads the app hosting stack's `SiteUrl` output through read-only CloudFormation lookup; neither an API URL nor manually copied CloudFront URL is used as the browser origin. Initial pairing requires the app hosting infrastructure to exist before enabling web CORS.
-
-The owner confirmed the intended Dev backend region is `ap-south-1`, but the deployed Dev account, stack name, API stage, management pool/client, live CORS configuration, and app hosting output remain unverified. Confirm the actual backend account and region before deployment; if the deployed backend region differs, resolve the pairing explicitly without migrating or recreating backend resources. Hosting stack lookups use their separately configured region and never change the backend deployment region.
-
-`scripts/deploy_backend.py`, used by Make and the current CI deploy jobs, checks `aws sts get-caller-identity`, resolves the app stack's `SiteUrl`, verifies its stable status and `Project`/`Environment` tags, then merges the discovered origin and explicitly approved additions with all SAM-configured parameters. It also retains origins already stored on the backend stack; removing them requires a reviewed configuration change. The `tour-mgmt-web-dev` and `tour-mgmt-web-prod` names are defaults, not lookups guessed from the backend stack name.
-
-For a local deployment, set the target variables in the shell or approved AWS profile, for example:
-
-```bash
-export AWS_PROFILE=<approved-dev-profile>
-export AWS_REGION=ap-south-1
-export EXPECTED_BACKEND_REGION=ap-south-1
-export EXPECTED_AWS_ACCOUNT_ID=<approved-12-digit-account-id>
-export MANAGEMENT_WEB_ENABLED=true
-export MANAGEMENT_WEB_STACK_NAME=tour-mgmt-web-dev
-export MANAGEMENT_WEB_STACK_REGION=ap-south-1
-export MANAGEMENT_WEB_ADDITIONAL_ORIGINS=http://localhost:5173
-make deploy-dev
-```
-
-`MANAGEMENT_WEB_ENABLED` defaults to `false`; when no origin list has previously been configured, disabled deployments need no app hosting stack and retain the management API wildcard policy and absent S3 CORS rule. To enable browser CORS, provide the hosting stack name/region and only owner-approved extra origins. Dev may include explicitly approved `http://localhost:<port>` origins; Production accepts HTTPS non-local origins only. Missing/wrong-account/wrong-tag/in-progress stacks, missing `SiteUrl`, invalid origins, or region mismatches stop deployment before SAM runs. The resolver does not silently fall back to wildcard.
-
-The app owner should deploy app infrastructure first, then run the independent backend deployment with origin discovery enabled, and finally publish the app. For GitHub deployments, configure environment-specific account/region variables and `MANAGEMENT_WEB_ENABLED_DEV|PROD`, `MANAGEMENT_WEB_STACK_NAME_DEV|PROD`, `MANAGEMENT_WEB_STACK_REGION_DEV|PROD`, and optional `MANAGEMENT_WEB_ADDITIONAL_ORIGINS_DEV|PROD`. `MANAGEMENT_WEB_PROJECT_TAG` defaults to `tour-mgmt-app`; override it only to match the approved app hosting stack tag. Test remains no-web unless its corresponding variable is explicitly enabled. Do not put credentials, account IDs, or live origins in tracked documentation.
-
-For an intentional transition back to no-web mode, set `MANAGEMENT_WEB_DISABLE_APPROVED=true` after the owner approves it; otherwise the existing allowlist is retained even if `MANAGEMENT_WEB_ENABLED=false`. Ordinary deployments merge rather than replace approved browser origins and SAM's existing Cognito and other parameter overrides. `--no-fail-on-empty-changeset` treats an unchanged stack as a successful no-op; actual lookup or SAM failures stop subsequent seed actions. Recover from an origin/CORS error by correcting the approved stack/region/origin settings and redeploying; rollback is an explicit, reviewed parameter change that preserves the complete approved list, not a web artifact rollback.
-
-When enabled, the management HTTP API uses the complete origin list, retains its methods and 600-second preflight cache, permits `Authorization`, `Content-Type`, and `If-None-Match`, and exposes `ETag` when the response sends it. The artifact bucket separately permits browser `PUT` with the signed `Content-Type`; it remains private and the presigned request must not carry the API bearer token. The photo bucket receives no CORS change because no CORS-dependent management photo flow has been established. CORS does not bypass JWT/RBAC or S3 signature/expiry checks. The rider API policy and native app authentication flows remain unchanged. Live Dev/browser/private-file acceptance is still pending.
+Choose the target stack's AWS region and verify the active account before deployment. The GitHub Actions workflow currently sets `AWS_REGION=us-east-1`; Make targets that seed or configure notification resources default to `ap-south-1`, so set `REGION=<your-region>` when needed.
 
 ## Cognito pools, test users, and groups
 
@@ -435,7 +418,7 @@ Default parameter paths (when not overridden in SAM parameters):
 
 ### 2) Seed notification defaults (required for complete framework behavior)
 
-`make deploy` already runs both seed targets automatically after a successful deployment. Run them manually only when deploying via `make deploy-test`, `make deploy-prod`, or GitHub Actions (the CI pipeline does not seed). Both seeds are insert-only and safe to re-run; existing rules/config entries are not overwritten.
+`make deploy` already runs both seed targets automatically after `sam deploy`. Run them manually only when deploying via `make deploy-test`, `make deploy-prod`, plain `sam deploy`, or GitHub Actions (the CI pipeline does not seed). Both seeds are insert-only and safe to re-run; existing rules/config entries are not overwritten.
 
 ```bash
 make seed-app-config STACK_NAME=dev
