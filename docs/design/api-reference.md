@@ -3282,6 +3282,10 @@ In addition to the standard `400`/`401`/`403`/`404`/`409`/`500` statuses above, 
 
 Endpoint-specific authorization requirements appear in the contract tables below. Exact permission names and the current Cognito group mapping are maintained in [RBAC](rbac.md) and `src/layers/common/rbac.py`. Some operations, including pit-stop actions and event scans, also enforce stage or tour-assignment constraints in the handler.
 
+### Management web browser CORS
+
+When the `ManagementWebAllowedOrigins` stack parameter is set (comma-separated origins), the management HTTP API allows only those exact origins, the headers `Authorization`, `Content-Type`, and `If-None-Match`, and exposes `ETag`. Conditional event reads use `If-None-Match` and return `304` when unchanged. When the parameter is empty, the existing wildcard policy applies. Origin-less native app calls and the rider HTTP API are unaffected.
+
 ## Request Validation
 
 All requests are validated at three levels: API Gateway auth, Lambda RBAC, and handler-level schema/business validation.

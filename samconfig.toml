@@ -3,6 +3,7 @@ version = 0.1
 [default]
 [default.global.parameters]
 stack_name = "dev"
+region = "ap-south-1"
 
 [default.build.parameters]
 cached = true
@@ -15,10 +16,12 @@ lint = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
+# Don't fail on empty chageset.
+fail_on_empty_changeset = false
 # Cognito User Pool is auto-created by default. No need to provide CognitoUserPoolArn/CognitoAppClientId
 # unless you want to use an existing User Pool.
 # parameter_overrides = "Environment=dev"
-parameter_overrides = "Environment=dev"
+parameter_overrides = "Environment=dev ManagementWebAllowedOrigins=\"https://d2jabz8s44foya.cloudfront.net,http://localhost:8081\""
 
 [default.package.parameters]
 resolve_s3 = true
@@ -36,6 +39,7 @@ warm_containers = "EAGER"
 [test]
 [test.global.parameters]
 stack_name = "test"
+region = "ap-south-1"
 
 [test.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
@@ -49,6 +53,7 @@ parameter_overrides = "Environment=test"
 [prod]
 [prod.global.parameters]
 stack_name = "prod"
+region = "ap-south-1"
 
 [prod.deploy.parameters]
 capabilities = "CAPABILITY_IAM"

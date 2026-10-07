@@ -116,6 +116,11 @@ Parameters:
     Type: String
     Description: SSM parameter path for Expo management app token
     Default: ''
+
+  ManagementWebAllowedOrigins:
+    Type: String
+    Description: Comma-separated management web browser origins. Empty keeps the wildcard policy.
+    Default: ''
   
 
 
@@ -124,6 +129,7 @@ Conditions:
   CreateCognito: !Equals [!Ref CognitoUserPoolArn, '']
   HasExpoTokenParamRider: !Not [!Equals [!Ref ExpoTokenParamRider, '']]
   HasExpoTokenParamMgmt: !Not [!Equals [!Ref ExpoTokenParamMgmt, '']]
+  HasManagementWebOrigins: !Not [!Equals [!Ref ManagementWebAllowedOrigins, '']]
 
 
 Resources:
@@ -345,18 +351,17 @@ Resources:
                   - UserPoolId: !Select [1, !Split ['/', !Select [5, !Split [':', !Ref CognitoUserPoolArn]]]]
               audience:
                 - !If [CreateCognito, !Ref CognitoUserPoolClient, !Ref CognitoAppClientId]
-      CorsConfiguration:
-        AllowOrigins:
-          - '*'  # TODO: Restrict to specific domains in production
-        AllowHeaders:
-          - '*'
-        AllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
-          - OPTIONS
-        MaxAge: 600
+      CorsConfiguration: !If
+        - HasManagementWebOrigins
+        - AllowOrigins: !Split [',', !Ref ManagementWebAllowedOrigins]
+          AllowHeaders: [Authorization, Content-Type, If-None-Match]
+          AllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
+          ExposeHeaders: [ETag]
+          MaxAge: 600
+        - AllowOrigins: ['*']
+          AllowHeaders: ['*']
+          AllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
+          MaxAge: 600
       Tags:
         Name: !Sub '${AWS::StackName}-api'
         Project: tour-data-api
@@ -1972,7 +1977,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/functions/checkins/
-      Handler: get_event_dashboard_progress.lambda_handler
+      Handler: get_dashboard_progress.lambda_handler
       Description: Get lightweight dashboard progress payload for a ride
       Timeout: 60
       Layers:
@@ -2618,7 +2623,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/functions/events/
-      Handler: get_dashboard.lambda_handler
+      Handler: get_event_dashboard.lambda_handler
       Description: Get event dashboard data
       Layers:
         - !Ref CommonLayer
@@ -2647,7 +2652,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/functions/events/
-      Handler: get_dashboard_progress.lambda_handler
+      Handler: get_event_dashboard_progress.lambda_handler
       Description: Get event dashboard progress data
       Layers:
         - !Ref CommonLayer
@@ -4520,6 +4525,16 @@ Resources:
       NotificationConfiguration:
         EventBridgeConfiguration:
           EventBridgeEnabled: true
+      CorsConfiguration: !If
+        - HasManagementWebOrigins
+        - CorsRules:
+            - AllowedOrigins: !Split [',', !Ref ManagementWebAllowedOrigins]
+              AllowedMethods:
+                - PUT
+              AllowedHeaders:
+                - Content-Type
+              MaxAge: 600
+        - !Ref AWS::NoValue
       LifecycleConfiguration:
         Rules:
           - Id: DeleteOldVersions

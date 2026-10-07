@@ -165,7 +165,44 @@ aws sts get-caller-identity --profile <profile-name>
 
 For temporary credentials from an assumed role, set the returned `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` in the current shell. Do not commit credentials or place secrets directly in command history. GitHub deployments should use OIDC rather than long-lived keys.
 
-Choose the target stack's AWS region and verify the active account before deployment. The GitHub Actions workflow currently sets `AWS_REGION=us-east-1`; Make targets that seed or configure notification resources default to `ap-south-1`, so set `REGION=<your-region>` when needed.
+The AWS region is pinned to `ap-south-1` in `samconfig.toml` (all config-envs) and in the GitHub Actions workflow (`AWS_REGION`). Verify the active account before deployment.
+
+## Management web CORS
+
+The `ManagementWebAllowedOrigins` parameter (comma-separated origins) restricts CORS on the management HTTP API and the artifacts bucket. Set it per config-env in `samconfig.toml` `parameter_overrides` (`[default]` is the dev stack, plus `[test]` and `[prod]`). Empty keeps the wildcard policy.
+
+- The hosting stack `tour-mgmt-web-<env>` is owned and deployed by `tour-mgmt-app`.
+- Redeploy the backend only when the site URL changes (for example, the hosting stack is recreated).
+- Dev allows the deployed Dev site origin and `http://localhost:8081` (Expo web dev). Test keeps the wildcard.
+- Prod allows https origins only, no localhost.
+
+### Dev verification
+
+After `make deploy-dev`, the changeset must modify only `TourDataApi` and `ArtifactsBucket` (no replacement). Verify with `curl`:
+
+- API preflight (`OPTIONS`) with the site origin, `Access-Control-Request-Method: GET`, and request headers `authorization,content-type,if-none-match` returns that origin in `access-control-allow-origin`; an unlisted origin returns none.
+- An authorized `GET` with the site origin exposes `etag` in `access-control-expose-headers`.
+- Artifacts bucket preflight with request method `PUT` and header `content-type` is allowed.
+- RiderApi preflight is unchanged (wildcard).
+
+Verified 2026-10-07 (dev): all five checks passed (allowed-origin preflight, disallowed-origin preflight, `etag` exposed on an authorized GET, artifacts bucket `PUT` preflight, RiderApi wildcard unchanged).
+
+### TODO Items
+
+#### Hardcoded Origins and Region
+
+Origins are hardcoded in `samconfig.toml` by owner decision (2026-10-07), an exception to the no-hardcoding rule. TODO: move them to a GitHub Environment variable.
+
+The region (`ap-south-1`) is likewise hardcoded in `samconfig.toml` and `ci-cd.yml`. TODO: move it to a GitHub Environment variable.
+
+#### Prod management web CORS
+
+Deferred until the Mgmt App production deployment, which is scheduled only after full user testing succeeds. Then:
+
+1. Get the Prod site origin (https only, no localhost) from the `tour-mgmt-web-prod` hosting stack.
+2. In `samconfig.toml` `[prod.deploy.parameters]`, add `ManagementWebAllowedOrigins=\"<Prod site origin>\"` to `parameter_overrides`.
+3. Run `make deploy-prod` with the usual approval. The changeset must modify only `TourDataApi` and `ArtifactsBucket`.
+4. Repeat the [Dev verification](#dev-verification) checks against prod and record the date and results here.
 
 ## Cognito pools, test users, and groups
 

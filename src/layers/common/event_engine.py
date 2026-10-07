@@ -1167,7 +1167,7 @@ def cancel_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     return cancel_record(tour_id, record, get_claim(event, "sub"), (body or {}).get("cancelReason"))
 
 
-def get_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
+def get_event_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
     params = event.get("pathParameters") or {}
     tour_id = params.get("tourId")
     event_id = params.get("eventId")
@@ -1209,7 +1209,7 @@ def get_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def get_dashboard_progress(event: Dict[str, Any]) -> Dict[str, Any]:
+def get_event_dashboard_progress(event: Dict[str, Any]) -> Dict[str, Any]:
     params = event.get("pathParameters") or {}
     tour_id = params.get("tourId")
     event_id = params.get("eventId")
