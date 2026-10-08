@@ -38,26 +38,38 @@ def test_template_web_cors_is_conditional_and_keeps_rider_policy_independent():
     ]
 
     management_cors = resources["TourDataApi"]["Properties"]["CorsConfiguration"]
-    assert management_cors["AllowOrigins"]["If"][0] == "HasManagementWebOrigins"
-    assert management_cors["AllowOrigins"]["If"][1]["Split"] == [
-        ",",
-        {"Ref": "ManagementWebAllowedOrigins"},
-    ]
-    assert management_cors["AllowOrigins"]["If"][2] == ["*"]
-    assert management_cors["AllowHeaders"]["If"][1] == [
+    condition, restricted_cors, wildcard_cors = management_cors["If"]
+    assert condition == "HasManagementWebOrigins"
+
+    assert restricted_cors["AllowOrigins"] == {
+        "Split": [",", {"Ref": "ManagementWebAllowedOrigins"}]
+    }
+    assert restricted_cors["AllowHeaders"] == [
         "Authorization",
         "Content-Type",
         "If-None-Match",
     ]
-    assert management_cors["ExposeHeaders"]["If"][1] == ["ETag"]
-    assert management_cors["AllowMethods"] == [
+    assert restricted_cors["ExposeHeaders"] == ["ETag"]
+    assert restricted_cors["AllowMethods"] == [
         "GET",
         "POST",
         "PUT",
         "DELETE",
         "OPTIONS",
     ]
-    assert management_cors["MaxAge"] == 600
+    assert restricted_cors["MaxAge"] == 600
+
+    assert wildcard_cors["AllowOrigins"] == ["*"]
+    assert wildcard_cors["AllowHeaders"] == ["*"]
+    assert "ExposeHeaders" not in wildcard_cors
+    assert wildcard_cors["AllowMethods"] == [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS",
+    ]
+    assert wildcard_cors["MaxAge"] == 600
 
     rider_cors = resources["RiderApi"]["Properties"]["CorsConfiguration"]
     assert rider_cors["AllowOrigins"] == ["*"]

@@ -313,6 +313,11 @@ def build_tour_table_tags(tour_id):
 
 
 def create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=False):
+    """Create a single tour-specific table and return its name."""
+    return _create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing)[0]
+
+
+def _create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=False):
     """
     Create a single tour-specific DynamoDB table
 
@@ -323,7 +328,7 @@ def create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=Fals
         ignore_existing: When true, existing tables are returned without error
 
     Returns:
-        Created table name
+        Tuple of (table name, True if created by this call)
     """
     table_name = get_tour_table_name(table_type, tour_id)
     definition = TOUR_TABLE_DEFINITIONS[table_type]
@@ -361,31 +366,31 @@ def create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=Fals
                     except ClientError:
                         pass
 
-                return table_name
+                return table_name, False
 
             current = dynamodb_client.describe_table(TableName=table_name)
             if _is_new_notification_schema(current):
-                return table_name
+                return table_name, False
 
             scan = dynamodb_client.scan(TableName=table_name, Limit=1)
             if scan.get('Items'):
-                return table_name
+                return table_name, False
 
             if os.environ.get('ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE', 'false').lower() != 'true':
                 logger.info(
                     "Legacy notification table detected for %s; skipping recreate because ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE is not true",
                     table_name,
                 )
-                return table_name
+                return table_name, False
 
             dynamodb_client.delete_table(TableName=table_name)
             waiter = dynamodb_client.get_waiter('table_not_exists')
             waiter.wait(TableName=table_name)
             dynamodb_client.create_table(**create_params)
-            return table_name
+            return table_name, True
         raise
 
-    return table_name
+    return table_name, True
 
 
 def wait_for_tour_tables(dynamodb_client, table_names, max_wait=90):
@@ -430,20 +435,21 @@ def provision_tour_tables(dynamodb_client, tour_id, ignore_existing=False):
         ignore_existing: When true, existing tables are ignored for rerun provisioning
 
     Returns:
-        List of created table names
+        List of table names created by this call (existing tables excluded)
 
     Raises:
         TimeoutError: If tables don't become ACTIVE within timeout
     """
     created_tables = []
     for table_type in TOUR_TABLE_TYPES:
-        table_name = create_tour_table(
+        table_name, created = _create_tour_table(
             dynamodb_client,
             table_type,
             tour_id,
             ignore_existing=ignore_existing,
         )
-        created_tables.append(table_name)
+        if created:
+            created_tables.append(table_name)
 
     wait_for_tour_tables(dynamodb_client, created_tables)
 

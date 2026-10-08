@@ -556,6 +556,19 @@ Resources:
               Condition:
                 StringEquals:
                   lambda:FunctionArn: !GetAtt PushSenderFunction.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:DescribeStream
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - dynamodb:ListStreams
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*/stream/*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -602,6 +615,19 @@ Resources:
               Condition:
                 StringEquals:
                   lambda:FunctionArn: !GetAtt PushSenderFunction.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:DescribeStream
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - dynamodb:ListStreams
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*/stream/*'
       Events:
         HttpApi:
           Type: HttpApi
@@ -648,6 +674,19 @@ Resources:
               Condition:
                 StringEquals:
                   lambda:FunctionArn: !GetAtt PushSenderFunction.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*'
+            - Effect: Allow
+              Action:
+                - dynamodb:DescribeStream
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - dynamodb:ListStreams
+              Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Notification-*/stream/*'
       Events:
         HttpApi:
           Type: HttpApi
