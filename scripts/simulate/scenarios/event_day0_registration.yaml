@@ -95,17 +95,17 @@ events:
         prerequisite_activity_ids: [ACT-004]
 
     occurrences:
-      # A historical occurrence (2 days before "today") fully completed by
-      # every rider — useful for dashboard/reconciliation-style testing.
-      - day_offset: -2
-        seq: 1
-        progress:
-          activity_outcomes:
-            ACT-004:
-              opted_out_ratio: 0.1
-              variant_split: { VEG: 0.5, NON_VEG: 0.5 }
-            ACT-005:
-              opted_out_ratio: 0.05
+      # # A historical occurrence (2 days before "today") fully completed by
+      # # every rider — useful for dashboard/reconciliation-style testing.
+      # - day_offset: -2
+      #   seq: 1
+      #   progress:
+      #     activity_outcomes:
+      #       ACT-004:
+      #         opted_out_ratio: 0.1
+      #         variant_split: { VEG: 0.5, NON_VEG: 0.5 }
+      #       ACT-005:
+      #         opted_out_ratio: 0.05
 
       # Today's occurrence — the one used for live manual QR-scan testing.
       # Left PLANNED with no records unless --include-in-progress is passed.
@@ -125,5 +125,4 @@ events:
             ACT-001: 5
 
 options:
-  clean_before_load: true
   seed: 42
