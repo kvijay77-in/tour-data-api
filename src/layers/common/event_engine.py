@@ -19,6 +19,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from dynamodb_utils import (
+    batch_get_items,
     get_item,
     get_tour_item,
     get_tour_table,
@@ -60,6 +61,7 @@ from response import (
 )
 from validation import (
     ValidationError,
+    build_emergency_contact_from_profile,
     validate_activity_id,
     validate_allowed_type_codes,
     validate_baggage_status,
@@ -1167,72 +1169,188 @@ def cancel_activity_record(event: Dict[str, Any]) -> Dict[str, Any]:
     return cancel_record(tour_id, record, get_claim(event, "sub"), (body or {}).get("cancelReason"))
 
 
-def get_event_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
+def _load_event_dashboard_context(event: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """Validate the path and load the data shared by the dashboard and progress endpoints."""
     params = event.get("pathParameters") or {}
     tour_id = params.get("tourId")
     event_id = params.get("eventId")
     occurrence_id = params.get("occurrenceId")
+    if not tour_id or not event_id or not occurrence_id:
+        return None, bad_request_response("tourId, eventId and occurrenceId are required in path")
+    try:
+        validate_tour_id(tour_id)
+        validate_event_id(event_id)
+        validate_occurrence_id(occurrence_id)
+    except ValidationError as exc:
+        return None, bad_request_response(exc.message, exc.details)
+
     occurrence = _get_occurrence(tour_id, event_id, occurrence_id)
-    event_definition = _get_event_definition(tour_id, event_id)
     if not occurrence:
-        return error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
-    event_definition = event_definition or {}
+        return None, error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
+    event_definition = _get_event_definition(tour_id, event_id) or {}
+
+    tour_riders = scan_tour_items("TourRider", tour_id)
+    registrations: List[Dict[str, Any]] = []
+    if event_definition.get("registrationEnabled") is True:
+        registrations = event_registration.list_registrations(tour_id, occurrence_id)
+        registered_ids = {item.get("riderId") for item in registrations if item.get("riderId")}
+        riders = [rider for rider in tour_riders if rider.get("riderId") in registered_ids]
+    else:
+        registered_ids = {
+            rider.get("riderId") for rider in tour_riders
+            if rider.get("riderId") and event_registration.is_active_rider(rider)
+        }
+        riders = tour_riders
+
     records = _scan_records_for_occurrence(tour_id, occurrence_id)
-    non_cancelled = _non_cancelled_records(records)
-    riders = scan_tour_items("TourRider", tour_id)
-    registered_ids = event_registration.registered_rider_ids(tour_id, event_definition, occurrence_id, riders)
-    items = []
-    for rider in riders:
-        rider_status = []
-        for activity in event_definition.get("activities", []):
-            status = "PENDING"
-            for record in non_cancelled:
-                if record.get("riderId") == rider.get("riderId") and record.get("activityId") == activity.get("activityId"):
-                    status = record.get("outcome") or "COMPLETED"
-                    break
-            rider_status.append({"activityId": activity.get("activityId"), "status": status})
-        items.append(
+    return {
+        "tourId": tour_id,
+        "eventId": event_id,
+        "occurrenceId": occurrence_id,
+        "occurrence": occurrence,
+        "eventDefinition": event_definition,
+        "riders": riders,
+        "registeredIds": registered_ids,
+        "registrations": registrations,
+        "records": _non_cancelled_records(records),
+        "cancelled": [record for record in records if record.get("cancelledAt")],
+    }, None
+
+
+def _build_event_dashboard_summary(context: Dict[str, Any]) -> Dict[str, Any]:
+    event_definition = context["eventDefinition"]
+    occurrence = context["occurrence"]
+    records = context["records"]
+    rider_ids = {rider.get("riderId") for rider in context["riders"] if rider.get("riderId")}
+    activities = [
+        activity for activity in event_definition.get("activities", []) or []
+        if _effective_activity_enabled(occurrence, activity)
+    ]
+
+    outstanding = 0
+    activity_summaries = []
+    for activity in activities:
+        activity_id = activity.get("activityId")
+        activity_records = [record for record in records if record.get("activityId") == activity_id]
+        recorded_riders = {record.get("riderId") for record in activity_records} & rider_ids
+        if activity.get("mandatory"):
+            outstanding += len(rider_ids) - len(recorded_riders)
+        activity_summaries.append(
             {
-                "riderId": rider.get("riderId"),
-                "registered": rider.get("riderId") in registered_ids,
-                "activities": rider_status,
+                "activityId": activity_id,
+                "completed": len([r for r in activity_records if r.get("outcome") == EventRecordOutcome.COMPLETED.value]),
+                "optedOut": len([r for r in activity_records if r.get("outcome") == EventRecordOutcome.OPTED_OUT.value]),
+                "flagged": len([r for r in activity_records if r.get("isFlagged")]),
+                "pending": len(rider_ids) - len(recorded_riders),
             }
         )
-    return success_response(
-        {
-            "occurrence": occurrence,
-            "registrationEnabled": event_definition.get("registrationEnabled") is True,
-            "registeredCount": len(registered_ids),
-            "riders": items,
-            "cancelled": [record for record in records if record.get("cancelledAt")],
-        }
-    )
+    return {
+        "totalRiders": len(rider_ids),
+        "registrationEnabled": event_definition.get("registrationEnabled") is True,
+        "registeredCount": len(context["registeredIds"]),
+        "completedCount": len([r for r in records if r.get("outcome") == EventRecordOutcome.COMPLETED.value]),
+        "outstandingMandatoryCount": outstanding,
+        "optedOutCount": len([r for r in records if r.get("outcome") == EventRecordOutcome.OPTED_OUT.value]),
+        "flaggedCount": len([r for r in records if r.get("isFlagged")]),
+        "activities": activity_summaries,
+    }
+
+
+def _event_dashboard_data_version(context: Dict[str, Any]) -> str:
+    candidates: List[str] = []
+    sources = [
+        (context["occurrence"], ("updatedAt", "createdAt")),
+        (context["eventDefinition"], ("updatedAt", "createdAt")),
+    ]
+    sources += [(rider, ("updatedAt", "createdAt", "registeredAt")) for rider in context["riders"]]
+    sources += [(item, ("registeredAt",)) for item in context["registrations"]]
+    sources += [
+        (record, ("timestamp", "updatedAt", "createdAt", "cancelledAt"))
+        for record in context["records"] + context["cancelled"]
+    ]
+    for item, field_names in sources:
+        candidates.extend(item[name] for name in field_names if item.get(name))
+    return max(candidates) if candidates else "1970-01-01T00:00:00Z"
+
+
+def _conditional_dashboard_response(event: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    etag = f'"{_event_etag(payload)}"'
+    headers = event.get("headers") or {}
+    request_etag = headers.get("if-none-match") or headers.get("If-None-Match")
+    response = not_modified_response() if request_etag == etag else success_response(payload)
+    response["headers"]["ETag"] = etag
+    return response
+
+
+def get_event_dashboard(event: Dict[str, Any]) -> Dict[str, Any]:
+    context, err = _load_event_dashboard_context(event)
+    if err:
+        return err
+    event_definition = context["eventDefinition"]
+    records = context["records"]
+
+    record_status: Dict[Tuple[Any, Any], str] = {}
+    for record in records:
+        record_status.setdefault(
+            (record.get("riderId"), record.get("activityId")),
+            record.get("outcome") or EventRecordOutcome.COMPLETED.value,
+        )
+
+    profile_keys = [{"profileId": rider["profileId"]} for rider in context["riders"] if rider.get("profileId")]
+    profile_map = {
+        profile.get("profileId"): profile
+        for profile in (batch_get_items("RIDER_PROFILE_TABLE", profile_keys) if profile_keys else [])
+    }
+
+    riders = []
+    for rider in context["riders"]:
+        rider_id = rider.get("riderId")
+        profile = profile_map.get(rider.get("profileId"), {})
+        riders.append(
+            {
+                "riderId": rider_id,
+                "profileId": rider.get("profileId"),
+                "status": rider.get("status"),
+                "name": profile.get("name"),
+                "email": profile.get("email"),
+                "phone": profile.get("phone"),
+                "emergencyContact": build_emergency_contact_from_profile(profile),
+                "photoS3Key": profile.get("photoS3Key"),
+                "registered": rider_id in context["registeredIds"],
+                "activities": [
+                    {
+                        "activityId": activity.get("activityId"),
+                        "status": record_status.get((rider_id, activity.get("activityId")), "PENDING"),
+                    }
+                    for activity in event_definition.get("activities", []) or []
+                ],
+            }
+        )
+
+    payload = {
+        "event": event_definition,
+        "occurrence": context["occurrence"],
+        "riders": riders,
+        "records": records,
+        "cancelled": context["cancelled"],
+        "summary": _build_event_dashboard_summary(context),
+    }
+    return _conditional_dashboard_response(event, payload)
 
 
 def get_event_dashboard_progress(event: Dict[str, Any]) -> Dict[str, Any]:
-    params = event.get("pathParameters") or {}
-    tour_id = params.get("tourId")
-    event_id = params.get("eventId")
-    occurrence_id = params.get("occurrenceId")
-    occurrence = _get_occurrence(tour_id, event_id, occurrence_id)
-    event_definition = _get_event_definition(tour_id, event_id)
-    if not occurrence:
-        return error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
-    riders = scan_tour_items("TourRider", tour_id)
-    records = _non_cancelled_records(_scan_records_for_occurrence(tour_id, occurrence_id))
-    mandatory_count = _count_outstanding_mandatory(tour_id, event_id, occurrence)
-    registered_ids = event_registration.registered_rider_ids(tour_id, event_definition or {}, occurrence_id, riders)
-    return success_response(
-        {
-            "totalRiders": len(riders),
-            "registrationEnabled": (event_definition or {}).get("registrationEnabled") is True,
-            "registeredCount": len(registered_ids),
-            "completedCount": len([record for record in records if record.get("outcome") == EventRecordOutcome.COMPLETED.value]),
-            "outstandingMandatoryCount": mandatory_count,
-            "optedOutCount": len([record for record in records if record.get("outcome") == EventRecordOutcome.OPTED_OUT.value]),
-            "flaggedCount": len([record for record in records if record.get("isFlagged")]),
-        }
-    )
+    context, err = _load_event_dashboard_context(event)
+    if err:
+        return err
+    payload = {
+        "eventId": context["eventId"],
+        "occurrenceId": context["occurrenceId"],
+        "records": context["records"],
+        "cancelled": context["cancelled"],
+        "summary": _build_event_dashboard_summary(context),
+        "dataVersion": _event_dashboard_data_version(context),
+    }
+    return _conditional_dashboard_response(event, payload)
 
 
 def get_rider_progress(event: Dict[str, Any]) -> Dict[str, Any]:

@@ -1,5 +1,5 @@
 # Dashboard API design
-_Last updated: 2026-09-29_
+_Last updated: 2026-10-12_
 
 The dashboard API separates initial dashboard loading from frequent progress refreshes and on-demand rider detail retrieval.
 
@@ -17,7 +17,12 @@ All three ride-dashboard GET endpoints return an `ETag` and accept `If-None-Matc
 
 ## Event dashboard
 
-Event occurrence dashboards have their own full and progress endpoints. They use the same separation between initial data and lightweight progress refresh. Their contracts are documented under [Events in the API reference](api-reference.md#events).
+Event occurrence dashboards mirror the ride dashboard split:
+
+- `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` returns the event definition, occurrence, riders (with profile data and per-activity status), active `records`, `cancelled` records, and `summary`.
+- `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` returns `records`, `cancelled`, `summary`, and `dataVersion` only, without the event definition, occurrence, or rider profiles.
+
+Both require `DASHBOARD`, return an `ETag`, and accept `If-None-Match` (`304 Not Modified` on a match). Rider scope follows the event definition: when `registrationEnabled` is `true` only riders registered for the occurrence are listed and counted; otherwise all tour riders are. Both endpoints share one data loader and summary builder in `event_engine.py`, so the `summary` objects are identical. Wire-level contracts are in [Events in the API reference](api-reference.md#events).
 
 ## Requirements
 

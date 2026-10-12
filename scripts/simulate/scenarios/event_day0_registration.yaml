@@ -56,7 +56,7 @@ riders:
   status_in: [REGISTERED, ACTIVE]
 
 events:
-  - event_id: EVT-REG
+  - event_id: EVT-DAY0
     event_name: "Day 0 Registration"
     event_type: SINGLE
     location: "Tour start venue"
