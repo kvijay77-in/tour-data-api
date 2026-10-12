@@ -2408,6 +2408,8 @@ Resources:
             TableName: !Ref AppConfigTable
         - DynamoDBReadPolicy:
             TableName: !Ref RiderProfileTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref NotificationRuleTable
         - Statement:
             - Effect: Allow
               Action:
@@ -2699,6 +2701,7 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:Query
                 - dynamodb:Scan
+                - dynamodb:BatchGetItem
               Resource:
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-*'
       Events:
@@ -2760,6 +2763,7 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:Query
               Resource:
+                - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-Event-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventOccurrence-*'
                 - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AWS::StackName}-EventActivityLogs-*'
       Events:
