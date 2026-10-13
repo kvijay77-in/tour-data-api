@@ -107,6 +107,15 @@ Some specific or explicit instructions that must be followed. Same will be updat
 - Do not run test case repeatedly without making necessary changes or fixes. Results in wasted time and resources.
 
 
+## Special Case: Backend API Access Permissions
+- Ensure that backend API access permissions are properly configured and follow the principle of least privilege.
+- As en exception only the following API Functions will have broader access permissions:
+  - `CreateTourFunction`
+  - `UpdateTourFunction`
+  - `ProvisionTourFunction`
+  - `ArchiveTourFunction`
+- All new API must explicitly define access permissions and follow the principle of least privilege.
+
 ## Miscellaneous
 - Activate Python virtual environment for development and testing to manage dependencies effectively.
   - Use `source .venv/bin/activate` to activate the virtual environment.
