@@ -1,0 +1,651 @@
+# docmaint doc map for the backend (tour-data-api).
+# Commit as docs/_map.yaml on the code branch. Check with:
+#   docmaint map check backend --file docs/_map.yaml
+#
+# Resolution: per changed path (or changed SAM logical ID), the most specific
+# matching pattern wins. FILE#ID patterns beat path patterns; then more literal
+# characters win. So the narrow entries below (dashboards, rider exit, profile,
+# admin user management) take their files away from the broad domain entries.
+#
+# Not mapped on purpose:
+#   docs/requirements/**  product intent; code changes don't edit it (see brief)
+#   docs/misc/**          historical, never edited
+#   tests/test_*.py       test-only changes don't affect docs
+version: 1
+entries:
+  # ---------------------------------------------------------------- tours
+  - id: tours-api
+    kind: api
+    code:
+      - "src/functions/tours/**"
+      - "template.yaml#GetActiveTourFunction"
+      - "template.yaml#GetTourFunction"
+      - "template.yaml#ListToursFunction"
+      - "template.yaml#CreateTourFunction"
+      - "template.yaml#UpdateTourFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Tours"
+      - file: docs/design/api-reference.md
+        heading: "Tours Examples"
+
+  - id: tour-lifecycle
+    kind: data-model
+    code:
+      - "src/functions/tours/provision_tour.py"
+      - "src/functions/tours/archive_tour.py"
+      - "scripts/provision_tour.py"
+      - "scripts/cleanup_tour_tables.py"
+      - "template.yaml#ProvisionTourFunction"
+      - "template.yaml#ArchiveTourFunction"
+    docs:
+      - file: docs/design/data-model.md
+        heading: "Provisioning and lifecycle"
+      - file: docs/design/api-reference.md
+        heading: "Tours"
+      - file: docs/guides/deployment.md
+        heading: "After Deployment: Provisioning a Tour"
+    note: "Provisioning is idempotent repair and never changes provisionedAt. Archive exports, then deletes, the same table inventory."
+
+  # ---------------------------------------------------------------- riders
+  - id: riders-api
+    kind: api
+    code:
+      - "src/functions/riders/**"
+      - "template.yaml#GetTourRidersFunction"
+      - "template.yaml#GetTourRiderNamesFunction"
+      - "template.yaml#GetTourRiderByIdFunction"
+      - "template.yaml#RegisterTourRiderFunction"
+      - "template.yaml#GetRiderStatisticsFunction"
+      - "template.yaml#GetRiderTourParticipationFunction"
+      - "template.yaml#ListRiderTourParticipationsFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Riders"
+      - file: docs/design/api-reference.md
+        heading: "List Tour Riders"
+      - file: docs/design/api-reference.md
+        heading: "List Tour Rider Names"
+      - file: docs/design/api-reference.md
+        heading: "Register Tour Rider"
+      - file: docs/design/api-reference.md
+        heading: "Get Tour Rider"
+      - file: docs/design/api-reference.md
+        heading: "Get Rider Statistics"
+      - file: docs/design/api-reference.md
+        heading: "List Rider Tour Participations"
+      - file: docs/design/api-reference.md
+        heading: "Get Rider Tour Participation"
+    note: "'Riders Examples' is ~4k tokens, so rider entries target its H5 examples. A new rider endpoint also needs one there."
+
+  - id: rider-exit
+    kind: api
+    code:
+      - "src/functions/riders/exit_tour_rider.py"
+      - "src/functions/riders/cancel_rider_exit.py"
+      - "src/functions/riders/release_rider_baggage.py"
+      - "template.yaml#ExitTourRiderFunction"
+      - "template.yaml#CancelRiderExitFunction"
+      - "template.yaml#ReleaseRiderBaggageFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Riders"
+      - file: docs/design/api-reference.md
+        heading: "Exit Rider"
+      - file: docs/design/api-reference.md
+        heading: "Cancel Rider Exit"
+      - file: docs/design/api-reference.md
+        heading: "Release Rider Baggage"
+      - file: docs/design/events.md
+        heading: "Configuration and behavior"
+    note: "Rider status and baggage custody (ACTIVE, RETAINED, WITH_RIDER) are separate lifecycles."
+
+  - id: rider-profile
+    kind: api
+    code:
+      - "src/functions/riders/*profile*.py"
+      - "src/functions/riders/link_rider_cognito_user.py"
+      - "src/functions/config/get_admin_config.py"
+      - "src/functions/config/put_admin_config.py"
+      - "src/layers/common/profile_schema.py"
+      - "template.yaml#*RiderProfileFunction"
+      - "template.yaml#*ProfilePictureFunction"
+      - "template.yaml#*ProfileAttributeFileFunction"
+      - "template.yaml#LinkRiderCognitoUserFunction"
+      - "template.yaml#*AdminConfigFunction"
+      - "template.yaml#PhotosBucket*"
+    docs:
+      - file: docs/design/rider-profile-schema.md
+      - file: docs/design/api-reference.md
+        heading: "Rider profile configuration and write contracts"
+      - file: docs/design/api-reference.md
+        heading: "Riders"
+      - file: docs/design/api-reference.md
+        heading: "Create Rider Profile"
+      - file: docs/design/api-reference.md
+        heading: "Create Rider Profile With Path profileId"
+      - file: docs/design/api-reference.md
+        heading: "Get Rider Profile"
+      - file: docs/design/api-reference.md
+        heading: "Update Rider Profile"
+      - file: docs/design/api-reference.md
+        heading: "Get Cognito Link"
+      - file: docs/design/api-reference.md
+        heading: "Create Cognito Link"
+      - file: docs/design/api-reference.md
+        heading: "Delete Cognito Link"
+      - file: docs/design/api-reference.md
+        heading: "Get Profile Picture Upload URL"
+      - file: docs/design/api-reference.md
+        heading: "Get Profile Picture Download URL"
+
+  - id: rider-identity
+    kind: auth
+    code:
+      - "src/layers/common/ownership.py"
+      - "src/layers/common/rider_identity.py"
+    docs:
+      - file: docs/design/rbac.md
+        heading: "Permission resolution"
+      - file: docs/design/rider-profile-schema.md
+        heading: "Identity and access"
+      - file: docs/design/check-ins.md
+        heading: "Rider read access"
+    note: "Rider API identity: Cognito username -> RiderCognitoUser -> profileId -> TourRider row."
+
+  # ---------------------------------------------------------------- rides and check-ins
+  - id: rides-api
+    kind: api
+    code:
+      - "src/functions/rides/**"
+      - "template.yaml#GetTodaysRideFunction"
+      - "template.yaml#GetRideFunction"
+      - "template.yaml#ListRidesFunction"
+      - "template.yaml#CreateRideFunction"
+      - "template.yaml#UpdateRideFunction"
+      - "template.yaml#OpenRideFunction"
+      - "template.yaml#StartRideFunction"
+      - "template.yaml#CloseRideFunction"
+      - "template.yaml#*PitStopFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Rides"
+      - file: docs/design/api-reference.md
+        heading: "Rides Examples"
+      - file: docs/design/check-ins.md
+        heading: "Stored policy"
+
+  - id: checkins-api
+    kind: api
+    code:
+      - "src/functions/checkins/**"
+      - "src/layers/common/checkin_service.py"
+      - "src/layers/common/self_checkin_rules.py"
+      - "template.yaml#*CheckIn*Function"
+    docs:
+      - file: docs/design/check-ins.md
+      - file: docs/design/api-reference.md
+        heading: "Check-Ins"
+      - file: docs/design/api-reference.md
+        heading: "Check-Ins Examples"
+
+  - id: self-service-policy
+    kind: api
+    code:
+      - "src/layers/common/self_service_policy.py"
+    docs:
+      - file: docs/design/check-ins.md
+        heading: "Stored policy"
+      - file: docs/design/events.md
+        heading: "Configuration and behavior"
+    note: "Ride: stage -> ride -> stage-type default. Event: override -> occurrence -> activity -> event -> false. null on create/update clears a level."
+
+  - id: ride-dashboard
+    kind: api
+    code:
+      - "src/functions/checkins/get_dashboard_*.py"
+      - "src/functions/riders/get_rider_ride_details.py"
+      - "template.yaml#GetDashboard*Function"
+      - "template.yaml#GetRiderRideDetailsFunction"
+    docs:
+      - file: docs/design/dashboard-api.md
+        heading: "Ride dashboard"
+      - file: docs/design/api-reference.md
+        heading: "Check-Ins"
+
+  # ---------------------------------------------------------------- events and hotels
+  # "Events Examples" is ~7k tokens, too big as one candidate, so the event
+  # entries target the H5 examples. events-api catches shared code and new files.
+  - id: events-api
+    kind: api
+    code:
+      - "src/functions/events/**"
+      - "src/layers/common/event_engine.py"
+      - "src/layers/common/event_registration.py"
+      - "src/layers/common/event_self_service.py"
+      - "template.yaml#*Event*Function"
+    docs:
+      - file: docs/design/events.md
+        heading: "Configuration and behavior"
+      - file: docs/design/api-reference.md
+        heading: "Events"
+    note: "A new event endpoint also needs an H5 example under 'API Examples > Events Examples'."
+
+  - id: event-definitions
+    kind: api
+    code:
+      - "src/functions/events/list_events.py"
+      - "src/functions/events/get_event.py"
+      - "src/functions/events/create_event.py"
+      - "src/functions/events/update_event.py"
+      - "template.yaml#ListEventsFunction"
+      - "template.yaml#GetEventFunction"
+      - "template.yaml#CreateEventFunction"
+      - "template.yaml#UpdateEventFunction"
+    docs:
+      - file: docs/design/events.md
+        heading: "Event hierarchy"
+      - file: docs/design/events.md
+        heading: "Configuration and behavior"
+      - file: docs/design/api-reference.md
+        heading: "Events"
+      - file: docs/design/api-reference.md
+        heading: "List Events"
+      - file: docs/design/api-reference.md
+        heading: "Get Event"
+      - file: docs/design/api-reference.md
+        heading: "Create Event"
+      - file: docs/design/api-reference.md
+        heading: "Update Event"
+
+  - id: event-occurrences
+    kind: api
+    code:
+      - "src/functions/events/*occurrence*.py"
+      - "src/functions/events/*activity_overrides.py"
+      - "template.yaml#*Occurrence*Function"
+      - "template.yaml#*ActivityOverridesFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Events"
+      - file: docs/design/api-reference.md
+        heading: "List Occurrences"
+      - file: docs/design/api-reference.md
+        heading: "Get Occurrence"
+      - file: docs/design/api-reference.md
+        heading: "Create Occurrence"
+      - file: docs/design/api-reference.md
+        heading: "Update Occurrence"
+      - file: docs/design/api-reference.md
+        heading: "Start Occurrence"
+      - file: docs/design/api-reference.md
+        heading: "Complete Occurrence"
+      - file: docs/design/api-reference.md
+        heading: "Cancel Occurrence"
+      - file: docs/design/api-reference.md
+        heading: "Get Activity Overrides"
+      - file: docs/design/api-reference.md
+        heading: "Update Activity Override"
+
+  - id: event-records
+    kind: api
+    code:
+      - "src/functions/events/*_activity_record.py"
+      - "src/functions/events/*_self_record.py"
+      - "template.yaml#*EventActivityRecordFunction"
+      - "template.yaml#*SelfEventRecordFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Events"
+      - file: docs/design/api-reference.md
+        heading: "Create Activity Record"
+      - file: docs/design/api-reference.md
+        heading: "Cancel Activity Record"
+      - file: docs/design/api-reference.md
+        heading: "Rider Self-Record"
+      - file: docs/design/api-reference.md
+        heading: "Cancel Rider Self-Record"
+
+  - id: event-registrations
+    kind: api
+    code:
+      - "src/functions/events/register_self.py"
+      - "src/functions/events/unregister_self.py"
+      - "src/functions/events/list_registrations.py"
+      - "src/functions/events/staff_*register_rider.py"
+      - "template.yaml#RegisterForEventFunction"
+      - "template.yaml#UnregisterFromEventFunction"
+      - "template.yaml#ListEventRegistrationsFunction"
+      - "template.yaml#Staff*EventRiderFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Events"
+      - file: docs/design/api-reference.md
+        heading: "Rider Event Registration"
+      - file: docs/design/api-reference.md
+        heading: "Rider Event Unregistration"
+      - file: docs/design/api-reference.md
+        heading: "List Event Registrations"
+      - file: docs/design/api-reference.md
+        heading: "Staff Register Event Rider"
+      - file: docs/design/api-reference.md
+        heading: "Staff Unregister Event Rider"
+
+  - id: event-reads
+    kind: api
+    code:
+      - "src/functions/events/get_bootstrap.py"
+      - "src/functions/events/get_rider_progress.py"
+      - "src/functions/events/get_reconciliation.py"
+      - "template.yaml#GetEventsBootstrapFunction"
+      - "template.yaml#GetRiderEventProgressFunction"
+      - "template.yaml#GetEventReconciliationFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Events"
+      - file: docs/design/api-reference.md
+        heading: "Get Event Bootstrap"
+      - file: docs/design/api-reference.md
+        heading: "Get Rider Event Progress"
+      - file: docs/design/api-reference.md
+        heading: "Get Event Reconciliation"
+    note: "Bootstrap is a data-loading API; it does not mean either app works offline."
+
+  - id: event-dashboard
+    kind: api
+    code:
+      - "src/functions/events/get_event_dashboard*.py"
+      - "template.yaml#GetEventDashboard*Function"
+    docs:
+      - file: docs/design/dashboard-api.md
+        heading: "Event dashboard"
+      - file: docs/design/api-reference.md
+        heading: "Events"
+      - file: docs/design/api-reference.md
+        heading: "Get Event Dashboard"
+      - file: docs/design/api-reference.md
+        heading: "Get Event Dashboard Progress"
+    note: "Full dashboard and progress share one loader and summary builder in event_engine.py."
+
+  - id: hotels-api
+    kind: api
+    code:
+      - "src/functions/hotels/**"
+      - "template.yaml#*Hotel*Function"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Hotels"
+      - file: docs/design/api-reference.md
+        heading: "Hotels Examples"
+      - file: docs/design/events.md
+        heading: "Configuration and behavior"
+    note: "CSV allocation uploads are validated as a whole batch; a rejected file writes nothing."
+
+  # ---------------------------------------------------------------- artifacts, config
+  - id: artifacts-api
+    kind: api
+    code:
+      - "src/functions/artifacts/**"
+      - "template.yaml#*Artifact*Function"
+      - "template.yaml#ArtifactsBucket*"
+    docs:
+      - file: docs/design/artifacts.md
+      - file: docs/design/api-reference.md
+        heading: "Artifacts"
+      - file: docs/design/api-reference.md
+        heading: "Artifacts Examples"
+
+  - id: config-api
+    kind: config
+    code:
+      - "src/functions/config/**"
+      - "template.yaml#GetConfigFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Config"
+      - file: docs/design/api-reference.md
+        heading: "Config Examples"
+
+  - id: seed-app-config
+    kind: config
+    code:
+      - "scripts/seed_app_config.py"
+    docs:
+      - file: docs/guides/deployment.md
+        heading: "Deployment note: rider profile config seed"
+      - file: docs/design/rider-profile-schema.md
+        heading: "Configuration model"
+
+  # ---------------------------------------------------------------- users and auth
+  - id: users-api
+    kind: api
+    code:
+      - "src/functions/users/**"
+      - "template.yaml#GetCurrentUserFunction"
+      - "template.yaml#ListCognitoUsersFunction"
+      - "template.yaml#ListTourUsersFunction"
+      - "template.yaml#GetCurrentTourUserFunction"
+      - "template.yaml#CreateTourUserFunction"
+      - "template.yaml#UpdateTourUserFunction"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Users"
+      - file: docs/design/api-reference.md
+        heading: "Users Examples"
+
+  - id: admin-user-management
+    kind: auth
+    code:
+      - "src/functions/users/*managed_user*.py"
+      - "src/functions/users/list_role_groups.py"
+      - "src/functions/users/usermgmt_common.py"
+      - "template.yaml#*UserMgmt*Function"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Admin User Management"
+      - file: docs/design/api-reference.md
+        heading: "Admin User Management Examples"
+
+  - id: rbac
+    kind: auth
+    code:
+      - "src/layers/common/rbac.py"
+    docs:
+      - file: docs/design/rbac.md
+      - file: docs/design/api-reference.md
+        heading: "Authorization"
+      - file: docs/design/api-reference.md
+        heading: "Pit Stop Role Rules"
+    note: "rbac.py is authoritative. Docs name permissions; handlers never compare group names."
+
+  - id: cognito
+    kind: auth
+    code:
+      - "template.yaml#Cognito*"
+    docs:
+      - file: docs/guides/deployment.md
+        heading: "Cognito pools, test users, and groups"
+      - file: docs/design/rbac.md
+        heading: "Cognito ownership"
+      - file: docs/design/rbac.md
+        heading: "Default group mapping"
+    note: "Management pool resources exist only under the CreateCognito condition; the rider pool is always created."
+
+  - id: http-apis
+    kind: api
+    code:
+      - "template.yaml#TourDataApi"
+      - "template.yaml#RiderApi"
+    docs:
+      - file: docs/design/architecture.md
+        heading: "Request and event flow"
+      - file: docs/design/api-reference.md
+        heading: "Management web browser CORS"
+      - file: docs/guides/deployment.md
+        heading: "Management web CORS"
+
+  # ---------------------------------------------------------------- notifications
+  - id: notifications-api
+    kind: api
+    code:
+      - "src/functions/notifications/**"
+      - "src/layers/common/notification_service.py"
+      - "template.yaml#*Notification*Function"
+      - "template.yaml#*Device*Function"
+      - "template.yaml#*UnreadCount*Function"
+      - "template.yaml#*MarkRead*Function"
+    docs:
+      - file: docs/design/notifications.md
+        heading: "API integration"
+      - file: docs/design/notifications.md
+        heading: "7) Common layer service"
+      - file: docs/design/api-reference.md
+        heading: "Notifications"
+      - file: docs/design/api-reference.md
+        heading: "Notifications Examples"
+
+  - id: push-delivery
+    kind: deploy
+    code:
+      - "src/functions/notifications/push_sender.py"
+      - "scripts/setup_notification_push.py"
+      - "scripts/seed_notification_rules.py"
+      - "template.yaml#PushSender*"
+      - "template.yaml#*StreamMapping"
+    docs:
+      - file: docs/design/notifications.md
+        heading: "8) Push sender"
+      - file: docs/guides/deployment.md
+        heading: "After Deployment: Notification Push Setup"
+    note: "Push failure never removes or blocks the inbox item."
+
+  # ---------------------------------------------------------------- data model
+  - id: data-model
+    kind: data-model
+    code:
+      - "src/layers/common/tour_provisioning.py"
+      - "src/layers/common/models.py"
+      - "template.yaml#*Table"
+    docs:
+      - file: docs/design/data-model.md
+      - file: docs/guides/deployment.md
+        heading: "Database Tables"
+    note: "Tour tables come from tour_provisioning.py and TOUR_TABLE_TYPES, not template.yaml. models.py also holds status enums for every domain."
+
+  - id: notification-tables
+    kind: data-model
+    code:
+      - "template.yaml#*Notification*Table"
+      - "template.yaml#*PushDevice*Table"
+    docs:
+      - file: docs/design/notifications.md
+        heading: "3) Data model"
+      - file: docs/design/data-model.md
+        heading: "Shared tables"
+
+  # ---------------------------------------------------------------- shared code, build, deploy
+  - id: api-conventions
+    kind: api
+    code:
+      - "src/layers/common/response.py"
+      - "src/layers/common/validation.py"
+      - "src/layers/common/dynamodb_utils.py"
+      - "src/layers/common/logger.py"
+    docs:
+      - file: docs/design/api-reference.md
+        heading: "Response Format"
+      - file: docs/design/api-reference.md
+        heading: "Common Validation Rules"
+      - file: docs/guides/development.md
+        heading: "Coding Conventions"
+
+  - id: sam-template
+    kind: deploy
+    code:
+      - "template.yaml"
+    docs:
+      - file: docs/design/architecture.md
+        heading: "Implementation"
+      - file: docs/guides/deployment.md
+        heading: "AWS Resources Reference"
+    note: "Fallback for Globals, Parameters, Conditions, Outputs and resources no other entry claims."
+
+  - id: build-and-test
+    kind: build
+    code:
+      - "Makefile"
+      - "requirements-dev.txt"
+      - "pytest.ini"
+      - "tests/conftest.py"
+      - "tests/fixtures/**"
+      - "src/layers/common/requirements.txt"
+      - "template.yaml#CommonLayer"
+    docs:
+      - file: docs/guides/development.md
+        heading: "Useful Commands"
+      - file: docs/guides/development.md
+        heading: "Unit Testing"
+      - file: tests/README.md
+        heading: "Run tests"
+
+  - id: ci-cd
+    kind: deploy
+    code:
+      - ".github/workflows/**"
+    docs:
+      - file: docs/guides/deployment.md
+        heading: "Deploying via GitHub Actions"
+      - file: docs/guides/deployment.md
+        heading: "What Happens When You Deploy"
+
+  - id: environments
+    kind: deploy
+    code:
+      - "samconfig.toml"
+    docs:
+      - file: docs/guides/deployment.md
+        heading: "Environments Explained"
+      - file: docs/guides/deployment.md
+        heading: "Deploying from Terminal"
+
+  - id: github-oidc
+    kind: deploy
+    code:
+      - "cloudformation/**"
+    docs:
+      - file: docs/guides/deployment.md
+        heading: "One-Time Setup: GitHub OIDC"
+
+  - id: dev-tooling
+    kind: build
+    code:
+      - "scripts/preflight-check.sh"
+      - "scripts/dev-test-setup.*"
+      - "scripts/generate_test_data.py"
+      - "scripts/load_test_data.py"
+      - "scripts/test_data/**"
+    docs:
+      - file: docs/guides/development.md
+        heading: "Initial Setup"
+      - file: docs/guides/development.md
+        heading: "Useful Commands"
+
+  - id: simulation
+    kind: build
+    code:
+      - "scripts/simulate/**"
+    docs:
+      - file: scripts/simulate/README.md
+        heading: "Usage"
+      - file: scripts/simulate/README.md
+        heading: "Data Generation Details"
+
+  - id: simulation-scenarios
+    kind: build
+    code:
+      - "scripts/simulate/scenarios/**"
+    docs:
+      - file: scripts/simulate/README.md
+        heading: "Scenario Configuration Reference"
+      - file: scripts/simulate/README.md
+        heading: "Event Engine Simulation Scenario"
