@@ -613,8 +613,11 @@ entries:
     code:
       - "cloudformation/**"
     docs:
+      - file: docs/guides/aws-deploy-access-setup.md
+        heading: "AWS Deploy Access Setup"
       - file: docs/guides/deployment.md
-        heading: "One-Time Setup: GitHub OIDC"
+        heading: "One-Time Setup: AWS Deploy Access"
+    note: "template.yaml Globals.Function.PermissionsBoundary, the Lambda role policies and the shared DynamoDB table list must stay in sync with cloudformation/deploy-access.yaml (see 'Keeping the policies in sync')."
 
   - id: dev-tooling
     kind: build

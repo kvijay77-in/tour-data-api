@@ -26,7 +26,12 @@ Globals:
     MemorySize: 512
     Runtime: !Ref PythonRuntime
     Architectures:
-      - x86_64
+    #  - x86_64
+      - arm64
+    # Ceiling for every SAM-created Lambda execution role. The policy is created per environment
+    # by cloudformation/deploy-access.yaml (see docs/guides/aws-deploy-access-setup.md) and must
+    # exist before this stack is deployed; the deploy roles can only create roles carrying it.
+    PermissionsBoundary: !Sub 'arn:aws:iam::${AWS::AccountId}:policy/tour-data-api-${AWS::StackName}-lambda-boundary'
     Environment:
       Variables:
         # Shared table names (SAM-managed)

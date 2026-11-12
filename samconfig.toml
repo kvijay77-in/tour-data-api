@@ -15,7 +15,8 @@ lint = true
 [default.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
-resolve_s3 = true
+# The artifacts bucket is created by cloudformation/deploy-access.yaml and passed on the command line:
+#   sam deploy --s3-bucket tour-data-api-sam-<stack>-<account-id>   (resolve_s3 cannot be combined with it)
 # Don't fail on empty chageset.
 fail_on_empty_changeset = false
 # Cognito User Pool is auto-created by default. No need to provide CognitoUserPoolArn/CognitoAppClientId
@@ -44,7 +45,7 @@ region = "ap-south-1"
 [test.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
-resolve_s3 = true
+fail_on_empty_changeset = false
 # Cognito User Pool is auto-created by default.
 # parameter_overrides = "Environment=test"
 parameter_overrides = "Environment=test"
@@ -58,7 +59,7 @@ region = "ap-south-1"
 [prod.deploy.parameters]
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
-resolve_s3 = true
+fail_on_empty_changeset = false
 # Cognito User Pool is auto-created by default.
 # parameter_overrides = "Environment=prod"
 parameter_overrides = "Environment=prod"
