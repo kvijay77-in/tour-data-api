@@ -28,6 +28,8 @@ flowchart LR
 
 The API Gateway JWT authorizers validate tokens from the corresponding Cognito pool. Lambda handlers enforce application permissions from `src/layers/common/rbac.py`; the authoritative group-to-permission mapping is in [RBAC](rbac.md). Lambda execution roles grant access to only the AWS resources required by each handler.
 
+Management web hosting is owned by `tour-mgmt-app`; the backend only provides CORS through the `ManagementWebAllowedOrigins` parameter.
+
 S3 presigned URLs are used for private file uploads and downloads. S3 object-created events can trigger asynchronous processing, such as hotel allocation CSV validation. Notification inbox writes can invoke the push sender through DynamoDB Streams.
 
 ## Data organization

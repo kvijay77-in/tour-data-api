@@ -1,0 +1,729 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Least-privilege deployment access for one Tour Data API environment (dev, test or prod).
+
+  Deploy ONE stack per environment, manually, with administrator credentials.
+  Stack name: tour-data-api-deploy-access-<env>. Full instructions:
+  docs/guides/aws-deploy-access-setup.md
+
+  Creates:
+    - SAM artifacts bucket used by `sam deploy --s3-bucket` (no CreateBucket needed at deploy time)
+    - Permissions boundary that caps every Lambda execution role created by template.yaml
+    - Deploy managed policies (control plane only, scoped to the target stack's resource names)
+    - GitHubDeployRole   (optional) - assumed by GitHub Actions from ONE branch only
+    - TerminalDeployRole (optional) - assumed from a terminal by an admin-chosen principal
+
+  The deploy roles can create/update the stack's infrastructure but cannot read or write
+  application data (no item-level DynamoDB, no S3 object access, no Cognito user access),
+  cannot create roles without the boundary, and cannot edit this stack's roles or policies.
+
+Parameters:
+  TargetStackName:
+    Type: String
+    AllowedValues: [dev, test, prod]
+    Description: Name of the application (SAM) stack that these roles may deploy. Equals the environment name.
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, test, prod]
+    Description: Environment name. Used for tagging and for Cognito tag-based access conditions.
+
+  GitHubOrg:
+    Type: String
+    MinLength: 1
+    Description: GitHub organization or username that owns the repository.
+
+  GitHubRepo:
+    Type: String
+    Default: tour-data-api
+    Description: GitHub repository name.
+
+  GitHubBranch:
+    Type: String
+    Default: ''
+    AllowedValues: ['', develop, main]
+    Description: >
+      Branch allowed to assume the GitHub deploy role (develop for dev, main for prod).
+      Leave empty to create no GitHub role (used for test).
+
+  OidcProviderArn:
+    Type: String
+    Default: ''
+    Description: >
+      ARN of the existing GitHub OIDC provider. Leave empty to use
+      arn:aws:iam::<account>:oidc-provider/token.actions.githubusercontent.com
+      (the provider created by cloudformation/github-oidc.yaml or already present in the account).
+
+  TerminalPrincipalArn:
+    Type: String
+    Default: ''
+    Description: >
+      ARN of the IAM user or role allowed to assume the terminal deploy role.
+      Leave empty to create no terminal role (prod is deployed from GitHub only).
+
+  TerminalRequireMfa:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Require MFA in the session that assumes the terminal deploy role. Set to false only when
+      the principal cannot carry the MFA claim.
+
+Rules:
+  # GitHub branch <-> environment pairing is a security boundary: only `main` may reach prod,
+  # only `develop` may reach dev. Enforced by CloudFormation when the stack is created/updated.
+  ProdOnlyFromMain:
+    RuleCondition: !Equals [!Ref Environment, prod]
+    Assertions:
+      - Assert: !Or [!Equals [!Ref GitHubBranch, ''], !Equals [!Ref GitHubBranch, main]]
+        AssertDescription: The prod GitHub deploy role may only be trusted from the main branch.
+  NonProdNeverFromMain:
+    RuleCondition: !Not [!Equals [!Ref Environment, prod]]
+    Assertions:
+      - Assert: !Or [!Equals [!Ref GitHubBranch, ''], !Equals [!Ref GitHubBranch, develop]]
+        AssertDescription: Dev/test GitHub deploy roles may only be trusted from the develop branch.
+
+Conditions:
+  HasGitHubBranch: !Not [!Equals [!Ref GitHubBranch, '']]
+  HasTerminalPrincipal: !Not [!Equals [!Ref TerminalPrincipalArn, '']]
+  UseDefaultOidcProvider: !Equals [!Ref OidcProviderArn, '']
+  TerminalRequiresMfa: !And
+    - !Not [!Equals [!Ref TerminalPrincipalArn, '']]
+    - !Equals [!Ref TerminalRequireMfa, 'true']
+
+Resources:
+  # ============================================================================
+  # SAM ARTIFACTS BUCKET
+  # Replaces `resolve_s3` so the deploy roles never need s3:CreateBucket or access
+  # to the shared aws-sam-cli-managed-default stack. Holds packaged Lambda code and
+  # the packaged template only; objects expire after 30 days (cost).
+  # ============================================================================
+  SamArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'tour-data-api-sam-${TargetStackName}-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldDeployArtifacts
+            Status: Enabled
+            ExpirationInDays: 30
+          - Id: AbortIncompleteUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      Tags:
+        - Key: Name
+          Value: !Sub 'tour-data-api-sam-${TargetStackName}'
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Purpose
+          Value: SAM deployment artifacts
+
+  SamArtifactsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SamArtifactsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt SamArtifactsBucket.Arn
+              - !Sub '${SamArtifactsBucket.Arn}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+
+  # ============================================================================
+  # PERMISSIONS BOUNDARY FOR LAMBDA EXECUTION ROLES
+  # template.yaml sets Globals.Function.PermissionsBoundary to this policy's ARN
+  # (arn:aws:iam::<account>:policy/tour-data-api-<stack>-lambda-boundary). The deploy
+  # roles may only create roles that carry this boundary, so a deployment can never
+  # mint a role stronger than this ceiling. Effective permissions of a Lambda role =
+  # its own policies INTERSECT this boundary.
+  #
+  # MAINTENANCE: when a function in template.yaml needs a new action or resource type,
+  # add it here too and update this stack BEFORE deploying the application.
+  # ============================================================================
+  LambdaPermissionsBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub 'tour-data-api-${TargetStackName}-lambda-boundary'
+      Description: !Sub 'Permissions boundary for all Lambda execution roles of the ${TargetStackName} stack'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LambdaLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${TargetStackName}-*'
+              - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${TargetStackName}-*:*'
+          # Shared tables and runtime-provisioned tour tables (<stack>-TourRider-<tourId> etc.).
+          - Sid: DynamoDbDataAndTourTableProvisioning
+            Effect: Allow
+            Action:
+              - dynamodb:BatchGetItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:ConditionCheckItem
+              - dynamodb:DeleteItem
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:UpdateItem
+              - dynamodb:DescribeTable
+              - dynamodb:CreateTable
+              - dynamodb:DeleteTable
+              - dynamodb:TagResource
+              - dynamodb:UpdateTimeToLive
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-*'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-*/index/*'
+          - Sid: DynamoDbStreams
+            Effect: Allow
+            Action:
+              - dynamodb:DescribeStream
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+            Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-*/stream/*'
+          - Sid: DynamoDbListStreams
+            Effect: Allow
+            Action: dynamodb:ListStreams
+            Resource: '*'
+          - Sid: AppBucketObjects
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:s3:::${TargetStackName}-artifacts-${AWS::AccountId}/*'
+              - !Sub 'arn:${AWS::Partition}:s3:::${TargetStackName}-photos-${AWS::AccountId}/*'
+          # The management pool may be an existing pool (CognitoUserPoolArn), so pools are not
+          # name-scoped here; the per-function policies in template.yaml narrow this to one pool.
+          - Sid: CognitoUserManagement
+            Effect: Allow
+            Action:
+              - cognito-idp:AdminAddUserToGroup
+              - cognito-idp:AdminCreateUser
+              - cognito-idp:AdminDeleteUser
+              - cognito-idp:AdminDisableUser
+              - cognito-idp:AdminEnableUser
+              - cognito-idp:AdminGetUser
+              - cognito-idp:AdminListGroupsForUser
+              - cognito-idp:AdminRemoveUserFromGroup
+              - cognito-idp:AdminUpdateUserAttributes
+              - cognito-idp:ListGroups
+              - cognito-idp:ListUsers
+            Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*'
+          - Sid: ExpoTokenParameters
+            Effect: Allow
+            Action: ssm:GetParameter
+            Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${TargetStackName}/*'
+          - Sid: DecryptSecureStringsViaSsm
+            Effect: Allow
+            Action: kms:Decrypt
+            Resource: !Sub 'arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+            Condition:
+              StringEquals:
+                'kms:ViaService': !Sub 'ssm.${AWS::Region}.amazonaws.com'
+          - Sid: PushSenderDeadLetterQueue
+            Effect: Allow
+            Action: sqs:SendMessage
+            Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${TargetStackName}-push-sender-dlq'
+          # Tour provisioning connects Notification-<tourId> streams to the push sender, and the
+          # hotel-upload function invokes its failure handler (Lambda destination).
+          - Sid: ConnectNotificationStreams
+            Effect: Allow
+            Action: lambda:CreateEventSourceMapping
+            Resource: '*'
+            Condition:
+              ArnLike:
+                'lambda:FunctionArn': !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetStackName}-*'
+          - Sid: ListEventSourceMappings
+            Effect: Allow
+            Action: lambda:ListEventSourceMappings
+            Resource: '*'
+          - Sid: InvokeStackFunctions
+            Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetStackName}-*'
+
+  # ============================================================================
+  # DEPLOY POLICY 1 of 2 - CloudFormation, S3, DynamoDB, SQS, CloudWatch, EventBridge
+  # Control plane only. Deliberately NOT granted: item-level DynamoDB access (except the
+  # seeding exception below), S3 object access on the application buckets, DeleteTable,
+  # DeleteBucket, DeleteStack. Resource actions are cross-checked against the CloudFormation
+  # resource-schema handler permissions for each resource type used by template.yaml.
+  # ============================================================================
+  DeployPolicyCore:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub 'tour-data-api-${TargetStackName}-deploy-core'
+      Description: !Sub 'Deploy access (CloudFormation, S3, DynamoDB, SQS, CloudWatch, EventBridge) for the ${TargetStackName} stack'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFormationStack
+            Effect: Allow
+            Action:
+              - cloudformation:CreateChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStackResource
+              - cloudformation:DescribeStackResources
+              - cloudformation:ListStackResources
+              - cloudformation:GetTemplate
+              - cloudformation:GetTemplateSummary
+            Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${TargetStackName}/*'
+          # Required to create a change set for a template using Transform: AWS::Serverless-2016-10-31.
+          - Sid: CloudFormationServerlessTransform
+            Effect: Allow
+            Action: cloudformation:CreateChangeSet
+            Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31'
+          - Sid: CloudFormationValidate
+            Effect: Allow
+            Action:
+              - cloudformation:ValidateTemplate
+              - cloudformation:GetTemplateSummary
+            Resource: '*'
+          - Sid: SamArtifactsBucketObjects
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:PutObject
+              - s3:AbortMultipartUpload
+            Resource: !Sub '${SamArtifactsBucket.Arn}/*'
+          - Sid: SamArtifactsBucketList
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketLocation
+            Resource: !GetAtt SamArtifactsBucket.Arn
+          # Bucket configuration only - no object read/write and no DeleteBucket.
+          - Sid: AppBucketConfiguration
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+              - s3:ListBucket
+              - s3:PutBucketTagging
+              - s3:TagResource
+              - s3:UntagResource
+              - s3:ListTagsForResource
+              - s3:PutBucketVersioning
+              - s3:PutEncryptionConfiguration
+              - s3:PutBucketPublicAccessBlock
+              - s3:PutLifecycleConfiguration
+              - s3:PutBucketCORS
+              - s3:PutBucketNotification
+              - s3:PutBucketPolicy
+              - s3:DeleteBucketPolicy
+              - s3:GetBucket*
+              - s3:Get*Configuration
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:s3:::${TargetStackName}-artifacts-${AWS::AccountId}'
+              - !Sub 'arn:${AWS::Partition}:s3:::${TargetStackName}-photos-${AWS::AccountId}'
+          # The 10 shared tables, by exact name. Tour-specific tables are never listed here:
+          # they are created at runtime by the Lambda roles. No item-level actions, no DeleteTable.
+          # MAINTENANCE: a new shared table in template.yaml must be added to this list.
+          - Sid: SharedTablesControlPlane
+            Effect: Allow
+            Action:
+              - dynamodb:CreateTable
+              - dynamodb:UpdateTable
+              - dynamodb:DescribeTable
+              - dynamodb:DescribeContinuousBackups
+              - dynamodb:UpdateContinuousBackups
+              - dynamodb:DescribeTimeToLive
+              - dynamodb:UpdateTimeToLive
+              - dynamodb:DescribeContributorInsights
+              - dynamodb:DescribeKinesisStreamingDestination
+              - dynamodb:GetResourcePolicy
+              - dynamodb:TagResource
+              - dynamodb:UntagResource
+              - dynamodb:ListTagsOfResource
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-RiderProfile'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-RiderTours'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-RiderCognitoUser'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-TourMaster'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-AppConfig'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-NotificationRule'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-RiderNotification'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-MgmtNotification'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-RiderPushDevice'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-MgmtPushDevice'
+          - Sid: NotificationStreamMetadata
+            Effect: Allow
+            Action: dynamodb:DescribeStream
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-RiderNotification/stream/*'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-MgmtNotification/stream/*'
+          - Sid: ListStreams
+            Effect: Allow
+            Action: dynamodb:ListStreams
+            Resource: '*'
+          # Seeding exception: scripts/seed_app_config.py and scripts/seed_notification_rules.py
+          # call get_item/put_item on these two tables only.
+          - Sid: SeedAppConfigAndNotificationRules
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-AppConfig'
+              - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TargetStackName}-NotificationRule'
+          - Sid: PushSenderDeadLetterQueue
+            Effect: Allow
+            Action:
+              - sqs:CreateQueue
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:SetQueueAttributes
+              - sqs:ListQueueTags
+              - sqs:TagQueue
+              - sqs:UntagQueue
+            Resource: !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${TargetStackName}-push-sender-dlq'
+          - Sid: StackAlarms
+            Effect: Allow
+            Action:
+              - cloudwatch:PutMetricAlarm
+              - cloudwatch:DescribeAlarms
+              - cloudwatch:DeleteAlarms
+              - cloudwatch:ListTagsForResource
+              - cloudwatch:TagResource
+              - cloudwatch:UntagResource
+            Resource: !Sub 'arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${TargetStackName}-*'
+          # EventBridge rule that triggers hotel CSV processing (S3 Object Created events).
+          - Sid: StackEventRules
+            Effect: Allow
+            Action:
+              - events:PutRule
+              - events:DescribeRule
+              - events:DeleteRule
+              - events:PutTargets
+              - events:RemoveTargets
+              - events:ListTargetsByRule
+              - events:TagResource
+              - events:UntagResource
+              - events:ListTagsForResource
+            Resource: !Sub 'arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/${TargetStackName}-*'
+
+  # ============================================================================
+  # DEPLOY POLICY 2 of 2 - Lambda, IAM (escalation-safe), API Gateway, Cognito, explicit denies
+  # ============================================================================
+  DeployPolicyCompute:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub 'tour-data-api-${TargetStackName}-deploy-compute'
+      Description: !Sub 'Deploy access (Lambda, IAM, API Gateway, Cognito) for the ${TargetStackName} stack'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: StackFunctions
+            Effect: Allow
+            Action:
+              - lambda:CreateFunction
+              - lambda:DeleteFunction
+              - lambda:UpdateFunctionCode
+              - lambda:UpdateFunctionConfiguration
+              - lambda:GetFunction
+              - lambda:GetFunctionConfiguration
+              - lambda:GetFunctionCodeSigningConfig
+              - lambda:GetFunctionRecursionConfig
+              - lambda:GetRuntimeManagementConfig
+              - lambda:AddPermission
+              - lambda:RemovePermission
+              - lambda:GetPolicy
+              - lambda:PutFunctionEventInvokeConfig
+              - lambda:UpdateFunctionEventInvokeConfig
+              - lambda:DeleteFunctionEventInvokeConfig
+              - lambda:GetFunctionEventInvokeConfig
+              - lambda:TagResource
+              - lambda:UntagResource
+              - lambda:ListTags
+            Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetStackName}-*'
+          - Sid: StackLayerPublish
+            Effect: Allow
+            Action: lambda:PublishLayerVersion
+            Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:layer:${TargetStackName}-common-layer'
+          - Sid: StackLayerVersions
+            Effect: Allow
+            Action:
+              - lambda:GetLayerVersion
+              - lambda:DeleteLayerVersion
+            Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:layer:${TargetStackName}-common-layer:*'
+          # Event source mappings are addressed by UUID, so they are limited by the target function.
+          - Sid: StackEventSourceMappingsCreate
+            Effect: Allow
+            Action: lambda:CreateEventSourceMapping
+            Resource: '*'
+            Condition:
+              ArnLike:
+                'lambda:FunctionArn': !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetStackName}-*'
+          - Sid: StackEventSourceMappingsManage
+            Effect: Allow
+            Action:
+              - lambda:UpdateEventSourceMapping
+              - lambda:DeleteEventSourceMapping
+              - lambda:GetEventSourceMapping
+            Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:event-source-mapping:*'
+            Condition:
+              ArnLike:
+                'lambda:FunctionArn': !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetStackName}-*'
+          - Sid: StackEventSourceMappingTags
+            Effect: Allow
+            Action:
+              - lambda:TagResource
+              - lambda:UntagResource
+              - lambda:ListTags
+            Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:event-source-mapping:*'
+
+          # ---- IAM: escalation-safe role management ------------------------------------------
+          # Roles may only be created/changed when they carry this stack's permissions boundary.
+          - Sid: CreateBoundedLambdaRoles
+            Effect: Allow
+            Action:
+              - iam:CreateRole
+              - iam:PutRolePolicy
+              - iam:PutRolePermissionsBoundary
+            Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${TargetStackName}-*'
+            Condition:
+              StringEquals:
+                'iam:PermissionsBoundary': !Ref LambdaPermissionsBoundary
+          - Sid: AttachBasicExecutionPolicyOnly
+            Effect: Allow
+            Action: iam:AttachRolePolicy
+            Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${TargetStackName}-*'
+            Condition:
+              StringEquals:
+                'iam:PermissionsBoundary': !Ref LambdaPermissionsBoundary
+                'iam:PolicyARN': !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+          - Sid: ManageStackRoles
+            Effect: Allow
+            Action:
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:ListRolePolicies
+              - iam:ListAttachedRolePolicies
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:DeleteRole
+              - iam:DeleteRolePolicy
+              - iam:DetachRolePolicy
+            Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${TargetStackName}-*'
+          - Sid: PassRolesToLambdaOnly
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${TargetStackName}-*'
+            Condition:
+              StringEquals:
+                'iam:PassedToService': lambda.amazonaws.com
+
+          # HTTP API IDs are random, so they cannot be scoped by name; scoped to the region.
+          - Sid: HttpApis
+            Effect: Allow
+            Action:
+              - apigateway:GET
+              - apigateway:POST
+              - apigateway:PUT
+              - apigateway:PATCH
+              - apigateway:DELETE
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis'
+              - !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*'
+              - !Sub 'arn:${AWS::Partition}:apigateway:${AWS::Region}::/tags/*'
+
+          # Cognito supports aws:ResourceTag on user pools. Pools are created with the template's
+          # Project/Environment tags, so only this environment's pools can be modified. No Admin*/
+          # ListUsers (user data) and no DeleteUserPool/DeleteGroup/DeleteUserPoolClient.
+          - Sid: CognitoCreateTaggedUserPool
+            Effect: Allow
+            Action: cognito-idp:CreateUserPool
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'aws:RequestTag/Project': tour-data-api
+                'aws:RequestTag/Environment': !Ref Environment
+          - Sid: CognitoManageEnvironmentUserPools
+            Effect: Allow
+            Action:
+              - cognito-idp:DescribeUserPool
+              - cognito-idp:UpdateUserPool
+              - cognito-idp:AddCustomAttributes
+              - cognito-idp:SetUserPoolMfaConfig
+              - cognito-idp:GetUserPoolMfaConfig
+              - cognito-idp:TagResource
+              - cognito-idp:UntagResource
+              - cognito-idp:ListTagsForResource
+              - cognito-idp:CreateUserPoolClient
+              - cognito-idp:UpdateUserPoolClient
+              - cognito-idp:DescribeUserPoolClient
+              - cognito-idp:ListUserPoolClientSecrets
+              - cognito-idp:CreateGroup
+              - cognito-idp:UpdateGroup
+              - cognito-idp:GetGroup
+            Resource: !Sub 'arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*'
+            Condition:
+              StringEquals:
+                'aws:ResourceTag/Project': tour-data-api
+                'aws:ResourceTag/Environment': !Ref Environment
+
+          # ---- Explicit denies (defence in depth; also protect against future over-broad allows) --
+          - Sid: DenyRemovingPermissionsBoundary
+            Effect: Deny
+            Action: iam:DeleteRolePermissionsBoundary
+            Resource: '*'
+          - Sid: DenyChangingProjectAccessRolesAndPolicies
+            Effect: Deny
+            Action:
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:PutRolePolicy
+              - iam:DeleteRolePolicy
+              - iam:PutRolePermissionsBoundary
+              - iam:UpdateAssumeRolePolicy
+              - iam:UpdateRole
+              - iam:UpdateRoleDescription
+              - iam:DeleteRole
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:CreatePolicyVersion
+              - iam:SetDefaultPolicyVersion
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/tour-data-api-*'
+              - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/tour-data-api-*'
+          - Sid: DenyIamUsersKeysAndProviders
+            Effect: Deny
+            Action:
+              - iam:CreateUser
+              - iam:CreateAccessKey
+              - iam:CreateLoginProfile
+              - iam:UpdateLoginProfile
+              - iam:AttachUserPolicy
+              - iam:PutUserPolicy
+              - iam:AttachGroupPolicy
+              - iam:PutGroupPolicy
+              - iam:CreateOpenIDConnectProvider
+              - iam:UpdateOpenIDConnectProviderThumbprint
+            Resource: '*'
+
+  # ============================================================================
+  # GITHUB ACTIONS DEPLOY ROLE (only when GitHubBranch is set)
+  # Trust is pinned to ONE branch with StringEquals (no wildcards): develop -> dev, main -> prod.
+  # Workflow jobs must not use a GitHub `environment:` because that changes the `sub` claim.
+  # ============================================================================
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Condition: HasGitHubBranch
+    Properties:
+      RoleName: !Sub 'tour-data-api-github-deploy-${TargetStackName}'
+      Description: !Sub 'GitHub Actions (${GitHubOrg}/${GitHubRepo}, branch ${GitHubBranch}) deploys the ${TargetStackName} stack'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - UseDefaultOidcProvider
+                - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+                - !Ref OidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': sts.amazonaws.com
+                'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/${GitHubBranch}'
+      ManagedPolicyArns:
+        - !Ref DeployPolicyCore
+        - !Ref DeployPolicyCompute
+      Tags:
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Purpose
+          Value: GitHub Actions deployment
+
+  # ============================================================================
+  # TERMINAL DEPLOY ROLE (only when TerminalPrincipalArn is set)
+  # Same permissions as the GitHub role; for ad hoc deployments from a terminal.
+  # ============================================================================
+  TerminalDeployRole:
+    Type: AWS::IAM::Role
+    Condition: HasTerminalPrincipal
+    Properties:
+      RoleName: !Sub 'tour-data-api-terminal-deploy-${TargetStackName}'
+      Description: !Sub 'Terminal deployments of the ${TargetStackName} stack'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref TerminalPrincipalArn
+            Action: sts:AssumeRole
+            Condition: !If
+              - TerminalRequiresMfa
+              - Bool:
+                  'aws:MultiFactorAuthPresent': 'true'
+              - !Ref AWS::NoValue
+      ManagedPolicyArns:
+        - !Ref DeployPolicyCore
+        - !Ref DeployPolicyCompute
+      Tags:
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Purpose
+          Value: Terminal deployment
+
+Outputs:
+  GitHubDeployRoleArn:
+    Condition: HasGitHubBranch
+    Description: Store as the GitHub Actions secret AWS_DEPLOY_ROLE_ARN_DEV (dev) or AWS_DEPLOY_ROLE_ARN_PROD (prod).
+    Value: !GetAtt GitHubDeployRole.Arn
+
+  TerminalDeployRoleArn:
+    Condition: HasTerminalPrincipal
+    Description: Role ARN to put in the role_arn of your AWS CLI profile.
+    Value: !GetAtt TerminalDeployRole.Arn
+
+  SamArtifactsBucketName:
+    Description: Pass to `sam deploy --s3-bucket`.
+    Value: !Ref SamArtifactsBucket
+
+  LambdaPermissionsBoundaryArn:
+    Description: Permissions boundary applied to all Lambda execution roles by template.yaml.
+    Value: !Ref LambdaPermissionsBoundary

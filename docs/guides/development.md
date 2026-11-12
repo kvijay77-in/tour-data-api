@@ -1,5 +1,5 @@
 # Development Guide
-_Last updated: 2026-09-29_
+_Last updated: 2026-11-11_
 
 [← Back to README](../README.md)
 
@@ -94,10 +94,10 @@ make build
 ### Deploy
 
 ```bash
-sam deploy
-# or
-make deploy
+AWS_PROFILE=tour-data-api-dev-deploy make deploy   # alias of make deploy-dev
 ```
+
+`make deploy` builds, runs `sam deploy --config-env default --s3-bucket tour-data-api-sam-dev-<account-id>`, and seeds the `AppConfig` and `NotificationRule` defaults. It uses the least-privilege terminal deploy role for dev; the one-time AWS setup is in the [AWS Deploy Access Setup guide](aws-deploy-access-setup.md). Plain `sam deploy` now needs `--s3-bucket` (the config no longer uses `resolve_s3`).
 
 SAM shows a summary of resources to be created/updated and asks for confirmation. Type `y` to proceed.
 
@@ -268,10 +268,9 @@ All validators are in `src/layers/common/validation.py` and raise `ValidationErr
 | `make install` | Install AWS SAM CLI and dependencies |
 | `make build` | Build the SAM application |
 | `make validate` | Validate SAM template |
-| `make deploy` | Build and deploy to default environment |
-| `make deploy-dev` | Deploy to development environment |
-| `make deploy-test` | Deploy to test environment |
-| `make deploy-prod` | Deploy to production (with confirmation) |
+| `make deploy` | Alias of `make deploy-dev` |
+| `make deploy-dev` | Build, deploy to development and seed defaults (terminal deploy role) |
+| `make deploy-test` | Build, deploy to test and seed defaults (terminal deploy role) |
 | `make local-api` | Start API locally |
 | `make sync` | Sync code changes to AWS (fast iteration) |
 | `make test` | Run all unit tests |
@@ -284,18 +283,17 @@ All validators are in `src/layers/common/validation.py` and raise `ValidationErr
 | `make invoke FUNCTION=X EVENT=Y` | Invoke a function locally |
 | `make package` | Package application for deployment |
 | `make clean` | Clean build artifacts |
-| `make delete` | Delete stack and tour-specific DynamoDB tables |
+| `make delete` | Delete stack and tour-specific DynamoDB tables (needs admin credentials) |
 | `make cleanup-tour-tables` | Dry run — list tour-specific tables |
 | `make cleanup-tour-tables CONFIRM=true` | Delete tour-specific DynamoDB tables |
 | `make provision-tour TOUR_ID=X ...` | Provision a new tour with DynamoDB tables |
 | `make check-config` | Run preflight checks |
 | `make dev-test-setup` | Export env vars for dev API testing |
-| `make setup-github-oidc` | Set up GitHub OIDC for keyless deployments |
 | `make all` | Run full pipeline: validate, build, test, deploy |
 
 > **Note**: Commands that accept `STACK_NAME` (e.g., `delete`, `cleanup-tour-tables`, `provision-tour`) default to `dev`. Override with `STACK_NAME=test`.
 
-> **Note**: For deploying to test or prod environments, see the [Deployment Guide](deployment.md).
+> **Note**: Production is deployed only from GitHub Actions (branch `main`). See the [Deployment Guide](deployment.md).
 
 ---
 

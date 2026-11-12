@@ -32,6 +32,8 @@ sequenceDiagram
     Rider->>S3: Download file
 ```
 
+Browser uploads from the management web app use a presigned PUT directly to the artifact bucket. When `ManagementWebAllowedOrigins` is set, the bucket has an S3 CORS rule for those origins allowing `PUT` with the `Content-Type` header. The photos bucket has no CORS rule.
+
 The API validates the tour, ride (when applicable), configured artifact category, and supported content type before issuing a presigned URL. Artifact deletion removes the S3 object and the corresponding metadata item. Read endpoints can filter by `artifactId` and accept an expiry duration within the API's supported range.
 
 Rider API reads use the same `READ` permission and presigned URL behavior as management reads. Each manifest entry returns `artifactId`, `s3Key`, `contentType`, `version`, `title`, `downloadUrl`, `expiresIn`, `createdAt`, and `updatedAt`. `title` is the configured display name/description; category is implied by the tour or ride endpoint, and file name is the final path component of `s3Key` (there are no separate `category` or `fileName` response properties).

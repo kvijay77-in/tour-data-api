@@ -804,6 +804,28 @@ def test_event_read_endpoints_require_read_permission(event_engine_setup):
         assert response['statusCode'] == 403
 
 
+def test_event_bootstrap_supports_conditional_requests(event_engine_setup):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+
+    from get_bootstrap import lambda_handler as get_bootstrap_handler
+
+    event = _event(['ADMINISTRATOR'], {'tourId': MOCK_TOUR_ID})
+    response = get_bootstrap_handler(event, None)
+
+    assert response['statusCode'] == 200
+    etag = response['headers']['ETag']
+    assert etag
+
+    conditional_event = _event(['ADMINISTRATOR'], {'tourId': MOCK_TOUR_ID})
+    conditional_event['headers'] = {'if-none-match': etag}
+    not_modified = get_bootstrap_handler(conditional_event, None)
+
+    assert not_modified['statusCode'] == 304
+    assert not_modified['body'] == ''
+
+
 def test_create_activity_record_allows_opt_out_without_type_code(event_engine_setup):
     import dynamodb_utils
     dynamodb_utils.TABLES = {}
@@ -1173,3 +1195,148 @@ def test_reconciliation_uses_last_enabled_activity_after_override(event_engine_s
     data = _call_reconciliation()
 
     assert data == {'loadedCount': 1, 'unloadedCount': 1, 'missingRiderIds': ['R5']}
+
+
+DASH_OCCURRENCE_ID = 'EVT-DASH#2026-02-12#1'
+
+
+def _seed_dashboard_data(dynamodb, registration_enabled=False):
+    riders = dynamodb.Table(f'test-stack-TourRider-{MOCK_TOUR_ID}')
+    riders.put_item(Item={'riderId': 'R1', 'profileId': 'P001', 'status': 'REGISTERED', 'updatedAt': '2026-02-01T00:00:00Z'})
+    riders.put_item(Item={'riderId': 'R2', 'status': 'REGISTERED'})
+    riders.put_item(Item={'riderId': 'R3', 'status': 'REGISTERED'})
+    dynamodb.Table('test-rider-profile-table').put_item(Item={
+        'profileId': 'P001', 'name': 'John Doe', 'email': 'john@example.com', 'phone': '+1234567890',
+        'emergencyContact': {'name': 'Jane Doe', 'phone': '+0987654321', 'relation': 'Spouse'},
+    })
+    dynamodb.Table(f'test-stack-Event-{MOCK_TOUR_ID}').put_item(Item={
+        'eventId': 'EVT-DASH',
+        'eventName': 'Dash',
+        'registrationEnabled': registration_enabled,
+        'activities': [
+            {'activityId': 'ACT-001', 'name': 'A1', 'sequenceNo': 1, 'enabled': True, 'mandatory': True},
+            {'activityId': 'ACT-002', 'name': 'A2', 'sequenceNo': 2, 'enabled': True, 'mandatory': False},
+        ],
+    })
+    dynamodb.Table(f'test-stack-EventOccurrence-{MOCK_TOUR_ID}').put_item(Item={
+        'eventId': 'EVT-DASH', 'dateSeq': '2026-02-12#1', 'occurrenceId': DASH_OCCURRENCE_ID,
+        'date': '2026-02-12', 'status': 'ACTIVE', 'activityOverrides': [], 'updatedAt': '2026-02-02T00:00:00Z',
+    })
+    if registration_enabled:
+        dynamodb.Table(f'test-stack-EventRegistration-{MOCK_TOUR_ID}').put_item(Item={
+            'occurrenceId': DASH_OCCURRENCE_ID, 'riderId': 'R1', 'eventId': 'EVT-DASH', 'registeredAt': '2026-02-03T00:00:00Z',
+        })
+        dynamodb.Table(f'test-stack-EventRegistration-{MOCK_TOUR_ID}').put_item(Item={
+            'occurrenceId': DASH_OCCURRENCE_ID, 'riderId': 'R2', 'eventId': 'EVT-DASH', 'registeredAt': '2026-02-03T00:00:00Z',
+        })
+    logs = dynamodb.Table(f'test-stack-EventActivityLogs-{MOCK_TOUR_ID}')
+
+    def record(rider_id, activity_id, outcome='COMPLETED', timestamp='2026-02-12T05:00:00Z', cancelled_at=None):
+        item = {
+            'occurrenceId': DASH_OCCURRENCE_ID, 'recordId': f'{rider_id}#{activity_id}#{timestamp}',
+            'riderId': rider_id, 'activityId': activity_id, 'outcome': outcome, 'timestamp': timestamp,
+        }
+        if cancelled_at:
+            item['cancelledAt'] = cancelled_at
+        logs.put_item(Item=item)
+
+    record('R1', 'ACT-001')
+    record('R1', 'ACT-002', outcome='OPTED_OUT', timestamp='2026-02-12T05:10:00Z')
+    record('R2', 'ACT-001', timestamp='2026-02-12T05:20:00Z', cancelled_at='2026-02-12T06:00:00Z')
+
+
+def _call_event_dashboard(handler_name, headers=None, path=None):
+    import dynamodb_utils
+    dynamodb_utils.TABLES = {}
+    dynamodb_utils.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+    handler = __import__(handler_name).lambda_handler
+    request = _event(
+        ['ADMINISTRATOR'],
+        path or {'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-DASH', 'occurrenceId': DASH_OCCURRENCE_ID},
+    )
+    request['headers'] = headers or {}
+    return handler(request, None)
+
+
+def test_event_dashboard_returns_ride_style_payload(event_engine_setup):
+    _seed_dashboard_data(event_engine_setup)
+
+    response = _call_event_dashboard('get_event_dashboard')
+
+    assert response['statusCode'] == 200
+    assert response['headers']['ETag']
+    data = json.loads(response['body'])['data']
+    assert set(data) == {'event', 'occurrence', 'riders', 'records', 'cancelled', 'summary'}
+    assert data['event']['eventName'] == 'Dash'
+    assert len(data['records']) == 2
+    assert len(data['cancelled']) == 1
+    rider = next(item for item in data['riders'] if item['riderId'] == 'R1')
+    assert rider['name'] == 'John Doe'
+    assert rider['emergencyContact']['name'] == 'Jane Doe'
+    assert rider['registered'] is True
+    assert rider['activities'] == [
+        {'activityId': 'ACT-001', 'status': 'COMPLETED'},
+        {'activityId': 'ACT-002', 'status': 'OPTED_OUT'},
+    ]
+    assert len(data['riders']) == 3
+    assert data['summary']['totalRiders'] == 3
+    assert data['summary']['completedCount'] == 1
+    assert data['summary']['optedOutCount'] == 1
+    assert data['summary']['outstandingMandatoryCount'] == 2
+    assert data['summary']['activities'][0] == {
+        'activityId': 'ACT-001', 'completed': 1, 'optedOut': 0, 'flagged': 0, 'pending': 2,
+    }
+
+
+def test_event_dashboard_lists_only_registered_riders_when_registration_enabled(event_engine_setup):
+    _seed_dashboard_data(event_engine_setup, registration_enabled=True)
+
+    data = json.loads(_call_event_dashboard('get_event_dashboard')['body'])['data']
+
+    assert sorted(item['riderId'] for item in data['riders']) == ['R1', 'R2']
+    assert data['summary']['totalRiders'] == 2
+    assert data['summary']['registeredCount'] == 2
+    assert data['summary']['outstandingMandatoryCount'] == 1
+
+
+def test_event_dashboard_progress_payload_and_data_version(event_engine_setup):
+    _seed_dashboard_data(event_engine_setup, registration_enabled=True)
+
+    response = _call_event_dashboard('get_event_dashboard_progress')
+
+    assert response['statusCode'] == 200
+    data = json.loads(response['body'])['data']
+    assert set(data) == {'eventId', 'occurrenceId', 'records', 'cancelled', 'summary', 'dataVersion'}
+    assert data['eventId'] == 'EVT-DASH'
+    assert len(data['records']) == 2
+    assert len(data['cancelled']) == 1
+    assert data['dataVersion'] == '2026-02-12T06:00:00Z'
+    assert data['summary']['totalRiders'] == 2
+
+
+@pytest.mark.parametrize('handler_name', ['get_event_dashboard', 'get_event_dashboard_progress'])
+def test_event_dashboards_support_conditional_requests(event_engine_setup, handler_name):
+    _seed_dashboard_data(event_engine_setup)
+    etag = _call_event_dashboard(handler_name)['headers']['ETag']
+
+    not_modified = _call_event_dashboard(handler_name, headers={'if-none-match': etag})
+
+    assert not_modified['statusCode'] == 304
+    assert not_modified['body'] == ''
+    assert not_modified['headers']['ETag'] == etag
+
+
+@pytest.mark.parametrize('handler_name', ['get_event_dashboard', 'get_event_dashboard_progress'])
+def test_event_dashboards_validate_path_and_missing_occurrence(event_engine_setup, handler_name):
+    _seed_dashboard_data(event_engine_setup)
+
+    bad = _call_event_dashboard(
+        handler_name, path={'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-DASH', 'occurrenceId': 'bad id'}
+    )
+    missing = _call_event_dashboard(
+        handler_name,
+        path={'tourId': MOCK_TOUR_ID, 'eventId': 'EVT-DASH', 'occurrenceId': 'EVT-DASH#2026-03-01#1'},
+    )
+
+    assert bad['statusCode'] == 400
+    assert missing['statusCode'] == 404

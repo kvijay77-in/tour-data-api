@@ -425,6 +425,8 @@ This directly supports the two testing modes requested for the events engine:
 - **Start of event:** run the scenario with no extra flags — today's occurrence(s) are created `PLANNED` with no scans, ready for manual QR-scan testing from the very beginning.
 - **Event already in progress:** run with `--include-in-progress` (or re-run later with `--in-progress-only` to avoid re-writing events/hotels/history) to pre-populate today's occurrence(s) per `in_progress.activity_distribution`, so manual testing can continue from that point for the riders not yet touched.
 
+Re-running a scenario always deletes existing data for the events it defines (event definition, occurrences, activity records, registrations) before loading; other events are untouched. Hotels and room allocations are overwritten by key, not deleted. `--in-progress-only` skips this cleanup.
+
 Linked occurrences (for example Baggage Loading/Unloading) are resolved automatically: an occurrence with `linked_event_id: EVT-X` is paired with the occurrence in event `EVT-X` that has the same `day_offset` and `seq`, and `linkedOccurrenceRef` is set on both sides.
 
 ## Data Generation Details

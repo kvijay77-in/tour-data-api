@@ -178,11 +178,15 @@ def archive_read_items_for_audience(
     table = boto3.resource("dynamodb").Table(table_name)
     archive_table = boto3.resource("dynamodb").Table(archive_table_name)
     key_expr = Key("audience").eq(audience)
-    rows = table.query(
-        KeyConditionExpression=key_expr,
-        ScanIndexForward=True,
-        Limit=max(1, limit),
-    ).get("Items", [])
+    try:
+        rows = table.query(
+            KeyConditionExpression=key_expr,
+            ScanIndexForward=True,
+            Limit=max(1, limit),
+        ).get("Items", [])
+    except Exception as exc:
+        logger.warning("Archive query failed table=%s audience=%s: %s", table_name, audience, str(exc))
+        return 0
     moved = 0
     cutoff = datetime.now(timezone.utc).timestamp() - max(1, archive_after_hours) * 3600
     for row in rows:
@@ -195,8 +199,12 @@ def archive_read_items_for_audience(
             continue
         if created_ts > cutoff:
             continue
-        archive_table.put_item(Item=row)
-        table.delete_item(Key={"audience": row["audience"], "sk": row["sk"]})
+        try:
+            archive_table.put_item(Item=row)
+            table.delete_item(Key={"audience": row["audience"], "sk": row["sk"]})
+        except Exception as exc:
+            logger.warning("Archive move failed table=%s audience=%s: %s", table_name, audience, str(exc))
+            continue
         moved += 1
     return moved
 

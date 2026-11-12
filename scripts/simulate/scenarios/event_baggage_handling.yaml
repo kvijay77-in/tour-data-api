@@ -161,5 +161,4 @@ events:
             ACT-001: 12
 
 options:
-  clean_before_load: true
   seed: 42

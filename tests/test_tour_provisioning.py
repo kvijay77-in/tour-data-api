@@ -240,7 +240,7 @@ class TestProvisionTourTables:
             ignore_existing=True,
         )
 
-        assert len(created) == 13
+        assert created == [missing_table]
         for table_type in TOUR_TABLE_TYPES:
             resp = dynamodb_client_mock.describe_table(
                 TableName=f"{MOCK_STACK_NAME}-{table_type}-{MOCK_TOUR_ID}"

@@ -56,7 +56,7 @@ from decimal import Decimal
 import yaml
 import boto3
 from botocore.exceptions import ClientError
-from boto3.dynamodb.conditions import Attr
+from boto3.dynamodb.conditions import Attr, Key
 
 
 SCENARIO_TYPE_TOUR_DATA = 'tour_data_generation'
@@ -1961,8 +1961,6 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
 # hardcoded here, only generic defaults for optional config fields)
 # ============================================================================
 
-EVENT_TABLE_TYPES = ['Event', 'EventOccurrence', 'EventActivityLogs', 'EventRegistration', 'Hotel', 'RoomAllocation']
-
 EVENT_OCCURRENCE_STATUS_PLANNED = 'PLANNED'
 EVENT_OCCURRENCE_STATUS_ACTIVE = 'ACTIVE'
 EVENT_OCCURRENCE_STATUS_COMPLETED = 'COMPLETED'
@@ -2306,19 +2304,63 @@ def _build_activity_record(event_item, occurrence_item, activity, rider_id, time
     return {k: v for k, v in record.items() if v is not None}
 
 
-def clean_event_tables(dynamodb, stack_name, tour_id):
-    """Clean all data from the event-engine tour-specific tables."""
-    for table_type in EVENT_TABLE_TYPES:
-        table_name = build_table_name(stack_name, table_type, tour_id=tour_id)
-        try:
-            table = get_table(dynamodb, stack_name, table_type, tour_id=tour_id)
-            deleted = clean_table(table)
-            print(f"  Cleaned {table_name}: {deleted} items deleted")
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                print(f"  Skipped {table_name}: table not found")
-            else:
-                raise
+def _query_all_items(table, key_condition, projection_expression=None, expression_attribute_names=None):
+    """Query every page of items matching a key condition."""
+    kwargs = {'KeyConditionExpression': key_condition}
+    if projection_expression:
+        kwargs['ProjectionExpression'] = projection_expression
+    if expression_attribute_names:
+        kwargs['ExpressionAttributeNames'] = expression_attribute_names
+    items = []
+    while True:
+        response = table.query(**kwargs)
+        items.extend(response.get('Items', []))
+        if 'LastEvaluatedKey' not in response:
+            return items
+        kwargs['ExclusiveStartKey'] = response['LastEvaluatedKey']
+
+
+def _delete_items(table, keys):
+    """Batch-delete items by key and return the count."""
+    with table.batch_writer() as batch:
+        for key in keys:
+            batch.delete_item(Key=key)
+    return len(keys)
+
+
+def clean_event_data(dynamodb, stack_name, tour_id, event_ids):
+    """Delete existing data (definition, occurrences, activity logs, registrations) for the given events only."""
+    event_table = get_table(dynamodb, stack_name, 'Event', tour_id=tour_id)
+    occurrence_table = get_table(dynamodb, stack_name, 'EventOccurrence', tour_id=tour_id)
+    logs_table = get_table(dynamodb, stack_name, 'EventActivityLogs', tour_id=tour_id)
+    registration_table = get_table(dynamodb, stack_name, 'EventRegistration', tour_id=tour_id)
+
+    for event_id in event_ids:
+        occurrences = _query_all_items(
+            occurrence_table, Key('eventId').eq(event_id), projection_expression='eventId, dateSeq, occurrenceId',
+        )
+        log_count = 0
+        registration_count = 0
+        for occurrence in occurrences:
+            occurrence_id = occurrence['occurrenceId']
+            logs = _query_all_items(
+                logs_table, Key('occurrenceId').eq(occurrence_id), projection_expression='occurrenceId, recordId',
+            )
+            log_count += _delete_items(logs_table, logs)
+            registrations = _query_all_items(
+                registration_table, Key('occurrenceId').eq(occurrence_id),
+                projection_expression='occurrenceId, riderId',
+            )
+            registration_count += _delete_items(registration_table, registrations)
+
+        _delete_items(occurrence_table, [
+            {'eventId': o['eventId'], 'dateSeq': o['dateSeq']} for o in occurrences
+        ])
+        event_table.delete_item(Key={'eventId': event_id})
+        print(
+            f"  Cleaned event {event_id}: {len(occurrences)} occurrence(s), "
+            f"{log_count} activity record(s), {registration_count} registration(s)"
+        )
 
 
 def run_event_data_scenario(args, config, stack_name, region, seed):
@@ -2426,10 +2468,9 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
         print('\nDry run complete. No data written to DynamoDB.')
         return
 
-    options = config.get('options', {})
-    if options.get('clean_before_load') and not args.in_progress_only:
-        print('\nCleaning existing event-engine data...')
-        clean_event_tables(dynamodb, stack_name, tour_id)
+    if not args.in_progress_only:
+        print('\nCleaning existing data for the scenario events...')
+        clean_event_data(dynamodb, stack_name, tour_id, [e['eventId'] for e in event_items])
 
     print('\nLoading data to DynamoDB...')
 

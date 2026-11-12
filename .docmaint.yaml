@@ -1,0 +1,53 @@
+# .docmaint.yaml: commit this file in the code repo. Every key is optional;
+# anything set here overrides the global config.
+# The commented values below are what is in effect now (repo file > global
+# repo entry > global defaults). Uncomment a line to pin it in this repo.
+version: 1
+# code_branch: feature-first-release
+# docs_branch: docs/auto-update
+# Two READMEs outside docs/ are maintained docs: scripts/simulate/README.md
+# (simulation tooling, a change hotspot) and tests/README.md. They are map
+# targets, so their folders must be doc roots. docs/misc/ stays inside "docs"
+# but is never mapped (historical).
+doc_roots: ["docs", "scripts/simulate", "tests"]
+# doc_extensions: [".md"]
+# map_file: docs/_map.yaml
+# ignore_globs:
+#   - "package-lock.json"
+#   - "yarn.lock"
+#   - "pnpm-lock.yaml"
+#   - "uv.lock"
+#   - "poetry.lock"
+#   - "node_modules/"
+#   - "dist/"
+#   - "build/"
+#   - ".expo/"
+#   - ".aws-sam/"
+#   - "coverage/"
+#   - "__snapshots__/"
+#   - "*.snap"
+#   - "*.min.js"
+#   - "*.map"
+#   - "*.png"
+#   - "*.jpg"
+#   - "*.jpeg"
+#   - "*.gif"
+#   - "*.webp"
+#   - "*.ico"
+#   - "*.svg"
+#   - "*.ttf"
+#   - "*.otf"
+#   - "*.woff"
+#   - "*.woff2"
+
+# Phase 2 digest settings. This block replaces the defaults as a whole: any
+# key left out gets the built-in default, not the global repo entry's value.
+digest:
+  kind: sam                       # same as the default for role "backend"; pinned for clarity
+  sam_template: template.yaml
+  # The template has 155 HttpApi routes (111 TourDataApi, 44 RiderApi), about
+  # 4.6k estimated tokens for routes alone; 126 functions add about 3.9k.
+  # 5500 should keep every route and let the function list collapse to names.
+  # Prefix check: brief ~5.1k + developer style ~1.1k + notes <=2k + digest 5.5k
+  # = ~13.7k <= 14k. Confirm with `docmaint knowledge show backend`.
+  budget_tokens: 5500

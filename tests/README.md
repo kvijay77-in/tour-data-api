@@ -18,6 +18,32 @@ Or run the Make target:
 make test
 ```
 
+## Run targeted tests
+
+Run only what you changed. Activate the virtual environment first (`source .venv/bin/activate`).
+
+| Goal | Command |
+|---|---|
+| One test file | `pytest tests/test_rbac.py -v` |
+| Several test files | `pytest tests/test_rbac.py tests/test_validation.py -v` |
+| One test function | `pytest tests/test_rbac.py::test_name -v` |
+| One test class | `pytest tests/test_rbac.py::TestClassName -v` |
+| One method in a class | `pytest tests/test_rbac.py::TestClassName::test_name -v` |
+| Tests matching a keyword | `pytest tests/ -k "checkin and not cancel" -v` |
+| Re-run only last failures | `pytest tests/ --lf -v` |
+| Stop at first failure | `pytest tests/test_rbac.py -x -v` |
+| Show print output | `pytest tests/test_rbac.py -s -v` |
+
+To find test names without running them:
+
+```bash
+pytest tests/test_rbac.py --collect-only -q
+```
+
+Use the [test organization](#test-organization) table to choose the file that covers the area you changed.
+
+## Coverage
+
 The GitHub Actions workflow runs the test suite with coverage reporting. To generate a local HTML coverage report:
 
 ```bash

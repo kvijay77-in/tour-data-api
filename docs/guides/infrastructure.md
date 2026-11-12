@@ -1,17 +1,17 @@
 # Infrastructure guide
-_Last updated: 2026-09-29_
+_Last updated: 2026-11-11_
 
 ## Ownership
 
 This repository owns and manages **all AWS infrastructure for the entire Cycling Tour Management Platform**, including resources used by both the management and rider apps. This includes both Cognito user pools, API Gateway HTTP APIs, Lambda functions and layers, DynamoDB tables, S3 buckets, EventBridge rules, SQS dead-letter queues, IAM roles, and CloudWatch monitoring. App repositories do not own platform AWS infrastructure.
 
-The primary infrastructure definition is `/template.yaml`; the GitHub OIDC bootstrap is `cloudformation/github-oidc.yaml`. Runtime tour-table creation and cleanup are managed by `src/layers/common/tour_provisioning.py` and the scripts in `scripts/`.
+The primary infrastructure definition is `/template.yaml`. Deployment access is defined separately and created manually by an administrator ([AWS Deploy Access Setup](aws-deploy-access-setup.md)): `cloudformation/github-oidc.yaml` (GitHub OIDC identity provider, one per account) and `cloudformation/deploy-access.yaml` (one stack per environment: least-privilege deploy roles and policies, the SAM artifacts bucket, and the permissions boundary applied to every Lambda execution role through `Globals.Function.PermissionsBoundary` in `template.yaml`). Runtime tour-table creation and cleanup are managed by `src/layers/common/tour_provisioning.py` and the scripts in `scripts/`.
 
 ## Tagging
 
-The SAM template defines common tags, including `Project`, `Environment`, `Application`, `ManagedBy`, and `SubscriptionId`, and applies resource-specific tags where declared. `ResourceOwner` is used by selected resources. Runtime-provisioned tour tables are tagged by the provisioning code with project, environment, application, management, and optional subscription metadata. The GitHub OIDC bootstrap stack has its own tags.
+The SAM template defines common tags, including `Project`, `Environment`, `Application`, `ManagedBy`, and `SubscriptionId`, and applies resource-specific tags where declared. `ResourceOwner` is used by selected resources. Runtime-provisioned tour tables are tagged by the provisioning code with project, environment, application, management, and optional subscription metadata. The GitHub OIDC bootstrap stack and each deploy-access stack have their own tags (`Project`, `Environment`, `ManagedBy`, and `Purpose` where supported); IAM managed policies do not support tags.
 
-Check `template.yaml`, `cloudformation/github-oidc.yaml`, and `src/layers/common/tour_provisioning.py` when changing tagging behavior; not every AWS resource type supports identical stack-level tag propagation. Review newly added resources for the project and environment tags required for cost attribution.
+Check `template.yaml`, `cloudformation/github-oidc.yaml`, `cloudformation/deploy-access.yaml`, and `src/layers/common/tour_provisioning.py` when changing tagging behavior; not every AWS resource type supports identical stack-level tag propagation. Review newly added resources for the project and environment tags required for cost attribution.
 
 For cost reports, activate the applicable cost-allocation tags in the AWS Billing console. Use the AWS Resource Groups Tagging API to inspect tagged resources:
 

@@ -245,8 +245,8 @@ All routes below are shown with the deployed API version prefix (`/v1`).
 | `DELETE /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/registrations/{riderId}` | `tourId, eventId, occurrenceId, riderId` (required) | None | None | Requires `EVENT_REGISTRATION_MANAGE`; same enabled/`PLANNED` checks; absent registration returns `404 REGISTRATION_NOT_FOUND` |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records` | `tourId, eventId, occurrenceId` (required) | None | Required: `activityId`; Optional: `timestamp, outcome` (default `COMPLETED`; `COMPLETED` or `OPTED_OUT`), `variantSelected` | Requires Rider API `SELF_CHECKIN`; caller identity supplies `riderId`; occurrence must be `ACTIVE`; calculated activity permission must be true; enabled registration requires a registration row; reuses staff record sequence, prerequisite, opt-out, variant, and duplicate validation; method is `SELF_SERVICE`, `typeCode` is absent and no allowed-ID-type lookup is performed |
 | `POST /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/self-records/{recordId}/cancel` | `tourId, eventId, occurrenceId, recordId` (required) | None | Optional: `cancelReason` | Requires Rider API `SELF_CHECKIN`; record must belong to caller, occurrence must be `ACTIVE`, and calculated activity self-service permission must remain true; staff-created own records may also be cancelled |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; aggregated occurrence dashboard payload (see [Get Event Dashboard](#get-event-dashboard)) |
-| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; lightweight progress refresh payload |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; aggregated occurrence dashboard payload (see [Get Event Dashboard](#get-event-dashboard)); `400` on invalid path IDs, `404 OCCURRENCE_NOT_FOUND`; supports `If-None-Match` and `304 Not Modified` |
+| `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/dashboard/progress` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; lightweight refresh contract with `eventId`, `occurrenceId`, `records`, `cancelled`, `summary`, `dataVersion` (see [Get Event Dashboard Progress](#get-event-dashboard-progress)); excludes `event`, `occurrence` and `riders`; supports `If-None-Match` and `304 Not Modified` |
 | `GET /v1/tours/{tourId}/events/{eventId}/occurrences/{occurrenceId}/reconciliation` | `tourId, eventId, occurrenceId` (required) | None | None | Requires `DASHBOARD`; returns `loadedCount`, `unloadedCount`, and `missingRiderIds` (riders with a bag loaded but not unloaded); only non-cancelled, non-`OPTED_OUT` records with a `typeCode` at each occurrence's last enabled activity are counted; `400 NO_LINKED_OCCURRENCE` when the occurrence has no `linkedOccurrenceRef` |
 | `GET /v1/tours/{tourId}/events/bootstrap` | `tourId` (required) | None | None | Requires `READ`; event definitions include `registrationEnabled`; Rider API response adds caller `registered` per occurrence and calculated `selfServiceAllowed` per activity/occurrence |
 | `GET /v1/tours/{tourId}/riders/{riderId}/events/progress` | `tourId, riderId` (required) | `eventId` (optional) | None | Requires `READ`; Rider API path `riderId` must match the caller or returns `403 NOT_OWN_DATA`; returns each non-cancelled record's `method` and effective registration status per occurrence |
@@ -358,7 +358,7 @@ All endpoints below require caller role `ADMINISTRATOR` and are backed by the ma
 - **Headers:** every request needs `Authorization: Bearer <Cognito JWT>`. Requests with a body also need `Content-Type: application/json`.
 - **Responses:** examples show only the `data` value of the success envelope (`{"success": true, "data": ..., "timestamp": ...}`) along with the HTTP status. Fields that hold `null` in DynamoDB come back as `null`. Optional fields that were never set are left out.
 - **IDs containing `#`:** `occurrenceId` and event `recordId` must be URL-encoded (`#` → `%23`) when used as path parameters. Check-in IDs are server-generated UUIDs and do not require encoding. For example, `EVT-BAGLOAD#2026-02-12#1` becomes `EVT-BAGLOAD%232026-02-12%231`.
-- **Conditional GETs:** endpoints that return an `ETag` header (config, ride dashboard, dashboard progress, rider ride details, event bootstrap) accept `If-None-Match: <ETag>`. If the ETag matches, they return `304 Not Modified` with an empty body.
+- **Conditional GETs:** endpoints that return an `ETag` header (config, ride dashboard, dashboard progress, rider ride details, event bootstrap, event dashboard, event dashboard progress) accept `If-None-Match: <ETag>`. If the ETag matches, they return `304 Not Modified` with an empty body.
 - **Presigned URLs** are shortened with `...`. When uploading, send the same `Content-Type` that was used to sign the URL.
 - **`{ ... }` placeholders** stand for an object shown in full in another example. The linked example is noted next to it.
 
@@ -2425,35 +2425,64 @@ Response `200 OK`. The record is kept and marked cancelled:
 
 ```http
 GET /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/dashboard
+If-None-Match: "c0ffee0000000000000000000000beef"
 ```
 
-Response `200 OK`. `occurrence` is the object from [Get Occurrence](#get-occurrence). Activity `status` is `PENDING` (no active record) or the record `outcome` (`COMPLETED`, `OPTED_OUT`, `FLAGGED`). `cancelled` holds the full cancelled records, as in [Cancel Activity Record](#cancel-activity-record):
+Response `200 OK` (with `ETag` header). `event` is the object from [Get Event](#get-event) and `occurrence` the object from [Get Occurrence](#get-occurrence). `riders` carries profile data as in [Get Ride Dashboard](#get-ride-dashboard). When the event has `registrationEnabled: true`, only riders registered for the occurrence are listed; otherwise all tour riders are listed. Per-rider activity `status` is `PENDING` (no active record) or the record `outcome` (`COMPLETED`, `OPTED_OUT`, `FLAGGED`). `records` holds the active activity records and `cancelled` the cancelled records, as in [Cancel Activity Record](#cancel-activity-record). `summary` counts are per record, except `outstandingMandatoryCount` and `pending`, which count rider × activity pairs without an active record; `summary.activities` covers the enabled activities of the occurrence:
 ```json
 {
+  "event": { ... },
   "occurrence": { ... },
-  "registrationEnabled": true,
-  "registeredCount": 2,
   "riders": [
     {
       "riderId": "R12",
+      "profileId": "8a1d4f2b-6c3e-4f5a-9b7c-0d1e2f3a4b5c",
+      "status": "REGISTERED",
+      "name": "Priya Raman",
+      "email": "priya.raman@example.com",
+      "phone": "+919840012345",
+      "emergencyContact": { "name": "Karthik Raman", "phone": "+919840054321", "relation": "Brother" },
+      "photoS3Key": null,
       "registered": true,
       "activities": [
         { "activityId": "ACT-001", "status": "OPTED_OUT" },
         { "activityId": "ACT-002", "status": "PENDING" },
         { "activityId": "ACT-003", "status": "PENDING" }
       ]
-    },
-    {
-      "riderId": "R57",
-      "registered": true,
-      "activities": [
-        { "activityId": "ACT-001", "status": "COMPLETED" },
-        { "activityId": "ACT-002", "status": "COMPLETED" },
-        { "activityId": "ACT-003", "status": "COMPLETED" }
-      ]
     }
   ],
-  "cancelled": [ { ... } ]
+  "records": [
+              {
+                "eventId": "EVT-DAY0",
+                "typeCode": "1",
+                "isFlagged": false,
+                "occurrenceId": "EVT-DAY0#2026-10-12#1",
+                "timestamp": "2026-10-12T06:02:12Z",
+                "createdAt": "2026-10-12T06:02:12Z",
+                "activityId": "ACT-001",
+                "scannedBy": "simulation-script",
+                "method": "QR_SCAN",
+                "activityName": "ID Card collection",
+                "riderId": "R10",
+                "syncedAt": "2026-10-12T06:02:12Z",
+                "outcome": "COMPLETED",
+                "recordId": "R10#ACT-001#2026-10-12T06:02:12Z"
+            },{ ... } ],
+  "cancelled": [ { ... } ],
+  "summary": {
+    "totalRiders": 2,
+    "registrationEnabled": true,
+    "registeredCount": 2,
+    "completedCount": 3,
+    "outstandingMandatoryCount": 1,
+    "optedOutCount": 1,
+    "flaggedCount": 0,
+    "activities": [
+      { "activityId": "ACT-001", "completed": 1, "optedOut": 1, "flagged": 0, "pending": 0 },
+      { "activityId": "ACT-002", "completed": 1, "optedOut": 0, "flagged": 0, "pending": 1 },
+      { "activityId": "ACT-003", "completed": 1, "optedOut": 0, "flagged": 0, "pending": 1 }
+    ]
+  }
 }
 ```
 
@@ -2463,16 +2492,15 @@ Response `200 OK`. `occurrence` is the object from [Get Occurrence](#get-occurre
 GET /v1/tours/TOT-2026/events/EVT-BAGLOAD/occurrences/EVT-BAGLOAD%232026-02-12%231/dashboard/progress
 ```
 
-Response `200 OK`. `outstandingMandatoryCount` counts rider × mandatory-activity pairs that have no active record:
+Response `200 OK` (with `ETag` header). `records`, `cancelled` and `summary` are identical to [Get Event Dashboard](#get-event-dashboard). `dataVersion` is the latest timestamp across the event, occurrence, riders in scope, registrations and records:
 ```json
 {
-  "totalRiders": 2,
-  "registrationEnabled": true,
-  "registeredCount": 2,
-  "completedCount": 3,
-  "outstandingMandatoryCount": 1,
-  "optedOutCount": 1,
-  "flaggedCount": 0
+  "eventId": "EVT-BAGLOAD",
+  "occurrenceId": "EVT-BAGLOAD#2026-02-12#1",
+  "records": [ { ... } ],
+  "cancelled": [ { ... } ],
+  "summary": { "totalRiders": 2, "registrationEnabled": true, "registeredCount": 2, "completedCount": 3, "outstandingMandatoryCount": 1, "optedOutCount": 1, "flaggedCount": 0, "activities": [ ... ] },
+  "dataVersion": "2026-02-12T06:00:00Z"
 }
 ```
 
@@ -3281,6 +3309,10 @@ In addition to the standard `400`/`401`/`403`/`404`/`409`/`500` statuses above, 
 ## Authorization
 
 Endpoint-specific authorization requirements appear in the contract tables below. Exact permission names and the current Cognito group mapping are maintained in [RBAC](rbac.md) and `src/layers/common/rbac.py`. Some operations, including pit-stop actions and event scans, also enforce stage or tour-assignment constraints in the handler.
+
+### Management web browser CORS
+
+When the `ManagementWebAllowedOrigins` stack parameter is set (comma-separated origins), the management HTTP API allows only those exact origins, the headers `Authorization`, `Content-Type`, and `If-None-Match`, and exposes `ETag`. Conditional event reads use `If-None-Match` and return `304` when unchanged. When the parameter is empty, the existing wildcard policy applies. Origin-less native app calls and the rider HTTP API are unaffected.
 
 ## Request Validation
 

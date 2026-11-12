@@ -39,7 +39,8 @@ Frontend screen designs are maintained in the management and rider app repositor
 | Document | Scope |
 |---|---|
 | [Development](guides/development.md) | Environment setup, local development, tests, and commands |
-| [Deployment](guides/deployment.md) | AWS setup, Cognito, GitHub OIDC, environments, and deployment |
+| [Deployment](guides/deployment.md) | Branch-mapped GitHub Actions and terminal deployment, Cognito, and environments |
+| [AWS deploy access setup](guides/aws-deploy-access-setup.md) | One-time manual setup of deploy roles, OIDC, permissions boundary, secrets, and verification |
 | [Infrastructure](guides/infrastructure.md) | AWS ownership, tags, monitoring, and cost management |
 | [Project structure](guides/project-structure.md) | Current repository folders and code organization |
 

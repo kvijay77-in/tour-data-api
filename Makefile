@@ -1,4 +1,4 @@
-.PHONY: build deploy clean test validate sync logs install help check-config setup-github-oidc cleanup-tour-tables seed-app-config seed-notification-rules setup-notification-push
+.PHONY: build deploy clean test validate sync logs install help check-config cleanup-tour-tables seed-app-config seed-notification-rules setup-notification-push
 
 # Auto-detect Python: prefer project venv, then system python3/python
 # Project venv has the required dependencies (boto3, pytest, etc.)
@@ -27,22 +27,20 @@ build: ## Build SAM application
 validate: ## Validate SAM template
 	sam validate --lint
 
-deploy: build ## Build and deploy to default environment
-	sam deploy; RC=$$?; if [ $$RC -eq 0 ] || [ $$RC -eq 1 ]; then $(MAKE) seed-app-config; $(MAKE) seed-notification-rules; else exit $$RC; fi
+# Terminal deployments (dev iteration, ad hoc test) use the least-privilege terminal deploy role
+# created by cloudformation/deploy-access.yaml: run with AWS_PROFILE=<terminal-role-profile>.
+# Production is deployed from GitHub Actions only (main branch). See docs/guides/aws-deploy-access-setup.md.
+deploy: deploy-dev ## Alias of deploy-dev
 
-deploy-dev: build ## Deploy to development environment
-	sam deploy --config-env default
+deploy-dev: build ## Build, deploy to dev and seed AppConfig/NotificationRule
+	@ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text) || exit 1; \
+	sam deploy --config-env default --s3-bucket tour-data-api-sam-dev-$$ACCOUNT_ID || exit $$?; \
+	$(MAKE) seed-app-config STACK_NAME=dev && $(MAKE) seed-notification-rules STACK_NAME=dev
 
-deploy-test: build ## Deploy to test environment
-	sam deploy --config-env test
-
-deploy-prod: build ## Deploy to production environment (with confirmation)
-	@echo "WARNING: Deploying to PRODUCTION!"
-	@read -p "Are you sure? [y/N] " -n 1 -r; \
-	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		sam deploy --config-env prod; \
-	fi
+deploy-test: build ## Build, deploy to test and seed AppConfig/NotificationRule
+	@ACCOUNT_ID=$$(aws sts get-caller-identity --query Account --output text) || exit 1; \
+	sam deploy --config-env test --s3-bucket tour-data-api-sam-test-$$ACCOUNT_ID || exit $$?; \
+	$(MAKE) seed-app-config STACK_NAME=test && $(MAKE) seed-notification-rules STACK_NAME=test
 
 local-api: build ## Start API locally
 	sam local start-api
@@ -72,7 +70,7 @@ logs-tail: ## Alias for logs-function (usage: make logs-tail FUNCTION=CreateChec
 clean: ## Clean build artifacts
 	rm -rf .aws-sam
 
-delete: ## Delete CloudFormation stack and tour-specific tables
+delete: ## Delete stack and tour-specific tables (needs admin credentials; deploy roles cannot delete)
 	@echo "WARNING: This will delete the entire stack and all tour-specific DynamoDB tables!"
 	@printf "Are you sure? [y/N] "; \
 	read REPLY; \
@@ -164,25 +162,3 @@ check-config: ## Run preflight checks before deployment
 
 dev-test-setup: ## Export env vars for dev API testing (use with: source <(make dev-test-setup))
 	@bash scripts/dev-test-setup.sh
-
-setup-github-oidc: ## Set up GitHub OIDC for keyless deployments (one-time)
-	@echo "Setting up GitHub OIDC for passwordless deployments..."
-	@echo ""
-	@read -p "GitHub username or org: " ORG; \
-	read -p "GitHub repo name [tour-data-api]: " REPO; \
-	REPO=$${REPO:-tour-data-api}; \
-	aws cloudformation deploy \
-		--template-file cloudformation/github-oidc.yaml \
-		--stack-name tour-data-api-github-oidc \
-		--capabilities CAPABILITY_NAMED_IAM \
-		--parameter-overrides GitHubOrg=$$ORG GitHubRepo=$$REPO \
-		--tags Project=tour-data-api ManagedBy=CloudFormation; \
-	echo ""; \
-	echo "=== Setup Complete ==="; \
-	echo ""; \
-	echo "Add this as AWS_DEPLOY_ROLE_ARN in your GitHub repository secrets:"; \
-	aws cloudformation describe-stacks \
-		--stack-name tour-data-api-github-oidc \
-		--query "Stacks[0].Outputs[?OutputKey=='DeployRoleArn'].OutputValue" \
-		--output text; \
-	echo ""

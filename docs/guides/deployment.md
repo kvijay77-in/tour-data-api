@@ -1,14 +1,14 @@
 # Deployment Guide
-_Last updated: 2026-10-01_
+_Last updated: 2026-11-11_
 
 [← Back to README](../README.md)
 
-This guide covers AWS access and Cognito setup, GitHub Actions deployment, and the dev/test/prod environments. For local development, see the [Development Guide](development.md).
+This guide covers how deployments run (GitHub Actions and terminal), Cognito setup, and the dev/test/prod environments. The one-time AWS access setup is in the [AWS Deploy Access Setup guide](aws-deploy-access-setup.md). For local development, see the [Development Guide](development.md).
 
 ## Table of Contents
 
 - [Overview](#overview)
-- [One-Time Setup: GitHub OIDC](#one-time-setup-github-oidc)
+- [One-Time Setup: AWS Deploy Access](#one-time-setup-aws-deploy-access)
 - [Deploying via GitHub Actions](#deploying-via-github-actions)
 - [Deploying from Terminal](#deploying-from-terminal)
 - [Environments Explained](#environments-explained)
@@ -29,54 +29,30 @@ This guide covers AWS access and Cognito setup, GitHub Actions deployment, and t
 
 Deploying means publishing the application to Amazon Web Services (AWS) so your apps can connect to it over the internet.
 
-The recommended deployment method is **GitHub Actions** — a CI/CD pipeline that automatically runs tests, builds the application, and deploys it when you trigger a workflow. This works for all environments (dev, test, prod).
+Deployments use **least-privilege, short-lived AWS credentials** only — no static access keys:
 
-**Alternative**: You can also deploy directly from your terminal using SAM CLI. Developers typically use this for the dev environment (see [Development Guide → Deploy to Dev](development.md#deploy-to-dev-environment)). For test and prod from terminal, see [Deploying from Terminal](#deploying-from-terminal).
+| Environment | How it is deployed | Credentials |
+|---|---|---|
+| **dev** | GitHub Actions run on branch `develop`, or a terminal (`make deploy-dev`) | GitHub OIDC role (branch `develop` only) or terminal deploy role |
+| **test** | Terminal only, ad hoc (`make deploy-test`) | Terminal deploy role |
+| **prod** | GitHub Actions run on branch `main` **only** | GitHub OIDC role (branch `main` only), in the separate prod AWS account |
+
+The GitHub workflow is **manual** (*Run workflow*): there is no automatic deployment on merge, and the environment is not chosen by hand — it follows the branch. Production cannot be deployed from a terminal.
 
 ---
 
-## One-Time Setup: GitHub OIDC
+## One-Time Setup: AWS Deploy Access
 
-GitHub Actions deploys to AWS using **OIDC (OpenID Connect)** — a secure, industry-standard method that eliminates the need for stored access keys.
+An AWS administrator performs the setup once per AWS account (non-prod and prod), following the [AWS Deploy Access Setup guide](aws-deploy-access-setup.md). It creates, per environment, a CloudFormation stack (`tour-data-api-deploy-access-<env>`) with the deploy roles, their permissions, a permissions boundary for Lambda roles, and the SAM artifacts bucket. It also covers the GitHub branches, the OIDC provider and the verification checks.
 
-### 1. Create the OIDC Connection
+After the setup, the repository needs only these GitHub Actions secrets (role ARNs from the stack outputs):
 
-Run this command (it prompts for your GitHub username):
+| Secret | Used for |
+|---|---|
+| `AWS_DEPLOY_ROLE_ARN_DEV` | Deployments of branch `develop` to dev |
+| `AWS_DEPLOY_ROLE_ARN_PROD` | Deployments of branch `main` to prod |
 
-```bash
-make setup-github-oidc
-```
-
-This creates an identity link between your GitHub repository and AWS account. At the end, it prints a **Role ARN** — copy it.
-
-### 2. Add the Role ARN to GitHub
-
-1. Go to your GitHub repository → **Settings**
-2. In the left sidebar, click **Secrets and variables** → **Actions**
-3. Click **New repository secret**
-4. Name: `AWS_DEPLOY_ROLE_ARN`
-5. Value: Paste the Role ARN from step 1
-6. Click **Add secret**
-
-GitHub Actions can now deploy to your AWS account securely, with no access keys to manage or rotate.
-
-### For Production (Separate AWS Account)
-
-If you use a separate AWS account for production:
-
-1. Run `make setup-github-oidc` while authenticated to the **production** AWS account
-2. Add the resulting Role ARN as `AWS_DEPLOY_ROLE_ARN_PROD` in GitHub Secrets
-
-### Alternative: Static Access Keys
-
-If you prefer static access keys instead of OIDC (less secure, not recommended):
-
-| Secret Name | Value | Used For |
-|---|---|---|
-| `AWS_ACCESS_KEY_ID` | Your AWS access key | Dev and test deployments |
-| `AWS_SECRET_ACCESS_KEY` | Your AWS secret key | Dev and test deployments |
-
-Use credentials issued through your organization's approved least-privilege process, store them only as GitHub Actions secrets, and continue to prefer OIDC where possible.
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, their `_PROD` variants and `AWS_DEPLOY_ROLE_ARN` are no longer used and should be deleted.
 
 ---
 
@@ -87,56 +63,57 @@ Use credentials issued through your organization's approved least-privilege proc
 1. Go to your GitHub repository → **Actions** tab
 2. In the left sidebar, click **CI/CD Pipeline**
 3. Click **Run workflow**
-4. Select options:
-   - **Branch**: `main` (latest stable code)
-   - **Environment**: `dev`, `test`, or `prod`
+4. Select the **branch** to deploy — there are no other options:
+   - `develop` → deploys to **dev**
+   - `main` → deploys to **prod**
+   - any other branch (or a tag) is rejected in the first job with a clear message
 5. Click the green **Run workflow** button to start
 
 ### Monitoring Progress
 
-The pipeline runs three stages:
+The pipeline runs these stages:
 
 | Stage | What It Does | Duration |
 |---|---|---|
+| **Resolve environment** | Maps the branch to the environment and deploy role, rejects other branches | seconds |
 | **Run Tests** | Code quality checks, linting, and automated unit tests | ~1-2 min |
-| **Build Application** | Validates configuration and packages the code | ~1-2 min |
-| **Deploy to [env]** | Creates/updates all AWS resources and publishes the API | ~3-5 min |
+| **Build Application** | Validates the SAM template and builds the code | ~1-2 min |
+| **Deploy to [env]** | Builds, deploys to AWS, seeds `AppConfig`/`NotificationRule` defaults, prints the API endpoints | ~3-5 min |
 
-A green checkmark (✓) means success. A red X means something went wrong — see [Troubleshooting](#troubleshooting).
+Deployments to the same environment never overlap (a second run waits for the first). A green checkmark (✓) means success. A red X means something went wrong — see [Troubleshooting](#troubleshooting).
 
-After successful deployment, the API endpoint URL appears in the deploy job output. See [Getting Your API URL](#after-deployment-getting-your-api-url).
+After a successful deployment, the API endpoints appear in the job summary and the *Show API endpoints* step. See [Getting Your API URL](#after-deployment-getting-your-api-url).
 
 ---
 
 ## Deploying from Terminal
 
-For deploying test and prod environments from your terminal. Dev environment deployment is covered in the [Development Guide](development.md#deploy-to-dev-environment).
+For **dev** iteration and ad hoc **test** deployments. Production is deployed only through GitHub Actions on `main`.
+
+Terminal deployments use the least-privilege *terminal deploy role* created by the setup ([profile configuration](aws-deploy-access-setup.md#step-5-terminal-profile)) — not an administrator profile:
 
 ```bash
-# Build first
+# Dev: build, deploy, seed AppConfig and NotificationRule
+AWS_PROFILE=tour-data-api-dev-deploy make deploy-dev
+
+# Test: build, deploy, seed AppConfig and NotificationRule
+AWS_PROFILE=tour-data-api-test-deploy make deploy-test
+```
+
+`make deploy` is an alias of `make deploy-dev`. The make targets look up your account ID and pass the stack's SAM artifacts bucket. If you run SAM directly, pass the bucket yourself (the config no longer uses `resolve_s3`):
+
+```bash
 sam build
-
-# Deploy to test
-sam deploy --config-env test
-
-# Deploy to production
-sam deploy --config-env prod
+sam deploy --config-env test --s3-bucket tour-data-api-sam-test-<account-id>
 ```
 
-Using Make shortcuts:
-
-```bash
-make deploy-test     # Build and deploy to test
-make deploy-prod     # Build and deploy to prod (asks for confirmation)
-```
-
-> **Prerequisites**: AWS CLI configured for the target account and region with permission to deploy. See [AWS credentials and region](#aws-credentials-and-region).
+> **Prerequisites**: the deploy-access stack for that environment exists and your AWS CLI profile assumes its terminal role. See [AWS credentials and region](#aws-credentials-and-region). Deleting a stack (`make delete`) needs administrator credentials; the deploy roles cannot delete.
 
 ---
 
 ## Environments Explained
 
-Three independent environments, each with their own AWS resources, databases, and API URL. Changes to one environment do **not** affect the others.
+Three independent environments, each with their own AWS resources, databases, and API URL. Changes to one environment do **not** affect the others. Dev and test share the non-prod AWS account; prod is in a separate account.
 
 | Environment | Stack Name | Purpose |
 |---|---|---|
@@ -163,9 +140,46 @@ aws sso login --profile <profile-name>
 aws sts get-caller-identity --profile <profile-name>
 ```
 
-For temporary credentials from an assumed role, set the returned `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` in the current shell. Do not commit credentials or place secrets directly in command history. GitHub deployments should use OIDC rather than long-lived keys.
+For temporary credentials from an assumed role, set the returned `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` in the current shell. Do not commit credentials or place secrets directly in command history. GitHub deployments use OIDC rather than long-lived keys. For terminal deployments of dev and test, use the profile that assumes the terminal deploy role ([setup](aws-deploy-access-setup.md#step-5-terminal-profile)); administrator credentials are only needed for the one-time setup and for deleting stacks.
 
-Choose the target stack's AWS region and verify the active account before deployment. The GitHub Actions workflow currently sets `AWS_REGION=us-east-1`; Make targets that seed or configure notification resources default to `ap-south-1`, so set `REGION=<your-region>` when needed.
+The AWS region is pinned to `ap-south-1` in `samconfig.toml` (all config-envs) and in the GitHub Actions workflow (`AWS_REGION`). Verify the active account before deployment.
+
+## Management web CORS
+
+The `ManagementWebAllowedOrigins` parameter (comma-separated origins) restricts CORS on the management HTTP API and the artifacts bucket. Set it per config-env in `samconfig.toml` `parameter_overrides` (`[default]` is the dev stack, plus `[test]` and `[prod]`). Empty keeps the wildcard policy.
+
+- The hosting stack `tour-mgmt-web-<env>` is owned and deployed by `tour-mgmt-app`.
+- Redeploy the backend only when the site URL changes (for example, the hosting stack is recreated).
+- Dev allows the deployed Dev site origin and `http://localhost:8081` (Expo web dev). Test keeps the wildcard.
+- Prod allows https origins only, no localhost.
+
+### Dev verification
+
+After `make deploy-dev`, the changeset must modify only `TourDataApi` and `ArtifactsBucket` (no replacement). Verify with `curl`:
+
+- API preflight (`OPTIONS`) with the site origin, `Access-Control-Request-Method: GET`, and request headers `authorization,content-type,if-none-match` returns that origin in `access-control-allow-origin`; an unlisted origin returns none.
+- An authorized `GET` with the site origin exposes `etag` in `access-control-expose-headers`.
+- Artifacts bucket preflight with request method `PUT` and header `content-type` is allowed.
+- RiderApi preflight is unchanged (wildcard).
+
+Verified 2026-10-07 (dev): all five checks passed (allowed-origin preflight, disallowed-origin preflight, `etag` exposed on an authorized GET, artifacts bucket `PUT` preflight, RiderApi wildcard unchanged).
+
+### TODO Items
+
+#### Hardcoded Origins and Region
+
+Origins are hardcoded in `samconfig.toml` by owner decision (2026-10-07), an exception to the no-hardcoding rule. TODO: move them to a GitHub Environment variable.
+
+The region (`ap-south-1`) is likewise hardcoded in `samconfig.toml` and `ci-cd.yml`. TODO: move it to a GitHub Environment variable.
+
+#### Prod management web CORS
+
+Deferred until the Mgmt App production deployment, which is scheduled only after full user testing succeeds. Then:
+
+1. Get the Prod site origin (https only, no localhost) from the `tour-mgmt-web-prod` hosting stack.
+2. In `samconfig.toml` `[prod.deploy.parameters]`, add `ManagementWebAllowedOrigins=\"<Prod site origin>\"` to `parameter_overrides`.
+3. Run the CI/CD workflow on `main` (production is deployed from GitHub Actions only). The changeset must modify only `TourDataApi` and `ArtifactsBucket`.
+4. Repeat the [Dev verification](#dev-verification) checks against prod and record the date and results here.
 
 ## Cognito pools, test users, and groups
 
@@ -257,7 +271,7 @@ Packages the application code:
 
 ### Stage 3: Deploy to AWS (~3-5 min)
 
-Creates or updates all required resources in your AWS account.
+Creates or updates all required resources in your AWS account, then seeds the `AppConfig` and `NotificationRule` defaults and prints the API endpoints.
 
 **First deployment creates:**
 
@@ -418,7 +432,7 @@ Default parameter paths (when not overridden in SAM parameters):
 
 ### 2) Seed notification defaults (required for complete framework behavior)
 
-`make deploy` already runs both seed targets automatically after `sam deploy`. Run them manually only when deploying via `make deploy-test`, `make deploy-prod`, plain `sam deploy`, or GitHub Actions (the CI pipeline does not seed). Both seeds are insert-only and safe to re-run; existing rules/config entries are not overwritten.
+`make deploy`, `make deploy-dev`, `make deploy-test` and the GitHub Actions pipeline already run both seeds automatically after the deploy. Run them manually only when deploying with plain `sam deploy`. Both seeds are insert-only and safe to re-run; existing rules/config entries are not overwritten. The deploy roles may only `GetItem`/`PutItem` on `AppConfig` and `NotificationRule` for this purpose; seeding other tables needs different credentials.
 
 ```bash
 make seed-app-config STACK_NAME=dev
@@ -487,9 +501,8 @@ aws lambda list-event-source-mappings \
 
 ### From GitHub Actions
 
-1. Click on the completed **Deploy to [environment]** job
-2. Expand the **Build and Deploy** step
-3. Find the `api_endpoint` value in the output
+1. Open the completed workflow run
+2. The `ApiEndpoint` and `RiderApiEndpoint` values are listed in the run's summary, and in the **Show API endpoints** step of the **Deploy to [environment]** job
 
 ### From Terminal
 
@@ -654,9 +667,11 @@ AWS couldn't create or update a resource.
 
 1. Check the error message in the deploy output
 2. Common causes:
-   - **Missing permissions**: AWS user or OIDC role needs sufficient permissions
+   - **Missing permissions (`AccessDenied`)**: the deploy role is deliberately limited. See [Troubleshooting in the AWS Deploy Access Setup guide](aws-deploy-access-setup.md#troubleshooting); a new table, resource type or Lambda permission usually needs a deploy-access stack update first
+   - **Cannot assume the role**: the workflow was run on a branch other than `develop` (dev) or `main` (prod), or the role ARN secret is wrong
    - **Resource limit**: Hit an AWS service limit — contact AWS support
    - **Region mismatch**: Region in `samconfig.toml` doesn't match AWS configuration
+   - **Rollback failed**: deploy roles cannot delete resources, so an administrator must continue or clean up the rollback (see the setup guide's known limits)
 
 ### "Unauthorized" Error When Calling the API
 
@@ -694,12 +709,13 @@ sam delete --stack-name dev
 
 ---
 
-OIDC is the recommended GitHub Actions authentication method. Avoid long-lived static credentials. If an existing deployment requires static credentials, use an organization-approved least-privilege policy, store them only as GitHub Actions secrets, scope production credentials separately, and rotate them regularly. Do not attach broad administrator policies just to make deployment succeed.
+GitHub Actions authenticates with OIDC only; static AWS access keys are not used. Do not attach broad administrator policies to the deploy roles just to make a deployment succeed — extend the specific permission in `cloudformation/deploy-access.yaml` instead ([how](aws-deploy-access-setup.md#keeping-the-policies-in-sync)).
 
 ---
 
 ## Related Documentation
 
+- [AWS Deploy Access Setup](aws-deploy-access-setup.md) — One-time manual setup of deploy roles, OIDC, secrets and verification
 - [Development Guide](development.md) — Local development, testing, deploying dev environment
 - [Infrastructure Guide](infrastructure.md) — Resource ownership, tagging, monitoring, and cost management
 
