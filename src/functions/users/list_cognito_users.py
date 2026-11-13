@@ -6,18 +6,20 @@ Returns only `sub` and `name` attributes from the management user pool.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from botocore.exceptions import ClientError
 
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
-from response import success_response, internal_error_response
+from response import success_response
+from handler_utils import api_handler
 from usermgmt_common import (
     cognito_error_response,
     get_cognito_client,
     get_management_user_pool_id,
 )
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)
@@ -44,6 +46,7 @@ def _to_min_user(cognito_user):
     }
 
 
+@api_handler('Failed to list Cognito users')
 def lambda_handler(event, context):
     """Return all Cognito users with only `sub` and `name` attributes."""
     try:
@@ -103,6 +106,3 @@ def lambda_handler(event, context):
     except ClientError as exc:
         logger.warning('Cognito list users failed: %s', str(exc))
         return cognito_error_response(exc)
-    except Exception as exc:
-        logger.error('Error listing minimal Cognito users: %s', str(exc), exc_info=True)
-        return internal_error_response('Failed to list Cognito users')

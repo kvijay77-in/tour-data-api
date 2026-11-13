@@ -259,11 +259,11 @@ def validate_iso_date(date_str: str, field_name: str = "date") -> None:
         )
     try:
         datetime.strptime(date_str, '%Y-%m-%d')
-    except ValueError:
+    except ValueError as exc:
         raise ValidationError(
             f"Invalid date format: {date_str}. Expected format: YYYY-MM-DD",
             {"field": field_name, "value": date_str}
-        )
+        ) from exc
 
 
 def validate_iso_datetime(datetime_str: str, field_name: str = "timestamp") -> None:
@@ -288,12 +288,12 @@ def validate_iso_datetime(datetime_str: str, field_name: str = "timestamp") -> N
         )
     try:
         datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
-    except ValueError:
+    except ValueError as exc:
         raise ValidationError(
             f"Invalid datetime format: {datetime_str}. "
             "Expected ISO 8601 UTC format with Z suffix (e.g., 2026-02-11T10:30:00Z)",
             {"field": field_name, "value": datetime_str}
-        )
+        ) from exc
 
 
 def validate_time_hhmm(time_str: str, field_name: str = "time") -> None:

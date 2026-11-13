@@ -1,9 +1,8 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import os
 
-from common import (
+from notification_common import (
     get_jwt_claim,
     get_profile_id_for_rider,
     get_state_key,
@@ -14,11 +13,15 @@ from common import (
 )
 from logger import get_logger, log_event
 from models import utc_now_iso
-from response import bad_request_response, internal_error_response, success_response
+from response import bad_request_response, success_response
+from handler_utils import api_handler
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
 
+@api_handler('Failed to mark notifications as read')
 def lambda_handler(event, context):
     try:
         log_event(logger, event)
@@ -46,6 +49,3 @@ def lambda_handler(event, context):
 
     except ValueError as exc:
         return bad_request_response(str(exc))
-    except Exception as exc:
-        logger.error('mark read failed: %s', str(exc), exc_info=True)
-        return internal_error_response('Failed to mark notifications as read')

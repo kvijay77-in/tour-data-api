@@ -7,13 +7,15 @@ Route: GET /v1/tours/{tourId}/riders/names
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
-from response import success_response, bad_request_response, internal_error_response
+from response import success_response, bad_request_response
+from handler_utils import api_handler
 from dynamodb_utils import scan_tour_items, get_item
 from validation import validate_tour_id, ValidationError
 from rbac import Permission, require_permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -26,6 +28,7 @@ def _rider_sort_key(rider: dict):
     return (1, rider_id)
 
 
+@api_handler('Failed to retrieve rider names')
 def lambda_handler(event, context):
     """
     Get all riders enrolled in a specific tour with names only.
@@ -39,54 +42,49 @@ def lambda_handler(event, context):
     - 403: Missing READ permission
     - 500: Server error
     """
+    deny = require_permission(event, Permission.READ)
+    if deny:
+        return deny
+
+    tour_id = event.get('pathParameters', {}).get('tourId')
+    if not tour_id:
+        return bad_request_response("tourId is required in path")
+
     try:
-        deny = require_permission(event, Permission.READ)
-        if deny:
-            return deny
+        validate_tour_id(tour_id)
+    except ValidationError as e:
+        return bad_request_response(str(e))
 
-        tour_id = event.get('pathParameters', {}).get('tourId')
-        if not tour_id:
-            return bad_request_response("tourId is required in path")
+    logger.info("Fetching lightweight rider names for tour: %s", tour_id)
 
-        try:
-            validate_tour_id(tour_id)
-        except ValidationError as e:
-            return bad_request_response(str(e))
+    tour_riders = scan_tour_items(
+        table_type='TourRider',
+        tour_id=tour_id
+    )
 
-        logger.info(f"Fetching lightweight rider names for tour: {tour_id}")
+    riders = []
+    for tour_rider in tour_riders:
+        rider_id = tour_rider.get('riderId')
+        profile_id = tour_rider.get('profileId')
+        if not rider_id or not profile_id:
+            continue
 
-        tour_riders = scan_tour_items(
-            table_type='TourRider',
-            tour_id=tour_id
+        profile = get_item(
+            table_name_env='RIDER_PROFILE_TABLE',
+            key={'profileId': profile_id}
         )
 
-        riders = []
-        for tour_rider in tour_riders:
-            rider_id = tour_rider.get('riderId')
-            profile_id = tour_rider.get('profileId')
-            if not rider_id or not profile_id:
-                continue
-
-            profile = get_item(
-                table_name_env='RIDER_PROFILE_TABLE',
-                key={'profileId': profile_id}
-            )
-
-            riders.append({
-                'riderId': rider_id,
-                'name': profile.get('name') if profile else None,
-                'personalCode': profile.get('personalCode') if profile else None
-            })
-
-        riders.sort(key=_rider_sort_key)
-
-        logger.info(f"Returning {len(riders)} lightweight rider records for tour {tour_id}")
-        return success_response({
-            'riders': riders,
-            'count': len(riders),
-            'tourId': tour_id
+        riders.append({
+            'riderId': rider_id,
+            'name': profile.get('name') if profile else None,
+            'personalCode': profile.get('personalCode') if profile else None
         })
 
-    except Exception as e:
-        logger.error(f"Error getting lightweight rider names: {str(e)}", exc_info=True)
-        return internal_error_response("Failed to retrieve rider names")
+    riders.sort(key=_rider_sort_key)
+
+    logger.info("Returning %s lightweight rider records for tour %s", len(riders), tour_id)
+    return success_response({
+        'riders': riders,
+        'count': len(riders),
+        'tourId': tour_id
+    })

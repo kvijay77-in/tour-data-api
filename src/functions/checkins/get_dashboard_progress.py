@@ -13,7 +13,6 @@ Route: GET /v1/tours/{tourId}/rides/{rideId}/dashboard/progress
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import hashlib
 import json
@@ -23,14 +22,16 @@ from response import (
     success_response,
     not_found_response,
     bad_request_response,
-    internal_error_response,
     not_modified_response,
     DecimalEncoder,
 )
+from handler_utils import api_handler
 from dynamodb_utils import get_tour_item, query_tour_items, scan_tour_items
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from rbac import require_permission, Permission
 from models import is_cancelled_checkin_item
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -92,75 +93,71 @@ def _compute_data_version(ride, tour_riders, check_ins):
     return max(candidates)
 
 
+@api_handler('Failed to retrieve dashboard progress')
 def lambda_handler(event, context):
     """Get lightweight dashboard progress for a ride."""
+    log_event(logger, event)
+
+    tour_id = event.get('pathParameters', {}).get('tourId')
+    ride_id = event.get('pathParameters', {}).get('rideId')
+
+    deny = require_permission(event, Permission.DASHBOARD)
+    if deny:
+        return deny
+
+    if not tour_id or not ride_id:
+        return bad_request_response('tourId and rideId are required in path')
+
     try:
-        log_event(logger, event)
+        validate_tour_id(tour_id)
+        validate_ride_id(ride_id)
+    except ValidationError as e:
+        return bad_request_response(str(e))
 
-        tour_id = event.get('pathParameters', {}).get('tourId')
-        ride_id = event.get('pathParameters', {}).get('rideId')
+    ride = get_tour_item(
+        table_type='Ride',
+        tour_id=tour_id,
+        key={'rideId': ride_id},
+    )
+    if not ride:
+        return not_found_response('Ride', ride_id)
 
-        deny = require_permission(event, Permission.DASHBOARD)
-        if deny:
-            return deny
+    tour_riders = scan_tour_items(
+        table_type='TourRider',
+        tour_id=tour_id,
+    )
 
-        if not tour_id or not ride_id:
-            return bad_request_response('tourId and rideId are required in path')
+    all_check_ins = query_tour_items(
+        table_type='CheckIn',
+        tour_id=tour_id,
+        key_condition_expression='rideId = :rid',
+        expression_values={':rid': ride_id},
+    )
 
-        try:
-            validate_tour_id(tour_id)
-            validate_ride_id(ride_id)
-        except ValidationError as e:
-            return bad_request_response(str(e))
+    cancelled = [checkin for checkin in all_check_ins if is_cancelled_checkin_item(checkin)]
+    check_ins = [checkin for checkin in all_check_ins if not is_cancelled_checkin_item(checkin)]
 
-        ride = get_tour_item(
-            table_type='Ride',
-            tour_id=tour_id,
-            key={'rideId': ride_id},
-        )
-        if not ride:
-            return not_found_response('Ride', ride_id)
+    summary = _build_summary(tour_riders, check_ins)
+    data_version = _compute_data_version(ride, tour_riders, all_check_ins)
 
-        tour_riders = scan_tour_items(
-            table_type='TourRider',
-            tour_id=tour_id,
-        )
+    payload = {
+        'rideId': ride_id,
+        'checkIns': check_ins,
+        'cancelled': cancelled,
+        'summary': summary,
+        'dataVersion': data_version,
+    }
 
-        all_check_ins = query_tour_items(
-            table_type='CheckIn',
-            tour_id=tour_id,
-            key_condition_expression='rideId = :rid',
-            expression_values={':rid': ride_id},
-        )
+    payload_json = json.dumps(payload, sort_keys=True, cls=DecimalEncoder)
+    etag = f'"{hashlib.md5(payload_json.encode()).hexdigest()}"'
 
-        cancelled = [checkin for checkin in all_check_ins if is_cancelled_checkin_item(checkin)]
-        check_ins = [checkin for checkin in all_check_ins if not is_cancelled_checkin_item(checkin)]
-
-        summary = _build_summary(tour_riders, check_ins)
-        data_version = _compute_data_version(ride, tour_riders, all_check_ins)
-
-        payload = {
-            'rideId': ride_id,
-            'checkIns': check_ins,
-            'cancelled': cancelled,
-            'summary': summary,
-            'dataVersion': data_version,
-        }
-
-        payload_json = json.dumps(payload, sort_keys=True, cls=DecimalEncoder)
-        etag = f'"{hashlib.md5(payload_json.encode()).hexdigest()}"'
-
-        request_headers = event.get('headers', {}) or {}
-        if_none_match = request_headers.get('if-none-match') or request_headers.get('If-None-Match')
-        if if_none_match and if_none_match == etag:
-            response = not_modified_response()
-            response['headers']['ETag'] = etag
-            return response
-
-        response = success_response(payload)
+    request_headers = event.get('headers', {}) or {}
+    if_none_match = request_headers.get('if-none-match') or request_headers.get('If-None-Match')
+    if if_none_match and if_none_match == etag:
+        response = not_modified_response()
         response['headers']['ETag'] = etag
         return response
 
-    except Exception as e:
-        logger.error(f'Error getting dashboard progress: {str(e)}', exc_info=True)
-        return internal_error_response('Failed to retrieve dashboard progress')
+    response = success_response(payload)
+    response['headers']['ETag'] = etag
+    return response

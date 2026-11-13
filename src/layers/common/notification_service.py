@@ -9,6 +9,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from botocore.exceptions import BotoCoreError, ClientError
+
 from dynamodb_utils import dynamodb, get_item, get_tour_item
 from logger import get_logger
 from models import utc_now_iso
@@ -17,7 +19,7 @@ logger = get_logger(__name__)
 
 RULE_CACHE_TTL_SECONDS = 300
 _RULE_CACHE: Dict[str, Tuple[float, Optional[Dict[str, Any]]]] = {}
-_NOTIFICATION_LIMITS_CACHE: Tuple[float, Dict[str, int]] | None = None
+_NOTIFICATION_LIMITS_CACHE: Dict[str, Tuple[float, Dict[str, int]]] = {}
 
 CATEGORY_VALUES = {"ANNOUNCEMENT", "ALERT", "PERSONAL", "SYSTEM"}
 PRIORITY_VALUES = {"URGENT", "NORMAL"}
@@ -177,7 +179,7 @@ def _load_rule(rule_id: str) -> Optional[Dict[str, Any]]:
     if table_env:
         try:
             rule = get_item("NOTIFICATION_RULE_TABLE", {"ruleId": rule_id})
-        except Exception as exc:  # pragma: no cover - safeguard path
+        except (ClientError, BotoCoreError) as exc:  # pragma: no cover - safeguard path
             logger.warning("rule lookup failed: ruleId=%s error=%s", rule_id, str(exc))
             rule = None
 
@@ -186,10 +188,10 @@ def _load_rule(rule_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _get_notification_limits() -> Dict[str, int]:
-    global _NOTIFICATION_LIMITS_CACHE
     now = time.time()
-    if _NOTIFICATION_LIMITS_CACHE and now - _NOTIFICATION_LIMITS_CACHE[0] < RULE_CACHE_TTL_SECONDS:
-        return _NOTIFICATION_LIMITS_CACHE[1]
+    cached = _NOTIFICATION_LIMITS_CACHE.get("value")
+    if cached and now - cached[0] < RULE_CACHE_TTL_SECONDS:
+        return cached[1]
 
     limits = {
         "maxTitleLength": DEFAULT_MAX_TITLE_LENGTH,
@@ -205,10 +207,10 @@ def _get_notification_limits() -> Dict[str, int]:
                 limits["maxTitleLength"] = title_length
             if message_length > 0:
                 limits["maxMessageLength"] = message_length
-    except Exception as exc:  # pragma: no cover - permission/availability fallback
+    except (ClientError, BotoCoreError, ValueError, TypeError, AttributeError) as exc:  # pragma: no cover - permission/availability fallback
         logger.warning("notification limits lookup failed; using defaults error=%s", str(exc))
 
-    _NOTIFICATION_LIMITS_CACHE = (now, limits)
+    _NOTIFICATION_LIMITS_CACHE["value"] = (now, limits)
     return limits
 
 
@@ -219,7 +221,7 @@ def _render_template(template: str, context: Optional[Dict[str, Any]]) -> str:
     safe_values = _SafeTemplateDict({key: "" if value is None else value for key, value in values.items()})
     try:
         return template.format_map(safe_values)
-    except Exception:
+    except (KeyError, IndexError, ValueError, TypeError, AttributeError):
         return template
 
 
@@ -239,7 +241,7 @@ def _resolve_tour_rider_to_profile(audience: str) -> Optional[str]:
     rider_id = parts[3]
     try:
         rider = get_tour_item("TourRider", tour_id, {"riderId": rider_id})
-    except Exception as exc:
+    except (ClientError, BotoCoreError, ValueError) as exc:
         logger.warning("tour rider lookup failed: audience=%s error=%s", audience, str(exc))
         return None
     if not rider:
@@ -378,7 +380,7 @@ def notify(
 
         _batch_write(items_by_table)
         return notification_id
-    except Exception as exc:  # never raise to caller
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # never raise to caller
         logger.error(
             "notification_service.notify failed ruleId=%s tourId=%s error=%s",
             rule_id,

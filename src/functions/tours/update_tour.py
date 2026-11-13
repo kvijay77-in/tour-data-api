@@ -6,7 +6,6 @@ tables when they have not been provisioned before.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
@@ -17,6 +16,7 @@ from response import (
     success_response, bad_request_response, not_found_response,
     internal_error_response, validation_exception_response
 )
+from handler_utils import api_handler
 from dynamodb_utils import get_item, put_item
 from validation import (
     validate_tour_id, validate_iso_date, validate_ride_count, validate_optional_bool, ValidationError
@@ -25,6 +25,8 @@ from models import TourStatus, utc_now_iso
 from tour_provisioning import provision_tour_tables
 from self_service_policy import apply_tour_defaults
 from rbac import require_permission, Permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -67,11 +69,12 @@ def _validate_update_fields(updates, merged_tour):
     if 'status' in updates:
         try:
             merged_tour['status'] = TourStatus(updates['status'].upper()).value
-        except (AttributeError, ValueError):
+        except (AttributeError, ValueError) as exc:
             valid_statuses = ', '.join(status.value for status in TourStatus)
-            raise ValidationError(f"Invalid status. Must be one of: {valid_statuses}")
+            raise ValidationError(f"Invalid status. Must be one of: {valid_statuses}") from exc
 
 
+@api_handler('Failed to update tour')
 def lambda_handler(event, context):
     """
     Update an existing tour and rerun tour-specific table provisioning.
@@ -158,8 +161,9 @@ def lambda_handler(event, context):
                 tour_id,
                 ignore_existing=True,
             )
-        except Exception as e:
-            logger.error(f"Error provisioning tables for tour {tour_id}: {str(e)}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            # Intentionally broad: any provisioning failure must be recorded on the tour.
+            logger.error("Error provisioning tables for tour %s: %s", tour_id, e)
             updated_tour['provisioningError'] = str(e)
             updated_tour['updatedAt'] = utc_now_iso()
             put_item('TOUR_MASTER_TABLE', updated_tour)
@@ -170,7 +174,7 @@ def lambda_handler(event, context):
         updated_tour['updatedAt'] = utc_now_iso()
         put_item('TOUR_MASTER_TABLE', updated_tour)
 
-        logger.info(f"Tour {tour_id} provisioning rerun completed with {len(provisioned_tables)} tables")
+        logger.info("Tour %s provisioning rerun completed with %s tables", tour_id, len(provisioned_tables))
         return success_response({
             'tour': apply_tour_defaults(updated_tour),
             'provisioning': provisioning,
@@ -179,6 +183,3 @@ def lambda_handler(event, context):
 
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")
-    except Exception as e:
-        logger.error(f"Error updating tour: {str(e)}", exc_info=True)
-        return internal_error_response("Failed to update tour")

@@ -1,18 +1,20 @@
 """Admin-only AppConfig writer for rider profile configuration."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
 from botocore.exceptions import ClientError
 
 from logger import get_logger, log_event
-from response import success_response, error_response, bad_request_response, internal_error_response, conflict_response
+from response import success_response, error_response, bad_request_response, conflict_response
+from handler_utils import api_handler
 from dynamodb_utils import get_item, put_item
 from models import utc_now_iso
 from rbac import get_user_groups
 from profile_schema import validate_attribute_definitions_entry, get_definitions, ProfileSchemaError
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)
@@ -67,6 +69,7 @@ def _validate_entry(config_type, new_entry, existing):
     validate_attribute_definitions_entry(new_entry, existing=existing, definitions=defs)
 
 
+@api_handler('Failed to write admin config')
 def lambda_handler(event, context):
     try:
         log_event(logger, event)
@@ -132,6 +135,3 @@ def lambda_handler(event, context):
 
     except ProfileSchemaError as exc:
         return error_response(error_code=exc.code, message=exc.message, status_code=exc.status_code)
-    except Exception as exc:
-        logger.error(f'Error writing admin config: {str(exc)}', exc_info=True)
-        return internal_error_response('Failed to write admin config')

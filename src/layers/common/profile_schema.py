@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import json
 import re
 import time
 from dataclasses import dataclass
@@ -12,6 +11,8 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
+
+from botocore.exceptions import BotoCoreError, ClientError
 
 from dynamodb_utils import query_items
 from rbac import get_user_groups
@@ -109,7 +110,7 @@ def get_definitions() -> Definitions:
         sections = {item['configId']: item for item in _load_enabled(PROFILE_SECTION_TYPE)}
         attributes = {item['configId']: item for item in _load_enabled(PROFILE_ATTRIBUTE_TYPE)}
         lovs = {item['configId']: item for item in _load_enabled(LOV_TYPE)}
-    except Exception:
+    except (ClientError, BotoCoreError, ValueError, KeyError):
         load_failed = True
         sections = {}
         attributes = {}

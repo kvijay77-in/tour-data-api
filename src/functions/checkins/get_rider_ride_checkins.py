@@ -6,7 +6,6 @@ Route: GET /v1/tours/{tourId}/riders/{riderId}/rides/{rideNo}/checkins
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import (
@@ -15,6 +14,7 @@ from response import (
     error_response,
     internal_error_response,
 )
+from handler_utils import api_handler
 from models import is_cancelled_checkin_item
 from validation import validate_tour_id, validate_rider_id, ValidationError
 from dynamodb_utils import get_tour_item, query_tour_items, scan_tour_items
@@ -22,9 +22,12 @@ from rbac import Permission, require_permission
 from rider_identity import require_own_rider_data
 from botocore.exceptions import ClientError
 
+sys.path.insert(0, '/opt/python')
+
 logger = get_logger(__name__)
 
 
+@api_handler('Failed to get rider ride check-ins')
 def lambda_handler(event, context):
     """Get all check-ins for a rider filtered by rideNo within a tour."""
     try:
@@ -113,8 +116,5 @@ def lambda_handler(event, context):
             if 'rideNo' in path_params:
                 empty['rideNo'] = int(path_params['rideNo'])
             return success_response(empty)
-        logger.error(f"Error getting rider check-ins: {str(e)}", exc_info=True)
+        logger.error("Error getting rider check-ins: %s", e, exc_info=True)
         return internal_error_response("Failed to get rider check-ins")
-    except Exception as e:
-        logger.error(f"Error getting rider ride check-ins: {str(e)}", exc_info=True)
-        return internal_error_response("Failed to get rider ride check-ins")

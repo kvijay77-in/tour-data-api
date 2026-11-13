@@ -11,12 +11,12 @@ from models import utc_now_iso
 
 class DecimalEncoder(json.JSONEncoder):
     """JSON encoder that handles Decimal types from DynamoDB"""
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            if obj % 1 == 0:
-                return int(obj)
-            return float(obj)
-        return super(DecimalEncoder, self).default(obj)
+    def default(self, o):
+        if isinstance(o, Decimal):
+            if o % 1 == 0:
+                return int(o)
+            return float(o)
+        return super(DecimalEncoder, self).default(o)
 
 
 def success_response(data: Any, status_code: int = 200) -> Dict[str, Any]:

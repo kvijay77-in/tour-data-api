@@ -40,9 +40,9 @@ import json
 import re
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
-
 from logger import get_logger
 from response import forbidden_response
+from dynamodb_utils import get_tour_item
 
 
 logger = get_logger(__name__)
@@ -483,7 +483,6 @@ def require_event_assignment_access(
     is_baggage_event: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Enforce eventAssignments, assignedActivityIds, and hotel match restrictions for EVENT_SCAN."""
-    from dynamodb_utils import get_tour_item
 
     user_id = (
         event.get('requestContext', {})

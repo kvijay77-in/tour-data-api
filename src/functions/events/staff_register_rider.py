@@ -1,9 +1,10 @@
 """Mgmt API: staff registers a rider for an event occurrence."""
 import sys
-sys.path.insert(0, '/opt/python')
 
 from rbac import Permission, require_permission
 from event_self_service import staff_register
+
+sys.path.insert(0, '/opt/python')
 
 
 def lambda_handler(event, context):

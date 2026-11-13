@@ -3,13 +3,14 @@
 import sys
 import uuid
 
-sys.path.insert(0, '/opt/python')
-
 from logger import get_logger, log_event
-from response import success_response, bad_request_response, conflict_response, not_found_response, internal_error_response
+from response import success_response, bad_request_response, conflict_response, not_found_response
+from handler_utils import api_handler
 from dynamodb_utils import get_item, put_item, get_table
 from ownership import require_own_link_subject
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 TABLE_ENV = 'RIDER_COGNITO_USER_TABLE'
@@ -51,28 +52,24 @@ def _get_link(cognito_user_name):
     return success_response({'profileId': link['profileId']})
 
 
+@api_handler('Failed to process rider link request')
 def lambda_handler(event, context):
-    try:
-        log_event(logger, event)
+    log_event(logger, event)
 
-        method = _get_method(event)
-        cognito_user_name = _get_cognito_user_name(event)
-        if not cognito_user_name:
-            return bad_request_response('cognitoUserName is required in path')
+    method = _get_method(event)
+    cognito_user_name = _get_cognito_user_name(event)
+    if not cognito_user_name:
+        return bad_request_response('cognitoUserName is required in path')
 
-        deny = require_own_link_subject(event, cognito_user_name)
-        if deny:
-            return deny
+    deny = require_own_link_subject(event, cognito_user_name)
+    if deny:
+        return deny
 
-        if method == 'POST':
-            return _create_link(cognito_user_name)
-        if method == 'GET':
-            return _get_link(cognito_user_name)
-        if method == 'DELETE':
-            return _delete_link(cognito_user_name)
+    if method == 'POST':
+        return _create_link(cognito_user_name)
+    if method == 'GET':
+        return _get_link(cognito_user_name)
+    if method == 'DELETE':
+        return _delete_link(cognito_user_name)
 
-        return bad_request_response(f'Unsupported HTTP method: {method}')
-
-    except Exception as exc:
-        logger.error(f'Error linking/unlinking rider cognito user: {str(exc)}', exc_info=True)
-        return internal_error_response('Failed to process rider link request')
+    return bad_request_response(f'Unsupported HTTP method: {method}')

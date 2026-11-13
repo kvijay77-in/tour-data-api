@@ -1,19 +1,22 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import boto3
 
-from common import get_jwt_claim, parse_json_body
+from notification_common import get_jwt_claim, parse_json_body
 from logger import get_logger, log_event
 from notification_service import validate_rule_payload
 from rbac import Permission, require_permission
-from response import bad_request_response, internal_error_response, not_found_response, success_response
+from response import bad_request_response, not_found_response, success_response
+from handler_utils import api_handler
 from models import utc_now_iso
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 dynamodb = boto3.resource('dynamodb')
 
 
+@api_handler('Failed to update rule')
 def lambda_handler(event, context):
     try:
         log_event(logger, event)
@@ -41,6 +44,3 @@ def lambda_handler(event, context):
         return success_response(validated)
     except ValueError as exc:
         return bad_request_response(str(exc))
-    except Exception as exc:
-        logger.error('update rule failed: %s', str(exc), exc_info=True)
-        return internal_error_response('Failed to update rule')

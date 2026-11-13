@@ -1,15 +1,15 @@
 """Create rider profile using configuration-driven schema definitions."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 import uuid
 from botocore.exceptions import ClientError
 
 from logger import get_logger, log_event
-from response import success_response, bad_request_response, conflict_response, internal_error_response, error_response
-from dynamodb_utils import put_item, query_items, get_item
+from response import success_response, bad_request_response, conflict_response, error_response
+from handler_utils import api_handler
+from dynamodb_utils import put_item, query_items
 from validation import build_emergency_contact_from_profile, ValidationError
 from models import utc_now_iso
 from ownership import require_own_profile, resolve_profile_id_for_sub, is_rider_api_request
@@ -20,6 +20,8 @@ from profile_schema import (
     ProfileSchemaError,
     get_user_role_flags,
 )
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -33,6 +35,7 @@ def _claims(event):
     )
 
 
+@api_handler('Failed to create rider profile')
 def lambda_handler(event, context):
     try:
         log_event(logger, event)
@@ -136,6 +139,3 @@ def lambda_handler(event, context):
         return error_response(exc.code, exc.message, status_code=exc.status_code)
     except ValidationError as exc:
         return error_response('VALIDATION_ERROR', str(exc), status_code=422)
-    except Exception as exc:
-        logger.error(f'Error creating rider profile: {str(exc)}', exc_info=True)
-        return internal_error_response('Failed to create rider profile')
