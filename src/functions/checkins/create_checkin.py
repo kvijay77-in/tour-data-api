@@ -16,7 +16,6 @@ Route: POST /v1/tours/{tourId}/checkins
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
@@ -33,6 +32,8 @@ from validation import (
 from models import CheckInMethod, SELF_SERVICE_METHOD
 from checkin_service import create_checkin
 from rbac import Permission, require_permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -161,9 +162,7 @@ def lambda_handler(event, context):
                 return deny
         
         logger.info(
-            f"Creating check-in: rider={rider_id}, ride={ride_id}, "
-            f"isNotRiding={is_not_riding}, isFloat={is_float}, "
-            f"isQuitRiding={is_quit_riding}"
+            "Creating check-in: rider=%s, ride=%s, isNotRiding=%s, isFloat=%s, isQuitRiding=%s", rider_id, ride_id, is_not_riding, is_float, is_quit_riding
         )
 
         # Get checked-in-by from request context (JWT authorizer)
@@ -191,5 +190,5 @@ def lambda_handler(event, context):
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")
     except Exception as e:
-        logger.error(f"Error creating check-in: {str(e)}", exc_info=True)
+        logger.error("Error creating check-in: %s", e, exc_info=True)
         return internal_error_response("Failed to create check-in")

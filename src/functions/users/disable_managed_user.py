@@ -5,7 +5,6 @@ Route: POST /v1/admin/usermgmt/users/{cognitoUserId}/disable
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from botocore.exceptions import ClientError
 
@@ -21,6 +20,8 @@ from usermgmt_common import (
     validate_cognito_user_id,
 )
 from validation import ValidationError
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)

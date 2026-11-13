@@ -9,7 +9,6 @@ check-in function with method SELF_SERVICE and checkedInBy = rider profileId.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
@@ -21,6 +20,8 @@ from checkin_service import create_checkin
 from rbac import Permission, require_permission
 from rider_identity import reject_client_rider_id
 from self_checkin_rules import check_self_checkin_request, load_self_checkin_context
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -139,5 +140,5 @@ def lambda_handler(event, context):
         )
 
     except Exception as e:
-        logger.error(f"Error creating self check-in: {str(e)}", exc_info=True)
+        logger.error("Error creating self check-in: %s", e, exc_info=True)
         return internal_error_response("Failed to create self check-in")

@@ -5,13 +5,14 @@ Returns the currently active tour using the StatusIndex GSI.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from self_service_policy import apply_tour_defaults
 from response import success_response, error_response, internal_error_response
 from dynamodb_utils import query_items
 from models import TourStatus
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -49,9 +50,9 @@ def lambda_handler(event, context):
         # Return first active tour (should be only one)
         tour = items[0]
         
-        logger.info(f"Found active tour: {tour.get('tourId')}")
+        logger.info("Found active tour: %s", tour.get('tourId'))
         return success_response(apply_tour_defaults(tour))
     
     except Exception as e:
-        logger.error(f"Error getting active tour: {str(e)}", exc_info=True)
+        logger.error("Error getting active tour: %s", e, exc_info=True)
         return internal_error_response("Failed to retrieve active tour")

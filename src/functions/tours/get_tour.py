@@ -3,7 +3,6 @@ Get tour by ID Lambda function
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger, log_event
 from self_service_policy import apply_tour_defaults
@@ -13,6 +12,8 @@ from response import (
 )
 from dynamodb_utils import get_item
 from validation import validate_tour_id, ValidationError
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -39,7 +40,7 @@ def lambda_handler(event, context):
         except ValidationError as e:
             return bad_request_response(str(e))
         
-        logger.info(f"Getting tour: {tour_id}")
+        logger.info("Getting tour: %s", tour_id)
         
         # Get tour from DynamoDB
         tour = get_item(
@@ -50,9 +51,9 @@ def lambda_handler(event, context):
         if not tour:
             return not_found_response("Tour", tour_id)
         
-        logger.info(f"Found tour: {tour_id}")
+        logger.info("Found tour: %s", tour_id)
         return success_response(apply_tour_defaults(tour))
     
     except Exception as e:
-        logger.error(f"Error getting tour: {str(e)}", exc_info=True)
+        logger.error("Error getting tour: %s", e, exc_info=True)
         return internal_error_response("Failed to retrieve tour")

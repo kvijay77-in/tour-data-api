@@ -5,13 +5,14 @@ Lists all tours, optionally filtered by status using StatusIndex GSI.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from self_service_policy import apply_tour_defaults
 from response import success_response, error_response, internal_error_response
 from dynamodb_utils import scan_items, query_items
 from models import TourStatus
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -46,7 +47,7 @@ def lambda_handler(event, context):
                     status_code=400
                 )
         
-        logger.info(f"Listing tours with status filter: {status_filter or 'all'}")
+        logger.info("Listing tours with status filter: %s", status_filter or 'all')
         
         if status_filter:
             # Use StatusIndex GSI for efficient filtering
@@ -63,7 +64,7 @@ def lambda_handler(event, context):
                 table_name_env='TOUR_MASTER_TABLE'
             )
         
-        logger.info(f"Found {len(items)} tour(s)")
+        logger.info("Found %s tour(s)", len(items))
         
         return success_response({
             'tours': [apply_tour_defaults(item) for item in items],
@@ -71,5 +72,5 @@ def lambda_handler(event, context):
         })
     
     except Exception as e:
-        logger.error(f"Error listing tours: {str(e)}", exc_info=True)
+        logger.error("Error listing tours: %s", e, exc_info=True)
         return internal_error_response("Failed to list tours")

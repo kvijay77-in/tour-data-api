@@ -6,13 +6,14 @@ Route: GET /v1/tours/{tourId}/rides/{rideId}/checkins
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from dynamodb_utils import get_tour_item, query_tour_items
 from models import is_cancelled_checkin_item
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -47,7 +48,7 @@ def lambda_handler(event, context):
             return bad_request_response(str(e))
         
         # Verify ride exists in tour-specific Ride table
-        logger.info(f"Checking if ride exists: {tour_id}/{ride_id}")
+        logger.info("Checking if ride exists: %s/%s", tour_id, ride_id)
         ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
@@ -58,7 +59,7 @@ def lambda_handler(event, context):
             return not_found_response("Ride", ride_id)
         
         # Query all check-ins for this ride from tour-specific CheckIn table
-        logger.info(f"Querying check-ins for ride: {ride_id}")
+        logger.info("Querying check-ins for ride: %s", ride_id)
         checkins = query_tour_items(
             table_type='CheckIn',
             tour_id=tour_id,
@@ -70,7 +71,7 @@ def lambda_handler(event, context):
         # Sort check-ins by timestamp
         checkins.sort(key=lambda c: c.get('timestamp', ''))
         
-        logger.info(f"Successfully retrieved {len(checkins)} check-ins for ride {ride_id}")
+        logger.info("Successfully retrieved %s check-ins for ride %s", len(checkins), ride_id)
         return success_response({
             'checkIns': checkins,
             'count': len(checkins),
@@ -79,5 +80,5 @@ def lambda_handler(event, context):
         })
         
     except Exception as e:
-        logger.error(f"Error getting ride check-ins: {str(e)}", exc_info=True)
+        logger.error("Error getting ride check-ins: %s", e, exc_info=True)
         return internal_error_response("Failed to get ride check-ins")

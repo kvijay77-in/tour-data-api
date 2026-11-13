@@ -6,7 +6,6 @@ tables when they have not been provisioned before.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
@@ -25,6 +24,8 @@ from models import TourStatus, utc_now_iso
 from tour_provisioning import provision_tour_tables
 from self_service_policy import apply_tour_defaults
 from rbac import require_permission, Permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -159,7 +160,7 @@ def lambda_handler(event, context):
                 ignore_existing=True,
             )
         except Exception as e:
-            logger.error(f"Error provisioning tables for tour {tour_id}: {str(e)}")
+            logger.error("Error provisioning tables for tour %s: %s", tour_id, e)
             updated_tour['provisioningError'] = str(e)
             updated_tour['updatedAt'] = utc_now_iso()
             put_item('TOUR_MASTER_TABLE', updated_tour)
@@ -170,7 +171,7 @@ def lambda_handler(event, context):
         updated_tour['updatedAt'] = utc_now_iso()
         put_item('TOUR_MASTER_TABLE', updated_tour)
 
-        logger.info(f"Tour {tour_id} provisioning rerun completed with {len(provisioned_tables)} tables")
+        logger.info("Tour %s provisioning rerun completed with %s tables", tour_id, len(provisioned_tables))
         return success_response({
             'tour': apply_tour_defaults(updated_tour),
             'provisioning': provisioning,
@@ -180,5 +181,5 @@ def lambda_handler(event, context):
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")
     except Exception as e:
-        logger.error(f"Error updating tour: {str(e)}", exc_info=True)
+        logger.error("Error updating tour: %s", e, exc_info=True)
         return internal_error_response("Failed to update tour")

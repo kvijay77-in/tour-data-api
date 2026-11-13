@@ -7,8 +7,6 @@ Route: POST /v1/tours/{tourId}/rides/{rideId}/stages/{stageNumber}/pitstop/open
 
 import sys
 
-sys.path.insert(0, '/opt/python')
-
 from logger import get_logger
 from response import success_response, error_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, validate_ride_id, ValidationError
@@ -17,6 +15,8 @@ from models import RideStatus, StageType, PitStopStatus, utc_now_iso
 from notification_service import notify
 from rbac import require_permission, require_pit_stop_stage_access, Permission
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 
@@ -107,5 +107,5 @@ def lambda_handler(event, context):
         return success_response(ride)
 
     except Exception as e:
-        logger.error(f"Error opening pit stop: {str(e)}", exc_info=True)
+        logger.error("Error opening pit stop: %s", e, exc_info=True)
         return internal_error_response("Failed to open pit stop")

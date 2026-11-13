@@ -6,7 +6,6 @@ Returns only `sub` and `name` attributes from the management user pool.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from botocore.exceptions import ClientError
 
@@ -18,6 +17,8 @@ from usermgmt_common import (
     get_cognito_client,
     get_management_user_pool_id,
 )
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)

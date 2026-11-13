@@ -1,9 +1,10 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import os
 
 from get_notifications import lambda_handler as list_handler
+
+sys.path.insert(0, '/opt/python')
 
 
 def lambda_handler(event, context):

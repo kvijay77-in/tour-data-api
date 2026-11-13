@@ -13,7 +13,6 @@ Route: GET /v1/tours/{tourId}/rides/{rideId}/dashboard/progress
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import hashlib
 import json
@@ -31,6 +30,8 @@ from dynamodb_utils import get_tour_item, query_tour_items, scan_tour_items
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from rbac import require_permission, Permission
 from models import is_cancelled_checkin_item
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -162,5 +163,5 @@ def lambda_handler(event, context):
         return response
 
     except Exception as e:
-        logger.error(f'Error getting dashboard progress: {str(e)}', exc_info=True)
+        logger.error("Error getting dashboard progress: %s", e, exc_info=True)
         return internal_error_response('Failed to retrieve dashboard progress')

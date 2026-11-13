@@ -6,7 +6,6 @@ and deleting tour-specific DynamoDB tables.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 import os
@@ -24,6 +23,8 @@ from dynamodb_utils import get_item, put_item, get_tour_table_name
 from validation import validate_tour_id, ValidationError
 from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from rbac import require_permission, Permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -46,7 +47,7 @@ def _export_table_to_s3(table_name, tour_id, table_type):
             items.extend(page.get('Items', []))
         
         if not items:
-            logger.info(f"No items to export from {table_name}")
+            logger.info("No items to export from %s", table_name)
             return None
         
         # Write to S3
@@ -58,11 +59,11 @@ def _export_table_to_s3(table_name, tour_id, table_type):
             ContentType='application/json'
         )
         
-        logger.info(f"Exported {len(items)} items from {table_name} to s3://{bucket}/{key}")
+        logger.info("Exported %s items from %s to s3://%s/%s", len(items), table_name, bucket, key)
         return key
     
     except ClientError as e:
-        logger.error(f"Error exporting {table_name} to S3: {e}")
+        logger.error("Error exporting %s to S3: %s", table_name, e)
         return None
 
 
@@ -70,10 +71,10 @@ def _delete_table(table_name):
     """Delete a DynamoDB table"""
     try:
         dynamodb_client.delete_table(TableName=table_name)
-        logger.info(f"Delete initiated for table: {table_name}")
+        logger.info("Delete initiated for table: %s", table_name)
     except ClientError as e:
         if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            logger.warning(f"Table {table_name} does not exist, skipping")
+            logger.warning("Table %s does not exist, skipping", table_name)
         else:
             raise
 
@@ -89,14 +90,14 @@ def _wait_for_table_deletion(table_names, max_wait=90):
                 dynamodb_client.describe_table(TableName=table_name)
             except ClientError as e:
                 if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                    logger.info(f"Table {table_name} deleted")
+                    logger.info("Table %s deleted", table_name)
                     pending.discard(table_name)
         
         if pending:
             time.sleep(3)
     
     if pending:
-        logger.warning(f"Tables still pending deletion after {max_wait}s: {pending}")
+        logger.warning("Tables still pending deletion after %ss: %s", max_wait, pending)
 
 
 def lambda_handler(event, context):
@@ -160,7 +161,7 @@ def lambda_handler(event, context):
                 f"Current status: {current_status}"
             )
         
-        logger.info(f"Archiving tour: {tour_id} (export={export_to_s3}, delete={delete_tables})")
+        logger.info("Archiving tour: %s (export=%s, delete=%s)", tour_id, export_to_s3, delete_tables)
         
         # Export to S3 if requested
         exported_keys = {}
@@ -193,7 +194,7 @@ def lambda_handler(event, context):
         
         put_item('TOUR_MASTER_TABLE', tour)
         
-        logger.info(f"Tour {tour_id} archived successfully")
+        logger.info("Tour %s archived successfully", tour_id)
         
         return success_response({
             'tour': tour,
@@ -202,5 +203,5 @@ def lambda_handler(event, context):
         })
     
     except Exception as e:
-        logger.error(f"Error archiving tour: {str(e)}", exc_info=True)
+        logger.error("Error archiving tour: %s", e, exc_info=True)
         return internal_error_response("Failed to archive tour")

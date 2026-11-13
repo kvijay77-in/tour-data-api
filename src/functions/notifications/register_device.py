@@ -1,15 +1,16 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import os
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
 
-from common import get_jwt_claim, get_profile_id_for_rider, get_user_groups, parse_json_body
+from notification_common import get_jwt_claim, get_profile_id_for_rider, get_user_groups, parse_json_body
 from logger import get_logger, log_event
 from response import bad_request_response, internal_error_response, success_response
 from models import utc_now_iso
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 dynamodb = boto3.resource('dynamodb')

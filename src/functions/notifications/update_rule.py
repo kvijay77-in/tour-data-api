@@ -1,14 +1,15 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import boto3
 
-from common import get_jwt_claim, parse_json_body
+from notification_common import get_jwt_claim, parse_json_body
 from logger import get_logger, log_event
 from notification_service import validate_rule_payload
 from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, not_found_response, success_response
 from models import utc_now_iso
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 dynamodb = boto3.resource('dynamodb')

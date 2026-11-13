@@ -167,8 +167,7 @@ def create_checkin(
         # Allow late-sync: accept check-ins captured before ride was closed
         if client_timestamp and closed_at and client_timestamp < closed_at:
             logger.info(
-                f"Late-sync accepted: check-in timestamp {client_timestamp} "
-                f"predates ride closure {closed_at}"
+                "Late-sync accepted: check-in timestamp %s predates ride closure %s", client_timestamp, closed_at
             )
         else:
             return error_response(
@@ -261,8 +260,7 @@ def create_checkin(
             # before the rider quit (supports offline-synced check-ins)
             if client_timestamp and client_timestamp < qr_timestamp:
                 logger.info(
-                    f"Timestamp-based acceptance: check-in at {client_timestamp} "
-                    f"predates quit-riding at {qr_timestamp} for rider {rider_id}"
+                    "Timestamp-based acceptance: check-in at %s predates quit-riding at %s for rider %s", client_timestamp, qr_timestamp, rider_id
                 )
             else:
                 return conflict_response(
@@ -330,7 +328,7 @@ def create_checkin(
     except Exception as notify_exc:  # pragma: no cover - safeguard only
         logger.warning('check-in notification trigger failed: %s', str(notify_exc))
 
-    logger.info(f"Check-in created successfully: {check_in_id}")
+    logger.info("Check-in created successfully: %s", check_in_id)
     return success_response(checkin_response, status_code=201)
 
 

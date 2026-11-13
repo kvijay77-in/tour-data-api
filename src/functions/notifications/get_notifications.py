@@ -1,9 +1,8 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import os
 
-from common import (
+from notification_common import (
     archive_read_items_for_audience,
     dedupe_notifications,
     get_archive_after_read_hours,
@@ -22,6 +21,8 @@ from common import (
 )
 from logger import get_logger, log_event
 from response import bad_request_response, internal_error_response, success_response
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 

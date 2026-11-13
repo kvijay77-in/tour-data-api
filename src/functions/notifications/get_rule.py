@@ -1,11 +1,12 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import boto3
 
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, not_found_response, success_response
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 dynamodb = boto3.resource('dynamodb')

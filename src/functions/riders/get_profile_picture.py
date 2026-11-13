@@ -1,7 +1,6 @@
 """Generate presigned URL for rider profile photo download."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import os
 
@@ -12,6 +11,8 @@ from rbac import Permission, require_permission
 from response import success_response, bad_request_response, not_found_response, internal_error_response
 from dynamodb_utils import get_item
 from ownership import require_own_profile, is_rider_api_request
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 s3_client = boto3.client('s3')
@@ -74,5 +75,5 @@ def lambda_handler(event, context):
         })
 
     except Exception as exc:
-        logger.error(f'Error generating download URL: {str(exc)}', exc_info=True)
+        logger.error("Error generating download URL: %s", exc, exc_info=True)
         return internal_error_response('Failed to generate download URL')

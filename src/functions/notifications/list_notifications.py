@@ -7,7 +7,6 @@ Route: GET /v1/tours/{tourId}/notifications
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger, log_event
 from response import (
@@ -16,6 +15,8 @@ from response import (
 from dynamodb_utils import scan_tour_items, query_tour_items
 from validation import validate_tour_id, ValidationError
 from models import NotificationType
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -55,7 +56,7 @@ def lambda_handler(event, context):
         notification_type = query_params.get('type')
         rider_id = query_params.get('riderId')
 
-        logger.info(f"Listing notifications for tour: {tour_id}")
+        logger.info("Listing notifications for tour: %s", tour_id)
 
         # Validate type filter if provided
         if notification_type:
@@ -100,7 +101,7 @@ def lambda_handler(event, context):
         # Sort by createdAt descending (newest first)
         notifications.sort(key=lambda n: n.get('createdAt', ''), reverse=True)
 
-        logger.info(f"Found {len(notifications)} notifications for tour {tour_id}")
+        logger.info("Found %s notifications for tour %s", len(notifications), tour_id)
 
         return success_response({
             'notifications': notifications,
@@ -109,5 +110,5 @@ def lambda_handler(event, context):
         })
 
     except Exception as e:
-        logger.error(f"Error listing notifications: {str(e)}", exc_info=True)
+        logger.error("Error listing notifications: %s", e, exc_info=True)
         return internal_error_response("Failed to list notifications")

@@ -6,13 +6,14 @@ Route: GET /v1/tours/{tourId}/rides
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, ValidationError
 from dynamodb_utils import scan_tour_items, query_tour_items
 from models import RideStatus
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -54,7 +55,7 @@ def lambda_handler(event, context):
                     f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
                 )
         
-        logger.info(f"Listing rides for tour: {tour_id}, status filter: {status_filter or 'all'}")
+        logger.info("Listing rides for tour: %s, status filter: %s", tour_id, status_filter or 'all')
         
         if status_filter:
             # Use StatusIndex GSI for efficient status filtering
@@ -76,7 +77,7 @@ def lambda_handler(event, context):
         # Sort rides by date
         rides.sort(key=lambda r: r.get('date', ''))
         
-        logger.info(f"Successfully retrieved {len(rides)} rides for tour {tour_id}")
+        logger.info("Successfully retrieved %s rides for tour %s", len(rides), tour_id)
         return success_response({
             'rides': rides,
             'count': len(rides),
@@ -84,5 +85,5 @@ def lambda_handler(event, context):
         })
         
     except Exception as e:
-        logger.error(f"Error listing rides: {str(e)}", exc_info=True)
+        logger.error("Error listing rides: %s", e, exc_info=True)
         return internal_error_response("Failed to list rides")

@@ -6,13 +6,14 @@ Route: GET /v1/tours/{tourId}/rides/{rideId}
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, validate_ride_id, ValidationError
 from dynamodb_utils import get_item, get_tour_item
 from self_service_policy import build_ride_self_service
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -47,7 +48,7 @@ def lambda_handler(event, context):
             return bad_request_response(str(e))
         
         # Get ride from tour-specific Ride table
-        logger.info(f"Fetching ride: {tour_id}/{ride_id}")
+        logger.info("Fetching ride: %s/%s", tour_id, ride_id)
         ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
@@ -55,15 +56,15 @@ def lambda_handler(event, context):
         )
         
         if not ride:
-            logger.info(f"Ride not found: {ride_id}")
+            logger.info("Ride not found: %s", ride_id)
             return not_found_response("Ride", ride_id)
         
         tour = get_item(table_name_env='TOUR_MASTER_TABLE', key={'tourId': tour_id})
         ride['selfService'] = build_ride_self_service(ride, tour)
 
-        logger.info(f"Successfully retrieved ride: {ride_id}")
+        logger.info("Successfully retrieved ride: %s", ride_id)
         return success_response(ride)
         
     except Exception as e:
-        logger.error(f"Error getting ride: {str(e)}", exc_info=True)
+        logger.error("Error getting ride: %s", e, exc_info=True)
         return internal_error_response("Failed to get ride")

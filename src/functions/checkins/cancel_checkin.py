@@ -12,7 +12,6 @@ Route: POST /v1/tours/{tourId}/rides/{rideId}/checkins/{checkInId}/cancel
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
@@ -28,6 +27,8 @@ from validation import validate_tour_id, validate_ride_id, ValidationError
 from checkin_service import cancel_checkin
 from dynamodb_utils import get_tour_item
 from rbac import Permission, require_permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -94,5 +95,5 @@ def lambda_handler(event, context):
         return success_response(updated)
 
     except Exception as e:
-        logger.error(f"Error cancelling check-in: {str(e)}", exc_info=True)
+        logger.error("Error cancelling check-in: %s", e, exc_info=True)
         return internal_error_response("Failed to cancel check-in")

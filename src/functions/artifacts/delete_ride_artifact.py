@@ -5,13 +5,13 @@ import sys
 
 import boto3
 
-sys.path.insert(0, '/opt/python')
-
 from dynamodb_utils import get_tour_item, get_tour_table
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, not_found_response, success_response
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 s3_client = boto3.client('s3')
 
@@ -63,5 +63,5 @@ def lambda_handler(event, context):
             's3Key': s3_key,
         })
     except Exception as exc:
-        logger.error(f'Error deleting ride artifact: {str(exc)}', exc_info=True)
+        logger.error("Error deleting ride artifact: %s", exc, exc_info=True)
         return internal_error_response('Failed to delete artifact')

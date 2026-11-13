@@ -1,12 +1,13 @@
 """Admin-only AppConfig reader for rider-profile configuration types."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger, log_event
 from response import success_response, error_response, bad_request_response, internal_error_response
 from dynamodb_utils import query_items
 from rbac import get_user_groups
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)
@@ -38,5 +39,5 @@ def lambda_handler(event, context):
         return success_response({'items': items, 'count': len(items), 'configType': config_type})
 
     except Exception as exc:
-        logger.error(f'Error reading admin config: {str(exc)}', exc_info=True)
+        logger.error("Error reading admin config: %s", exc, exc_info=True)
         return internal_error_response('Failed to retrieve admin config')

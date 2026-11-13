@@ -7,8 +7,6 @@ Route: POST /v1/tours/{tourId}/rides/open
 
 import sys
 
-sys.path.insert(0, '/opt/python')
-
 from logger import get_logger
 from response import success_response, error_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, ValidationError
@@ -17,6 +15,8 @@ from models import utc_today_iso, utc_now_iso
 from notification_service import notify
 from rbac import require_permission, Permission
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 
@@ -51,7 +51,7 @@ def lambda_handler(event, context):
 
         # Resolve today's ride using DateIndex
         today = utc_today_iso()
-        logger.info(f"Finding today's ride for open operation: {tour_id} on {today}")
+        logger.info("Finding today's ride for open operation: %s on %s", tour_id, today)
         rides = query_tour_items(
             table_type='Ride',
             tour_id=tour_id,
@@ -78,10 +78,10 @@ def lambda_handler(event, context):
         ride['openedAt'] = now
         ride['updatedAt'] = now
 
-        logger.info(f"Opening today's ride: {ride.get('rideId')}")
+        logger.info("Opening today's ride: %s", ride.get('rideId'))
         put_tour_item(table_type='Ride', tour_id=tour_id, item=ride)
 
-        logger.info(f"Successfully opened today's ride: {ride.get('rideId')}")
+        logger.info("Successfully opened today's ride: %s", ride.get('rideId'))
         notify(
             rule_id='RIDE_OPENED',
             tour_id=tour_id,
@@ -91,5 +91,5 @@ def lambda_handler(event, context):
         return success_response(ride)
 
     except Exception as e:
-        logger.error(f"Error opening today's ride: {str(e)}", exc_info=True)
+        logger.error("Error opening today's ride: %s", e, exc_info=True)
         return internal_error_response("Failed to open today's ride")

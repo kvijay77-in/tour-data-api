@@ -6,7 +6,6 @@ Route: GET /v1/tours/{tourId}/users
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, bad_request_response, internal_error_response
@@ -14,6 +13,8 @@ from validation import validate_tour_id, ValidationError
 from dynamodb_utils import scan_tour_items
 from models import UserRole
 from rbac import Permission, is_pit_stop_group, require_permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -61,7 +62,7 @@ def lambda_handler(event, context):
                 )
         
         # Scan all users from tour-specific User table
-        logger.info(f"Querying users for tour: {tour_id}")
+        logger.info("Querying users for tour: %s", tour_id)
         
         if role_filter:
             users = scan_tour_items(
@@ -77,7 +78,7 @@ def lambda_handler(event, context):
                 tour_id=tour_id
             )
         
-        logger.info(f"Successfully retrieved {len(users)} users for tour {tour_id}")
+        logger.info("Successfully retrieved %s users for tour %s", len(users), tour_id)
         return success_response({
             'users': users,
             'count': len(users),
@@ -85,5 +86,5 @@ def lambda_handler(event, context):
         })
         
     except Exception as e:
-        logger.error(f"Error listing users: {str(e)}", exc_info=True)
+        logger.error("Error listing users: %s", e, exc_info=True)
         return internal_error_response("Failed to list users")

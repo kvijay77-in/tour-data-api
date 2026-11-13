@@ -1,7 +1,6 @@
 """Create rider profile using configuration-driven schema definitions."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 import uuid
@@ -20,6 +19,8 @@ from profile_schema import (
     ProfileSchemaError,
     get_user_role_flags,
 )
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -137,5 +138,5 @@ def lambda_handler(event, context):
     except ValidationError as exc:
         return error_response('VALIDATION_ERROR', str(exc), status_code=422)
     except Exception as exc:
-        logger.error(f'Error creating rider profile: {str(exc)}', exc_info=True)
+        logger.error("Error creating rider profile: %s", exc, exc_info=True)
         return internal_error_response('Failed to create rider profile')

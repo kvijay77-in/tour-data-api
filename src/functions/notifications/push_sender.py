@@ -1,5 +1,4 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 import os
@@ -11,8 +10,10 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.types import TypeDeserializer
 
-from common import split_base_token
+from notification_common import split_base_token
 from logger import get_logger, log_event
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 deserializer = TypeDeserializer()

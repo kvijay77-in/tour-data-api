@@ -1,7 +1,6 @@
 """Generate presigned URL for rider profile photo upload."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 import os
@@ -15,6 +14,8 @@ from response import success_response, bad_request_response, not_found_response,
 from dynamodb_utils import get_item
 from ownership import require_own_profile, is_rider_api_request
 from profile_schema import get_user_role_flags
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 s3_client = boto3.client('s3')
@@ -78,5 +79,5 @@ def lambda_handler(event, context):
         })
 
     except Exception as exc:
-        logger.error(f'Error generating upload URL: {str(exc)}', exc_info=True)
+        logger.error("Error generating upload URL: %s", exc, exc_info=True)
         return internal_error_response('Failed to generate upload URL')

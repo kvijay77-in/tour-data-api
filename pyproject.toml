@@ -1,0 +1,25 @@
+[tool.pylint.main]
+# Lambda functions import shared modules from the common layer, which is mounted
+# at /opt/python at runtime. Add it to the path so pylint can resolve them.
+# Paths are relative to the repo root, where pylint is run.
+init-hook = "import sys; sys.path.append('src/functions/users'); sys.path.append('src/functions/notifications'); sys.path.append('src/layers/common')"
+
+[tool.pylint.messages_control]
+
+
+# disable = [
+# There are so many!! For now all W, R and C are ignored.
+# Going with blanket skip.
+#     "R0801", # duplicate-code
+#     "C0303", # Trailing whitespaces
+#     "C0301",
+#     "C0304",
+#     "C0116",
+#     "C0103",
+#     "R0911
+# ]
+
+disable = [
+    "R", # Refactoring suggestions
+    "C", # Convention/style checks
+]

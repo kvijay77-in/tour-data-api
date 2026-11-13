@@ -5,7 +5,6 @@ Route: POST /v1/admin/usermgmt/users
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from botocore.exceptions import ClientError
 
@@ -29,6 +28,8 @@ from usermgmt_common import (
     validate_roles,
 )
 from validation import ValidationError, validate_email
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)

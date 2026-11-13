@@ -1,12 +1,13 @@
 """List rider tour participation records by profile ID."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, bad_request_response, internal_error_response
 from dynamodb_utils import query_items
 from ownership import require_own_profile
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -33,5 +34,5 @@ def lambda_handler(event, context):
         return success_response({'profileId': profile_id, 'count': len(participations), 'tours': participations})
 
     except Exception as exc:
-        logger.error(f'Error listing rider tour participations: {str(exc)}', exc_info=True)
+        logger.error("Error listing rider tour participations: %s", exc, exc_info=True)
         return internal_error_response('Failed to list rider tour participations')

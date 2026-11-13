@@ -7,8 +7,6 @@ Route: POST /v1/tours/{tourId}/rides/{rideId}/close
 
 import sys
 
-sys.path.insert(0, '/opt/python')
-
 from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, validate_ride_id, ValidationError
@@ -17,6 +15,8 @@ from models import RideStatus, utc_now_iso
 from notification_service import notify
 from rbac import require_permission, Permission
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 
@@ -56,7 +56,7 @@ def lambda_handler(event, context):
             return bad_request_response(str(e))
         
         # Get existing ride from tour-specific table
-        logger.info(f"Fetching ride to close: {tour_id}/{ride_id}")
+        logger.info("Fetching ride to close: %s/%s", tour_id, ride_id)
         ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
@@ -76,10 +76,10 @@ def lambda_handler(event, context):
         ride['closedAt'] = now
         ride['updatedAt'] = now
         
-        logger.info(f"Closing ride: {ride_id}")
+        logger.info("Closing ride: %s", ride_id)
         put_tour_item(table_type='Ride', tour_id=tour_id, item=ride)
         
-        logger.info(f"Successfully closed ride: {ride_id}")
+        logger.info("Successfully closed ride: %s", ride_id)
         notify(
             rule_id='RIDE_CLOSED',
             tour_id=tour_id,
@@ -89,5 +89,5 @@ def lambda_handler(event, context):
         return success_response(ride)
         
     except Exception as e:
-        logger.error(f"Error closing ride: {str(e)}", exc_info=True)
+        logger.error("Error closing ride: %s", e, exc_info=True)
         return internal_error_response("Failed to close ride")

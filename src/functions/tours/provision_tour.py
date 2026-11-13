@@ -1,7 +1,6 @@
 """Re-provision tour-specific DynamoDB tables without modifying TourMaster."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import boto3
 
@@ -12,6 +11,8 @@ from self_service_policy import apply_tour_defaults
 from response import bad_request_response, internal_error_response, not_found_response, success_response
 from tour_provisioning import provision_tour_tables
 from validation import ValidationError, validate_tour_id
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -52,12 +53,12 @@ def lambda_handler(event, context):
         )
 
         logger.info(
-            f"Tour {tour_id} re-provisioning completed with {len(provisioned_tables)} tables"
+            "Tour %s re-provisioning completed with %s tables", tour_id, len(provisioned_tables)
         )
         return success_response({
             'tour': apply_tour_defaults(tour),
             'provisionedTables': provisioned_tables,
         })
     except Exception as e:
-        logger.error(f"Error re-provisioning tour tables: {str(e)}", exc_info=True)
+        logger.error("Error re-provisioning tour tables: %s", e, exc_info=True)
         return internal_error_response("Failed to re-provision tour tables")

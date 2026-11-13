@@ -11,14 +11,14 @@ import sys
 
 import boto3
 
-sys.path.insert(0, '/opt/python')
-
 from dynamodb_utils import get_item, get_tour_item, query_tour_items
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, not_found_response, success_response
 from validation import ValidationError, validate_ride_id, validate_tour_id
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 s3_client = boto3.client('s3')
 
@@ -116,7 +116,7 @@ def lambda_handler(event, context):
         for artifact in artifacts:
             s3_key = artifact.get('s3Key')
             if not s3_key:
-                logger.warning(f"Artifact missing s3Key: {artifact.get('artifactId')}")
+                logger.warning("Artifact missing s3Key: %s", artifact.get('artifactId'))
                 continue
 
             try:
@@ -138,11 +138,11 @@ def lambda_handler(event, context):
                     'updatedAt': artifact.get('updatedAt'),
                 })
             except Exception as exc:
-                logger.error(f"Error generating presigned URL for {s3_key}: {str(exc)}", exc_info=True)
+                logger.error("Error generating presigned URL for %s: %s", s3_key, exc, exc_info=True)
                 continue
 
         return success_response(manifest)
 
     except Exception as exc:
-        logger.error(f'Error fetching ride artifacts: {str(exc)}', exc_info=True)
+        logger.error("Error fetching ride artifacts: %s", exc, exc_info=True)
         return internal_error_response('Failed to fetch artifacts')

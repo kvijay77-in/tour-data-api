@@ -1,13 +1,14 @@
 """Get all tour riders with role-filtered profile attributes."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, bad_request_response, internal_error_response
 from dynamodb_utils import scan_tour_items, get_item
 from validation import validate_tour_id, ValidationError
 from profile_schema import filter_profile_for_response
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -39,5 +40,5 @@ def lambda_handler(event, context):
         return success_response({'riders': enriched_riders, 'count': len(enriched_riders), 'tourId': tour_id})
 
     except Exception as exc:
-        logger.error(f'Error getting tour riders: {str(exc)}', exc_info=True)
+        logger.error("Error getting tour riders: %s", exc, exc_info=True)
         return internal_error_response('Failed to retrieve tour riders')

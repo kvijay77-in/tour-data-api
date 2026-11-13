@@ -3,13 +3,13 @@
 import sys
 import uuid
 
-sys.path.insert(0, '/opt/python')
-
 from logger import get_logger, log_event
 from response import success_response, bad_request_response, conflict_response, not_found_response, internal_error_response
 from dynamodb_utils import get_item, put_item, get_table
 from ownership import require_own_link_subject
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 TABLE_ENV = 'RIDER_COGNITO_USER_TABLE'
@@ -74,5 +74,5 @@ def lambda_handler(event, context):
         return bad_request_response(f'Unsupported HTTP method: {method}')
 
     except Exception as exc:
-        logger.error(f'Error linking/unlinking rider cognito user: {str(exc)}', exc_info=True)
+        logger.error("Error linking/unlinking rider cognito user: %s", exc, exc_info=True)
         return internal_error_response('Failed to process rider link request')

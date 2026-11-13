@@ -5,7 +5,6 @@ Route: GET /v1/admin/usermgmt/roles
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger, log_event
 from response import success_response, internal_error_response
@@ -15,6 +14,8 @@ from usermgmt_common import (
     list_pool_groups,
     require_admin_only,
 )
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)

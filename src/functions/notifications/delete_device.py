@@ -1,14 +1,15 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import os
 
 import boto3
 from boto3.dynamodb.conditions import Key
 
-from common import get_jwt_claim, get_profile_id_for_rider
+from notification_common import get_jwt_claim, get_profile_id_for_rider
 from logger import get_logger, log_event
 from response import internal_error_response
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 dynamodb = boto3.resource('dynamodb')

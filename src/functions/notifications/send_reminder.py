@@ -1,13 +1,14 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
-from common import get_jwt_claim, parse_json_body
+from notification_common import get_jwt_claim, parse_json_body
 from dynamodb_utils import get_tour_item, query_tour_items, scan_tour_items
 from logger import get_logger, log_event
 from models import TourRiderStatus, is_cancelled_checkin_item
 from notification_service import notify
 from rbac import Permission, require_permission
 from response import bad_request_response, error_response, internal_error_response, success_response
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 

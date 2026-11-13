@@ -1,7 +1,6 @@
 """Admin-only AppConfig writer for rider profile configuration."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
@@ -13,6 +12,8 @@ from dynamodb_utils import get_item, put_item
 from models import utc_now_iso
 from rbac import get_user_groups
 from profile_schema import validate_attribute_definitions_entry, get_definitions, ProfileSchemaError
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)
@@ -133,5 +134,5 @@ def lambda_handler(event, context):
     except ProfileSchemaError as exc:
         return error_response(error_code=exc.code, message=exc.message, status_code=exc.status_code)
     except Exception as exc:
-        logger.error(f'Error writing admin config: {str(exc)}', exc_info=True)
+        logger.error("Error writing admin config: %s", exc, exc_info=True)
         return internal_error_response('Failed to write admin config')

@@ -7,8 +7,6 @@ Route: GET /v1/tours/{tourId}/rides/today
 
 import sys
 
-sys.path.insert(0, '/opt/python')
-
 from logger import get_logger
 from response import success_response, not_found_response, error_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, ValidationError
@@ -16,6 +14,8 @@ from dynamodb_utils import get_item, query_tour_items
 from self_service_policy import build_ride_self_service
 from models import utc_today_iso
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 
@@ -48,7 +48,7 @@ def lambda_handler(event, context):
         today = utc_today_iso()
         
         # Query rides for today using DateIndex GSI
-        logger.info(f"Querying rides for tour {tour_id} on {today}")
+        logger.info("Querying rides for tour %s on %s", tour_id, today)
         rides = query_tour_items(
             table_type='Ride',
             tour_id=tour_id,
@@ -59,7 +59,7 @@ def lambda_handler(event, context):
         )
         
         if not rides:
-            logger.info(f"No ride found for tour {tour_id} on {today}")
+            logger.info("No ride found for tour %s on %s", tour_id, today)
             return error_response(
                 error_code="NO_ACTIVE_RIDE",
                 message="No active ride found for today",
@@ -71,9 +71,9 @@ def lambda_handler(event, context):
         tour = get_item(table_name_env='TOUR_MASTER_TABLE', key={'tourId': tour_id})
         todays_ride['selfService'] = build_ride_self_service(todays_ride, tour)
         
-        logger.info(f"Successfully retrieved today's ride: {todays_ride.get('rideId')}")
+        logger.info("Successfully retrieved today's ride: %s", todays_ride.get('rideId'))
         return success_response(todays_ride)
         
     except Exception as e:
-        logger.error(f"Error getting today's ride: {str(e)}", exc_info=True)
+        logger.error("Error getting today's ride: %s", e, exc_info=True)
         return internal_error_response("Failed to get today's ride")

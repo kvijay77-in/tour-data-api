@@ -6,11 +6,12 @@ No DynamoDB access needed - returns JWT claims only.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, unauthorized_response, internal_error_response
 from rbac import get_user_groups
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -58,9 +59,9 @@ def lambda_handler(event, context):
             'groups': get_user_groups(event)
         }
         
-        logger.info(f"Successfully retrieved current user: {user_id}")
+        logger.info("Successfully retrieved current user: %s", user_id)
         return success_response(user)
         
     except Exception as e:
-        logger.error(f"Error getting current user: {str(e)}", exc_info=True)
+        logger.error("Error getting current user: %s", e, exc_info=True)
         return internal_error_response("Failed to get current user")

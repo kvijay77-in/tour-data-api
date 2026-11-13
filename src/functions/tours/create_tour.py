@@ -6,7 +6,6 @@ provisions tour-specific DynamoDB tables.
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 import os
@@ -26,6 +25,8 @@ from validation import (
 from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from tour_provisioning import provision_tour_tables
 from rbac import require_permission, Permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -129,7 +130,7 @@ def lambda_handler(event, context):
             tour_item['description'] = body['description']
         
         put_item('TOUR_MASTER_TABLE', tour_item)
-        logger.info(f"Tour record created: {tour_id} (status: {tour_item['status']})")
+        logger.info("Tour record created: %s (status: %s)", tour_id, tour_item['status'])
         
         if not provisioning:
             return success_response(tour_item, status_code=201)
@@ -140,7 +141,7 @@ def lambda_handler(event, context):
             created_tables = provision_tour_tables(dynamodb_client, tour_id)
             
         except Exception as e:
-            logger.error(f"Error provisioning tables for tour {tour_id}: {str(e)}")
+            logger.error("Error provisioning tables for tour %s: %s", tour_id, e)
             # Update tour status to indicate failure
             tour_item['status'] = TourStatus.PLANNING.value
             tour_item['updatedAt'] = utc_now_iso()
@@ -154,12 +155,12 @@ def lambda_handler(event, context):
         tour_item['updatedAt'] = utc_now_iso()
         put_item('TOUR_MASTER_TABLE', tour_item)
         
-        logger.info(f"Tour {tour_id} provisioned successfully with {len(created_tables)} tables")
+        logger.info("Tour %s provisioned successfully with %s tables", tour_id, len(created_tables))
         
         return success_response(tour_item, status_code=201)
     
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")
     except Exception as e:
-        logger.error(f"Error creating tour: {str(e)}", exc_info=True)
+        logger.error("Error creating tour: %s", e, exc_info=True)
         return internal_error_response("Failed to create tour")

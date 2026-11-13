@@ -5,7 +5,6 @@ Route: POST /v1/tours/{tourId}/riders/{riderId}/baggage/release
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
@@ -15,6 +14,8 @@ from validation import ValidationError, validate_rider_id, validate_tour_id
 from models import BaggageStatus, utc_now_iso
 from dynamodb_utils import get_tour_item, update_tour_item
 from rbac import Permission, require_permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -85,5 +86,5 @@ def lambda_handler(event, context):
         )
         return success_response(updated)
     except Exception as exc:
-        logger.error(f"Error releasing rider baggage: {str(exc)}", exc_info=True)
+        logger.error("Error releasing rider baggage: %s", exc, exc_info=True)
         return internal_error_response("Failed to release rider baggage")

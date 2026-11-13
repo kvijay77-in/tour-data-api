@@ -14,7 +14,6 @@ Route: GET /v1/tours/{tourId}/rides/{rideId}/dashboard
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import hashlib
 import json
@@ -31,6 +30,8 @@ from validation import validate_tour_id, validate_ride_id, ValidationError
 from rbac import require_permission, Permission
 from models import is_cancelled_checkin_item
 from validation import build_emergency_contact_from_profile
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -65,7 +66,7 @@ def lambda_handler(event, context):
         except ValidationError as e:
             return bad_request_response(str(e))
         
-        logger.info(f"Getting dashboard data for ride: {tour_id}/{ride_id}")
+        logger.info("Getting dashboard data for ride: %s/%s", tour_id, ride_id)
         
         # Step 1: Get ride details from tour-specific Ride table
         ride = get_tour_item(
@@ -77,7 +78,7 @@ def lambda_handler(event, context):
         if not ride:
             return not_found_response("Ride", ride_id)
         
-        logger.info(f"Found ride: {ride_id}")
+        logger.info("Found ride: %s", ride_id)
         
         # Step 2: Get all riders from tour-specific TourRider table
         tour_riders = scan_tour_items(
@@ -85,7 +86,7 @@ def lambda_handler(event, context):
             tour_id=tour_id
         )
         
-        logger.info(f"Found {len(tour_riders)} riders for tour: {tour_id}")
+        logger.info("Found %s riders for tour: %s", len(tour_riders), tour_id)
         
         # Step 3: Get rider profiles in batch from shared RiderProfile table
         profile_keys = [
@@ -125,7 +126,7 @@ def lambda_handler(event, context):
         )
         check_ins = [checkin for checkin in check_ins if not is_cancelled_checkin_item(checkin)]
         
-        logger.info(f"Found {len(check_ins)} check-ins for ride: {ride_id}")
+        logger.info("Found %s check-ins for ride: %s", len(check_ins), ride_id)
         
         # Step 5: Calculate summary stats
         rider_ids = {tr.get('riderId') for tr in tour_riders}
@@ -167,16 +168,16 @@ def lambda_handler(event, context):
         if_none_match = request_headers.get('if-none-match') or request_headers.get('If-None-Match')
         
         if if_none_match and if_none_match == etag:
-            logger.info(f"ETag match — returning 304 Not Modified for ride: {ride_id}")
+            logger.info("ETag match — returning 304 Not Modified for ride: %s", ride_id)
             response = not_modified_response()
             response['headers']['ETag'] = etag
             return response
         
-        logger.info(f"Dashboard data prepared successfully for ride: {ride_id}")
+        logger.info("Dashboard data prepared successfully for ride: %s", ride_id)
         response = success_response(dashboard_data)
         response['headers']['ETag'] = etag
         return response
     
     except Exception as e:
-        logger.error(f"Error getting dashboard data: {str(e)}", exc_info=True)
+        logger.error("Error getting dashboard data: %s", e, exc_info=True)
         return internal_error_response("Failed to retrieve dashboard data")

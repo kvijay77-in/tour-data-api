@@ -6,7 +6,6 @@ Route: POST /v1/tours/{tourId}/notifications
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 import uuid
@@ -21,6 +20,8 @@ from validation import (
 )
 from models import NotificationType, utc_now_iso
 from rbac import require_permission, Permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -110,16 +111,16 @@ def lambda_handler(event, context):
         if body.get('expiresAt'):
             item['expiresAt'] = body['expiresAt']
 
-        logger.info(f"Creating notification {notification_id} for tour {tour_id}")
+        logger.info("Creating notification %s for tour %s", notification_id, tour_id)
         put_tour_item(
             table_type='Notification',
             tour_id=tour_id,
             item=item
         )
 
-        logger.info(f"Successfully created notification {notification_id}")
+        logger.info("Successfully created notification %s", notification_id)
         return success_response(item, status_code=201)
 
     except Exception as e:
-        logger.error(f"Error creating notification: {str(e)}", exc_info=True)
+        logger.error("Error creating notification: %s", e, exc_info=True)
         return internal_error_response("Failed to create notification")

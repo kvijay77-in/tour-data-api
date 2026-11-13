@@ -8,8 +8,6 @@ Route: POST /v1/tours/{tourId}/rides
 import json
 import sys
 
-sys.path.insert(0, '/opt/python')
-
 from logger import get_logger
 from response import (
     success_response, bad_request_response, conflict_response,
@@ -24,6 +22,8 @@ from dynamodb_utils import get_item, get_tour_item, put_tour_item
 from models import RideStatus, TourStatus, utc_now_iso
 from rbac import require_permission, Permission
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 # Optional ride-level self check-in settings; absent means "follow the default".
@@ -141,7 +141,7 @@ def lambda_handler(event, context):
                 return bad_request_response(str(e))
         
         # Check if tour exists and is in the right status
-        logger.info(f"Checking if tour exists: {tour_id}")
+        logger.info("Checking if tour exists: %s", tour_id)
         tour = get_item(
             table_name_env='TOUR_MASTER_TABLE',
             key={'tourId': tour_id}
@@ -196,12 +196,12 @@ def lambda_handler(event, context):
         ride = {k: v for k, v in ride.items() if v is not None}
         
         # Save to tour-specific Ride table
-        logger.info(f"Creating ride: {ride_id} in tour {tour_id}")
+        logger.info("Creating ride: %s in tour %s", ride_id, tour_id)
         put_tour_item(table_type='Ride', tour_id=tour_id, item=ride)
         
-        logger.info(f"Successfully created ride: {ride_id}")
+        logger.info("Successfully created ride: %s", ride_id)
         return success_response(ride, status_code=201)
         
     except Exception as e:
-        logger.error(f"Error creating ride: {str(e)}", exc_info=True)
+        logger.error("Error creating ride: %s", e, exc_info=True)
         return internal_error_response("Failed to create ride")

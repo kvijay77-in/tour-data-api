@@ -1,7 +1,6 @@
 """Generate presigned upload URL for rider profile FILE/IMAGE attributes."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 import os
@@ -14,6 +13,8 @@ from response import success_response, bad_request_response, not_found_response,
 from dynamodb_utils import get_item
 from ownership import require_own_profile
 from profile_schema import validate_attribute_upload_request, ProfileSchemaError, get_user_role_flags
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)
@@ -87,5 +88,5 @@ def lambda_handler(event, context):
     except ProfileSchemaError as exc:
         return error_response(exc.code, exc.message, status_code=exc.status_code)
     except Exception as exc:
-        logger.error(f'Error generating attribute upload URL: {str(exc)}', exc_info=True)
+        logger.error("Error generating attribute upload URL: %s", exc, exc_info=True)
         return internal_error_response('Failed to generate attribute upload URL')

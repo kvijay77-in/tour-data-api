@@ -6,8 +6,6 @@ import sys
 
 import boto3
 
-sys.path.insert(0, '/opt/python')
-
 from dynamodb_utils import get_item, get_tour_item, put_tour_item, query_items
 from logger import get_logger, log_event
 from models import utc_now_iso
@@ -15,6 +13,8 @@ from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, not_found_response, success_response
 from validation import ValidationError, validate_artifact_content_type, validate_artifact_id, validate_ride_id, validate_tour_id
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 s3_client = boto3.client('s3')
 
@@ -154,5 +154,5 @@ def lambda_handler(event, context):
             'title': metadata['title'],
         })
     except Exception as exc:
-        logger.error(f'Error generating ride artifact upload URL: {str(exc)}', exc_info=True)
+        logger.error("Error generating ride artifact upload URL: %s", exc, exc_info=True)
         return internal_error_response('Failed to generate upload URL')

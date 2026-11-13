@@ -7,13 +7,14 @@ Route: GET /v1/tours/{tourId}/riders/names
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, bad_request_response, internal_error_response
 from dynamodb_utils import scan_tour_items, get_item
 from validation import validate_tour_id, ValidationError
 from rbac import Permission, require_permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -53,7 +54,7 @@ def lambda_handler(event, context):
         except ValidationError as e:
             return bad_request_response(str(e))
 
-        logger.info(f"Fetching lightweight rider names for tour: {tour_id}")
+        logger.info("Fetching lightweight rider names for tour: %s", tour_id)
 
         tour_riders = scan_tour_items(
             table_type='TourRider',
@@ -80,7 +81,7 @@ def lambda_handler(event, context):
 
         riders.sort(key=_rider_sort_key)
 
-        logger.info(f"Returning {len(riders)} lightweight rider records for tour {tour_id}")
+        logger.info("Returning %s lightweight rider records for tour %s", len(riders), tour_id)
         return success_response({
             'riders': riders,
             'count': len(riders),
@@ -88,5 +89,5 @@ def lambda_handler(event, context):
         })
 
     except Exception as e:
-        logger.error(f"Error getting lightweight rider names: {str(e)}", exc_info=True)
+        logger.error("Error getting lightweight rider names: %s", e, exc_info=True)
         return internal_error_response("Failed to retrieve rider names")

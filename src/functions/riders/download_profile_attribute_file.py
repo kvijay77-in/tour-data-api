@@ -1,7 +1,6 @@
 """Generate presigned download URL for rider profile FILE/IMAGE attributes."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import os
 
@@ -17,6 +16,8 @@ from profile_schema import (
     get_attribute_flags,
     require_file_attribute_definition,
 )
+
+sys.path.insert(0, '/opt/python')
 
 
 logger = get_logger(__name__)
@@ -77,5 +78,5 @@ def lambda_handler(event, context):
     except ProfileSchemaError as exc:
         return error_response(exc.code, exc.message, status_code=exc.status_code)
     except Exception as exc:
-        logger.error(f'Error generating attribute download URL: {str(exc)}', exc_info=True)
+        logger.error("Error generating attribute download URL: %s", exc, exc_info=True)
         return internal_error_response('Failed to generate attribute download URL')

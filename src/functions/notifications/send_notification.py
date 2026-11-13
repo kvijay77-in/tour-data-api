@@ -1,11 +1,12 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
-from common import get_jwt_claim, parse_json_body
+from notification_common import get_jwt_claim, parse_json_body
 from logger import get_logger, log_event
 from notification_service import notify, validate_audiences
 from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, success_response
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 

@@ -1,7 +1,6 @@
 """Get rider details for dashboard popup with profile attribute filtering."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import hashlib
 import json
@@ -13,6 +12,8 @@ from validation import validate_tour_id, validate_ride_id, validate_rider_id, Va
 from rbac import require_permission, Permission
 from models import is_cancelled_checkin_item
 from profile_schema import filter_profile_for_response
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -123,5 +124,5 @@ def lambda_handler(event, context):
         return response
 
     except Exception as exc:
-        logger.error(f'Error getting rider details: {str(exc)}', exc_info=True)
+        logger.error("Error getting rider details: %s", exc, exc_info=True)
         return internal_error_response('Failed to retrieve rider details')

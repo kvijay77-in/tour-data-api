@@ -1,7 +1,8 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 from event_engine import process_hotel_upload
+
+sys.path.insert(0, '/opt/python')
 
 
 def lambda_handler(event, context):

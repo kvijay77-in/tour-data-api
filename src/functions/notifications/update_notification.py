@@ -7,7 +7,6 @@ Route: PUT /v1/tours/{tourId}/notifications/{notificationId}
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
@@ -18,6 +17,8 @@ from response import (
 )
 from dynamodb_utils import get_tour_item, put_tour_item
 from validation import validate_tour_id, ValidationError
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -86,7 +87,7 @@ def lambda_handler(event, context):
             notification['readBy'] = read_by
 
             logger.info(
-                f"Marking notification {notification_id} as read by {profile_id}"
+                "Marking notification %s as read by %s", notification_id, profile_id
             )
             put_tour_item(
                 table_type='Notification',
@@ -94,9 +95,9 @@ def lambda_handler(event, context):
                 item=notification
             )
 
-        logger.info(f"Successfully updated notification {notification_id}")
+        logger.info("Successfully updated notification %s", notification_id)
         return success_response(notification)
 
     except Exception as e:
-        logger.error(f"Error updating notification: {str(e)}", exc_info=True)
+        logger.error("Error updating notification: %s", e, exc_info=True)
         return internal_error_response("Failed to update notification")

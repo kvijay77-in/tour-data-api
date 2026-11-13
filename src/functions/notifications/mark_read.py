@@ -1,9 +1,8 @@
 import sys
-sys.path.insert(0, '/opt/python')
 
 import os
 
-from common import (
+from notification_common import (
     get_jwt_claim,
     get_profile_id_for_rider,
     get_state_key,
@@ -15,6 +14,8 @@ from common import (
 from logger import get_logger, log_event
 from models import utc_now_iso
 from response import bad_request_response, internal_error_response, success_response
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 

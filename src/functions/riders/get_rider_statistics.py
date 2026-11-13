@@ -7,7 +7,6 @@ Route: GET /v1/tours/{tourId}/riders/{riderId}/statistics
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger, log_event
 from response import (
@@ -18,6 +17,8 @@ from dynamodb_utils import get_tour_item, scan_tour_items, query_tour_items
 from validation import (
     validate_tour_id, validate_rider_id, ValidationError
 )
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -64,7 +65,7 @@ def lambda_handler(event, context):
         if not tour_rider:
             return not_found_response("TourRider", rider_id)
 
-        logger.info(f"Computing statistics for rider {rider_id} in tour {tour_id}")
+        logger.info("Computing statistics for rider %s in tour %s", rider_id, tour_id)
 
         # Get all rides for the tour
         all_rides = scan_tour_items(
@@ -153,9 +154,9 @@ def lambda_handler(event, context):
             'quitRiding': quit_riding
         }
 
-        logger.info(f"Statistics computed for rider {rider_id}: {rides_completed} rides completed")
+        logger.info("Statistics computed for rider %s: %s rides completed", rider_id, rides_completed)
         return success_response(statistics)
 
     except Exception as e:
-        logger.error(f"Error computing rider statistics: {str(e)}", exc_info=True)
+        logger.error("Error computing rider statistics: %s", e, exc_info=True)
         return internal_error_response("Failed to compute rider statistics")

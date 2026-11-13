@@ -1,13 +1,14 @@
 """Get specific tour rider details with filtered profile attributes."""
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import success_response, not_found_response, bad_request_response, internal_error_response
 from validation import validate_rider_id, validate_tour_id, ValidationError
 from dynamodb_utils import get_tour_item, get_item
 from profile_schema import filter_profile_for_response
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -40,5 +41,5 @@ def lambda_handler(event, context):
         return success_response(tour_rider)
 
     except Exception as exc:
-        logger.error(f'Error getting tour rider: {str(exc)}', exc_info=True)
+        logger.error("Error getting tour rider: %s", exc, exc_info=True)
         return internal_error_response('Failed to get tour rider')

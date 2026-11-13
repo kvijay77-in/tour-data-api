@@ -10,7 +10,6 @@ Route: POST /v1/tours/{tourId}/riders/{riderId}/exit/cancel
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 from logger import get_logger
 from response import (
@@ -24,6 +23,8 @@ from validation import validate_tour_id, validate_rider_id, ValidationError
 from models import BaggageStatus, TourRiderStatus, utc_now_iso
 from dynamodb_utils import get_tour_item, update_tour_item
 from rbac import Permission, require_permission
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -100,5 +101,5 @@ def lambda_handler(event, context):
         return success_response(updated)
 
     except Exception as e:
-        logger.error(f"Error cancelling rider exit from tour: {str(e)}", exc_info=True)
+        logger.error("Error cancelling rider exit from tour: %s", e, exc_info=True)
         return internal_error_response("Failed to cancel rider exit status")

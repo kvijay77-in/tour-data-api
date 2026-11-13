@@ -16,7 +16,6 @@ Notes:
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import hashlib
 import json
@@ -34,6 +33,8 @@ from response import (
 from dynamodb_utils import scan_items, query_items
 from rbac import Permission, require_permission
 from profile_schema import get_definitions_version
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -133,5 +134,5 @@ def lambda_handler(event, context):
         return response
 
     except Exception as e:
-        logger.error(f"Error getting config: {str(e)}", exc_info=True)
+        logger.error("Error getting config: %s", e, exc_info=True)
         return internal_error_response("Failed to retrieve config")

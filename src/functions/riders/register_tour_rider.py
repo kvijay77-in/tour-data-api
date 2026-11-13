@@ -7,7 +7,6 @@ Route: POST /v1/tours/{tourId}/riders
 """
 
 import sys
-sys.path.insert(0, '/opt/python')
 
 import json
 
@@ -21,6 +20,8 @@ from validation import (
     validate_tour_id, validate_required_fields, ValidationError
 )
 from models import TourRiderStatus, TourStatus, utc_now_iso
+
+sys.path.insert(0, '/opt/python')
 
 logger = get_logger(__name__)
 
@@ -140,16 +141,16 @@ def lambda_handler(event, context):
         if body.get('specialRequirements'):
             item['specialRequirements'] = body['specialRequirements']
 
-        logger.info(f"Registering rider {profile_id} for tour {tour_id}")
+        logger.info("Registering rider %s for tour %s", profile_id, tour_id)
         put_tour_item(
             table_type='TourRider',
             tour_id=tour_id,
             item=item
         )
 
-        logger.info(f"Successfully registered rider {profile_id} for tour {tour_id}")
+        logger.info("Successfully registered rider %s for tour %s", profile_id, tour_id)
         return success_response(item, status_code=201)
 
     except Exception as e:
-        logger.error(f"Error registering tour rider: {str(e)}", exc_info=True)
+        logger.error("Error registering tour rider: %s", e, exc_info=True)
         return internal_error_response("Failed to register tour rider")

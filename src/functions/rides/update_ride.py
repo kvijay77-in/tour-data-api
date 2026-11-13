@@ -8,8 +8,6 @@ Route: PUT /v1/tours/{tourId}/rides/{rideId}
 import json
 import sys
 
-sys.path.insert(0, '/opt/python')
-
 from logger import get_logger
 from response import (
     success_response, not_found_response, bad_request_response, internal_error_response,
@@ -24,6 +22,8 @@ from dynamodb_utils import get_tour_item, put_tour_item
 from models import RideStatus, utc_now_iso
 from rbac import require_permission, Permission
 
+
+sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 # Optional ride-level self check-in settings; sending null clears the setting.
@@ -90,7 +90,7 @@ def lambda_handler(event, context):
             return bad_request_response("Invalid JSON in request body")
         
         # Get existing ride
-        logger.info(f"Fetching existing ride: {tour_id}/{ride_id}")
+        logger.info("Fetching existing ride: %s/%s", tour_id, ride_id)
         existing_ride = get_tour_item(
             table_type='Ride',
             tour_id=tour_id,
@@ -181,12 +181,12 @@ def lambda_handler(event, context):
                 updated_ride.pop(setting, None)
         updated_ride['updatedAt'] = utc_now_iso()
         
-        logger.info(f"Updating ride: {ride_id}")
+        logger.info("Updating ride: %s", ride_id)
         put_tour_item(table_type='Ride', tour_id=tour_id, item=updated_ride)
         
-        logger.info(f"Successfully updated ride: {ride_id}")
+        logger.info("Successfully updated ride: %s", ride_id)
         return success_response(updated_ride)
         
     except Exception as e:
-        logger.error(f"Error updating ride: {str(e)}", exc_info=True)
+        logger.error("Error updating ride: %s", e, exc_info=True)
         return internal_error_response("Failed to update ride")
