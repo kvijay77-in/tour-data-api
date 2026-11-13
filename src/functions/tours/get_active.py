@@ -8,7 +8,8 @@ import sys
 
 from logger import get_logger, log_event
 from self_service_policy import apply_tour_defaults
-from response import success_response, error_response, internal_error_response
+from response import success_response, error_response
+from handler_utils import api_handler
 from dynamodb_utils import query_items
 from models import TourStatus
 
@@ -17,6 +18,7 @@ sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 
+@api_handler('Failed to retrieve active tour')
 def lambda_handler(event, context):
     """
     Get the currently active tour
@@ -28,32 +30,27 @@ def lambda_handler(event, context):
         404: No active tour found
         500: Server error
     """
-    try:
-        logger.info("Getting active tour")
-        log_event(logger, event)
-        
-        # Use StatusIndex GSI to query for ACTIVE tours
-        items = query_items(
-            table_name_env='TOUR_MASTER_TABLE',
-            key_condition_expression='#status = :status',
-            expression_values={':status': TourStatus.ACTIVE.value},
-            expression_names={'#status': 'status'},
-            index_name='StatusIndex'
-        )
-        
-        if not items:
-            return error_response(
-                error_code="NO_ACTIVE_TOUR",
-                message="No active tour found",
-                status_code=404
-            )
-        
-        # Return first active tour (should be only one)
-        tour = items[0]
-        
-        logger.info("Found active tour: %s", tour.get('tourId'))
-        return success_response(apply_tour_defaults(tour))
+    logger.info("Getting active tour")
+    log_event(logger, event)
     
-    except Exception as e:
-        logger.error("Error getting active tour: %s", e, exc_info=True)
-        return internal_error_response("Failed to retrieve active tour")
+    # Use StatusIndex GSI to query for ACTIVE tours
+    items = query_items(
+        table_name_env='TOUR_MASTER_TABLE',
+        key_condition_expression='#status = :status',
+        expression_values={':status': TourStatus.ACTIVE.value},
+        expression_names={'#status': 'status'},
+        index_name='StatusIndex'
+    )
+    
+    if not items:
+        return error_response(
+            error_code="NO_ACTIVE_TOUR",
+            message="No active tour found",
+            status_code=404
+        )
+    
+    # Return first active tour (should be only one)
+    tour = items[0]
+    
+    logger.info("Found active tour: %s", tour.get('tourId'))
+    return success_response(apply_tour_defaults(tour))

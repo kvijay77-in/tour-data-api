@@ -26,10 +26,10 @@ from response import (
     success_response,
     bad_request_response,
     error_response,
-    internal_error_response,
     not_modified_response,
     DecimalEncoder,
 )
+from handler_utils import api_handler
 from dynamodb_utils import scan_items, query_items
 from rbac import Permission, require_permission
 from profile_schema import get_definitions_version
@@ -85,54 +85,50 @@ def _query_all_enabled():
     )
 
 
+@api_handler('Failed to retrieve config')
 def lambda_handler(event, context):
+    log_event(logger, event)
+
+    deny = require_permission(event, Permission.READ)
+    if deny:
+        return deny
+
+    query_params = event.get('queryStringParameters') or {}
+    raw_config_type = (query_params.get('configType') or '').strip()
+
     try:
-        log_event(logger, event)
+        config_types = _parse_config_types(raw_config_type)
+    except ValueError as exc:
+        return bad_request_response(str(exc))
 
-        deny = require_permission(event, Permission.READ)
-        if deny:
-            return deny
+    if config_types:
+        items = _query_enabled_by_type(config_types)
+        if not items:
+            return error_response(
+                error_code='INVALID_CONFIG_TYPE',
+                message='Missing or Invalid configType',
+                status_code=404,
+            )
+    else:
+        items = _query_all_enabled()
 
-        query_params = event.get('queryStringParameters') or {}
-        raw_config_type = (query_params.get('configType') or '').strip()
+    items.sort(key=lambda item: (item.get('configType', ''), item.get('configId', '')))
 
-        try:
-            config_types = _parse_config_types(raw_config_type)
-        except ValueError as exc:
-            return bad_request_response(str(exc))
+    payload = {
+        'items': items,
+        'definitionsVersion': get_definitions_version(),
+    }
 
-        if config_types:
-            items = _query_enabled_by_type(config_types)
-            if not items:
-                return error_response(
-                    error_code='INVALID_CONFIG_TYPE',
-                    message='Missing or Invalid configType',
-                    status_code=404,
-                )
-        else:
-            items = _query_all_enabled()
+    payload_json = json.dumps(payload, sort_keys=True, cls=DecimalEncoder)
+    etag = f'"{hashlib.md5(payload_json.encode()).hexdigest()}"'
 
-        items.sort(key=lambda item: (item.get('configType', ''), item.get('configId', '')))
-
-        payload = {
-            'items': items,
-            'definitionsVersion': get_definitions_version(),
-        }
-
-        payload_json = json.dumps(payload, sort_keys=True, cls=DecimalEncoder)
-        etag = f'"{hashlib.md5(payload_json.encode()).hexdigest()}"'
-
-        request_headers = event.get('headers', {}) or {}
-        if_none_match = request_headers.get('if-none-match') or request_headers.get('If-None-Match')
-        if if_none_match and if_none_match == etag:
-            response = not_modified_response()
-            response['headers']['ETag'] = etag
-            return response
-
-        response = success_response(payload)
+    request_headers = event.get('headers', {}) or {}
+    if_none_match = request_headers.get('if-none-match') or request_headers.get('If-None-Match')
+    if if_none_match and if_none_match == etag:
+        response = not_modified_response()
         response['headers']['ETag'] = etag
         return response
 
-    except Exception as e:
-        logger.error("Error getting config: %s", e, exc_info=True)
-        return internal_error_response("Failed to retrieve config")
+    response = success_response(payload)
+    response['headers']['ETag'] = etag
+    return response

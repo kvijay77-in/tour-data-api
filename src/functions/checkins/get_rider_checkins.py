@@ -14,6 +14,7 @@ from response import (
     error_response,
     internal_error_response,
 )
+from handler_utils import api_handler
 from models import is_cancelled_checkin_item
 from validation import validate_tour_id, validate_rider_id, ValidationError
 from dynamodb_utils import get_tour_item, query_tour_items
@@ -26,6 +27,7 @@ sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 
+@api_handler('Failed to get rider check-ins')
 def lambda_handler(event, context):
     """Get all check-ins for a rider within a tour."""
     try:
@@ -94,8 +96,5 @@ def lambda_handler(event, context):
             if 'rideNo' in path_params:
                 empty['rideNo'] = int(path_params['rideNo'])
             return success_response(empty)
-        logger.error("Error getting rider check-ins: %s", e, exc_info=True)
-        return internal_error_response("Failed to get rider check-ins")
-    except Exception as e:
         logger.error("Error getting rider check-ins: %s", e, exc_info=True)
         return internal_error_response("Failed to get rider check-ins")

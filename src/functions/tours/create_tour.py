@@ -14,6 +14,7 @@ from response import (
     success_response, bad_request_response,
     conflict_response, internal_error_response, validation_exception_response
 )
+from handler_utils import api_handler
 from dynamodb_utils import get_item, put_item
 from validation import (
     validate_tour_id, validate_iso_date, validate_required_fields,
@@ -30,6 +31,7 @@ logger = get_logger(__name__)
 dynamodb_client = boto3.client('dynamodb')
 
 
+@api_handler('Failed to create tour')
 def lambda_handler(event, context):
     """
     Create a new tour
@@ -137,7 +139,8 @@ def lambda_handler(event, context):
         try:
             created_tables = provision_tour_tables(dynamodb_client, tour_id)
             
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            # Intentionally broad: any provisioning failure must be recorded on the tour.
             logger.error("Error provisioning tables for tour %s: %s", tour_id, e)
             # Update tour status to indicate failure
             tour_item['status'] = TourStatus.PLANNING.value
@@ -158,6 +161,3 @@ def lambda_handler(event, context):
     
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")
-    except Exception as e:
-        logger.error("Error creating tour: %s", e, exc_info=True)
-        return internal_error_response("Failed to create tour")

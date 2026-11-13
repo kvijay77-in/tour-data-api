@@ -40,7 +40,8 @@ The backend uses shared tables for platform-wide records and provisions a separa
 
 - `template.yaml` is the primary AWS SAM/CloudFormation definition.
 - `src/functions/` contains Lambda handlers organized by domain.
-- `src/layers/common/` contains shared Python modules, including `checkin_service`, `event_engine`, `event_registration`, `event_self_service`, `notification_service`, `ownership`, `profile_schema`, `rbac`, `rider_identity`, `self_checkin_rules`, `self_service_policy`, and `tour_provisioning`.
+- `src/layers/common/` contains shared Python modules, including `checkin_service`, `event_engine`, `event_registration`, `event_self_service`, `handler_utils`, `notification_service`, `ownership`, `profile_schema`, `rbac`, `rider_identity`, `self_checkin_rules`, `self_service_policy`, and `tour_provisioning`.
+- API Gateway handlers use the `api_handler` decorator from `handler_utils` as their outermost error boundary. Handlers catch only the exceptions they can map to a specific response (for example `ValidationError` to 400); any other exception is logged with its type and traceback and returned as the standard `INTERNAL_ERROR` (500) envelope. A handler that must act on every failure (for example, writing a failure audit record) does so in its own `except Exception` block and then re-raises.
 - `samconfig.toml`, `Makefile`, `scripts/`, and `.github/workflows/ci-cd.yml` support environment configuration, local development, provisioning, and deployment.
 - AWS service calls use the Python SDK (`boto3`), not the JavaScript AWS SDK.
 

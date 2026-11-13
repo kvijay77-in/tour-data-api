@@ -16,6 +16,7 @@ from response import (
     success_response, bad_request_response, not_found_response,
     internal_error_response, validation_exception_response
 )
+from handler_utils import api_handler
 from dynamodb_utils import get_item, put_item
 from validation import (
     validate_tour_id, validate_iso_date, validate_ride_count, validate_optional_bool, ValidationError
@@ -73,6 +74,7 @@ def _validate_update_fields(updates, merged_tour):
             raise ValidationError(f"Invalid status. Must be one of: {valid_statuses}") from exc
 
 
+@api_handler('Failed to update tour')
 def lambda_handler(event, context):
     """
     Update an existing tour and rerun tour-specific table provisioning.
@@ -159,7 +161,8 @@ def lambda_handler(event, context):
                 tour_id,
                 ignore_existing=True,
             )
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            # Intentionally broad: any provisioning failure must be recorded on the tour.
             logger.error("Error provisioning tables for tour %s: %s", tour_id, e)
             updated_tour['provisioningError'] = str(e)
             updated_tour['updatedAt'] = utc_now_iso()
@@ -180,6 +183,3 @@ def lambda_handler(event, context):
 
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")
-    except Exception as e:
-        logger.error("Error updating tour: %s", e, exc_info=True)
-        return internal_error_response("Failed to update tour")

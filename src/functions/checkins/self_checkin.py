@@ -13,7 +13,8 @@ import sys
 import json
 
 from logger import get_logger, log_event
-from response import bad_request_response, internal_error_response, validation_error_response
+from response import bad_request_response, validation_error_response
+from handler_utils import api_handler
 from validation import validate_iso_datetime, validate_ride_id, validate_tour_id, ValidationError
 from models import SELF_SERVICE_METHOD
 from checkin_service import create_checkin
@@ -65,6 +66,7 @@ def _parse_request(body):
     return stage_number, body.get('isNotRiding') is True, body.get('isQuitRiding') is True, timestamp, notes
 
 
+@api_handler('Failed to create self check-in')
 def lambda_handler(event, context):
     """
     Create a check-in for the calling rider.
@@ -78,67 +80,62 @@ def lambda_handler(event, context):
 
     Returns 201 with the created check-in (same shape as the Mgmt create check-in).
     """
+    log_event(logger, event)
+
+    deny = require_permission(event, Permission.SELF_CHECKIN)
+    if deny:
+        return deny
+
+    path_params = event.get('pathParameters') or {}
+    tour_id = path_params.get('tourId')
+    ride_id = path_params.get('rideId')
+    if not tour_id or not ride_id:
+        return bad_request_response("tourId and rideId are required in path")
     try:
-        log_event(logger, event)
+        validate_tour_id(tour_id)
+        validate_ride_id(ride_id)
+    except ValidationError as e:
+        return bad_request_response(str(e))
 
-        deny = require_permission(event, Permission.SELF_CHECKIN)
-        if deny:
-            return deny
+    try:
+        body = json.loads(event.get('body') or '{}')
+    except json.JSONDecodeError:
+        return bad_request_response("Invalid JSON in request body")
+    if not isinstance(body, dict):
+        return validation_error_response("Request body must be a JSON object")
 
-        path_params = event.get('pathParameters') or {}
-        tour_id = path_params.get('tourId')
-        ride_id = path_params.get('rideId')
-        if not tour_id or not ride_id:
-            return bad_request_response("tourId and rideId are required in path")
-        try:
-            validate_tour_id(tour_id)
-            validate_ride_id(ride_id)
-        except ValidationError as e:
-            return bad_request_response(str(e))
+    rejected = reject_client_rider_id(body, [event.get('queryStringParameters') or {}])
+    if rejected:
+        return rejected
 
-        try:
-            body = json.loads(event.get('body') or '{}')
-        except json.JSONDecodeError:
-            return bad_request_response("Invalid JSON in request body")
-        if not isinstance(body, dict):
-            return validation_error_response("Request body must be a JSON object")
+    try:
+        stage_number, is_not_riding, is_quit_riding, timestamp, notes = _parse_request(body)
+    except ValidationError as e:
+        return validation_error_response(str(e), e.details)
 
-        rejected = reject_client_rider_id(body, [event.get('queryStringParameters') or {}])
-        if rejected:
-            return rejected
+    # Checks 1-4: tour ACTIVE, caller on the tour, ride is today's and OPEN/STARTED
+    self_context, error = load_self_checkin_context(event, tour_id, ride_id)
+    if error:
+        return error
 
-        try:
-            stage_number, is_not_riding, is_quit_riding, timestamp, notes = _parse_request(body)
-        except ValidationError as e:
-            return validation_error_response(str(e), e.details)
+    # Checks 5-8: quit, stage permission / pit stop open, Not Riding, Quit Riding
+    error = check_self_checkin_request(self_context, tour_id, stage_number, is_not_riding, is_quit_riding)
+    if error:
+        return error
 
-        # Checks 1-4: tour ACTIVE, caller on the tour, ride is today's and OPEN/STARTED
-        self_context, error = load_self_checkin_context(event, tour_id, ride_id)
-        if error:
-            return error
-
-        # Checks 5-8: quit, stage permission / pit stop open, Not Riding, Quit Riding
-        error = check_self_checkin_request(self_context, tour_id, stage_number, is_not_riding, is_quit_riding)
-        if error:
-            return error
-
-        identity = self_context['identity']
-        # Check 9: all existing check-in rules through the shared create function
-        return create_checkin(
-            event,
-            tour_id=tour_id,
-            ride_id=ride_id,
-            rider_id=identity['riderId'],
-            method=SELF_SERVICE_METHOD,
-            checked_in_by=identity['profileId'],
-            stage_number_input=stage_number,
-            is_not_riding=is_not_riding,
-            is_quit_riding=is_quit_riding,
-            client_timestamp=timestamp,
-            notes=notes,
-            ride=self_context['ride'],
-        )
-
-    except Exception as e:
-        logger.error("Error creating self check-in: %s", e, exc_info=True)
-        return internal_error_response("Failed to create self check-in")
+    identity = self_context['identity']
+    # Check 9: all existing check-in rules through the shared create function
+    return create_checkin(
+        event,
+        tour_id=tour_id,
+        ride_id=ride_id,
+        rider_id=identity['riderId'],
+        method=SELF_SERVICE_METHOD,
+        checked_in_by=identity['profileId'],
+        stage_number_input=stage_number,
+        is_not_riding=is_not_riding,
+        is_quit_riding=is_quit_riding,
+        client_timestamp=timestamp,
+        notes=notes,
+        ride=self_context['ride'],
+    )

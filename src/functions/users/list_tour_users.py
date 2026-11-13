@@ -8,7 +8,8 @@ Route: GET /v1/tours/{tourId}/users
 import sys
 
 from logger import get_logger
-from response import success_response, bad_request_response, internal_error_response
+from response import success_response, bad_request_response
+from handler_utils import api_handler
 from validation import validate_tour_id, ValidationError
 from dynamodb_utils import scan_tour_items
 from models import UserRole
@@ -19,6 +20,7 @@ sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 
+@api_handler('Failed to list users')
 def lambda_handler(event, context):
     """
     List all users (admin/staff) for a tour
@@ -31,60 +33,55 @@ def lambda_handler(event, context):
     - 400: Invalid tour ID or role
     - 500: Server error
     """
-    try:
-        # Enforce RBAC — only USER_LIST permission may list tour users
-        deny = require_permission(event, Permission.USER_LIST)
-        if deny:
-            return deny
+    # Enforce RBAC — only USER_LIST permission may list tour users
+    deny = require_permission(event, Permission.USER_LIST)
+    if deny:
+        return deny
 
-        # Extract tour ID from path parameters
-        tour_id = event.get('pathParameters', {}).get('tourId')
-        
-        if not tour_id:
-            return bad_request_response("tourId is required in path")
-        
-        # Validate tour ID
-        try:
-            validate_tour_id(tour_id)
-        except ValidationError as e:
-            return bad_request_response(str(e))
-        
-        # Get optional role filter from query parameters
-        query_params = event.get('queryStringParameters') or {}
-        role_filter = query_params.get('role')
-        
-        # Validate role if provided
-        if role_filter:
-            valid_roles = [r.value for r in UserRole]
-            if role_filter not in valid_roles and not is_pit_stop_group(role_filter):
-                return bad_request_response(
-                    f"Invalid role. Must be one of: {', '.join(valid_roles)} or PS_<n>_USER"
-                )
-        
-        # Scan all users from tour-specific User table
-        logger.info("Querying users for tour: %s", tour_id)
-        
-        if role_filter:
-            users = scan_tour_items(
-                table_type='User',
-                tour_id=tour_id,
-                filter_expression='#role = :role',
-                expression_values={':role': role_filter},
-                expression_names={'#role': 'role'}
+    # Extract tour ID from path parameters
+    tour_id = event.get('pathParameters', {}).get('tourId')
+    
+    if not tour_id:
+        return bad_request_response("tourId is required in path")
+    
+    # Validate tour ID
+    try:
+        validate_tour_id(tour_id)
+    except ValidationError as e:
+        return bad_request_response(str(e))
+    
+    # Get optional role filter from query parameters
+    query_params = event.get('queryStringParameters') or {}
+    role_filter = query_params.get('role')
+    
+    # Validate role if provided
+    if role_filter:
+        valid_roles = [r.value for r in UserRole]
+        if role_filter not in valid_roles and not is_pit_stop_group(role_filter):
+            return bad_request_response(
+                f"Invalid role. Must be one of: {', '.join(valid_roles)} or PS_<n>_USER"
             )
-        else:
-            users = scan_tour_items(
-                table_type='User',
-                tour_id=tour_id
-            )
-        
-        logger.info("Successfully retrieved %s users for tour %s", len(users), tour_id)
-        return success_response({
-            'users': users,
-            'count': len(users),
-            'tourId': tour_id
-        })
-        
-    except Exception as e:
-        logger.error("Error listing users: %s", e, exc_info=True)
-        return internal_error_response("Failed to list users")
+    
+    # Scan all users from tour-specific User table
+    logger.info("Querying users for tour: %s", tour_id)
+    
+    if role_filter:
+        users = scan_tour_items(
+            table_type='User',
+            tour_id=tour_id,
+            filter_expression='#role = :role',
+            expression_values={':role': role_filter},
+            expression_names={'#role': 'role'}
+        )
+    else:
+        users = scan_tour_items(
+            table_type='User',
+            tour_id=tour_id
+        )
+    
+    logger.info("Successfully retrieved %s users for tour %s", len(users), tour_id)
+    return success_response({
+        'users': users,
+        'count': len(users),
+        'tourId': tour_id
+    })

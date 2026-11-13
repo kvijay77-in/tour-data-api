@@ -12,8 +12,8 @@ from logger import get_logger, log_event
 from response import (
     success_response,
     validation_error_response,
-    internal_error_response,
 )
+from handler_utils import api_handler
 from usermgmt_common import (
     audit_log,
     cognito_error_response,
@@ -36,6 +36,7 @@ sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 
+@api_handler("Failed to update user")
 def lambda_handler(event, context):
     target_user_id = event.get("pathParameters", {}).get("cognitoUserId")
     try:
@@ -163,5 +164,4 @@ def lambda_handler(event, context):
             target_cognito_user_id=target_user_id,
             extra={"reason": str(exc)},
         )
-        logger.error("Error updating managed user: %s", str(exc), exc_info=True)
-        return internal_error_response("Failed to update user")
+        raise  # api_handler logs it and returns the standard 500

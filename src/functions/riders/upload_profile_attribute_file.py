@@ -10,6 +10,7 @@ import boto3
 
 from logger import get_logger, log_event
 from response import success_response, bad_request_response, not_found_response, error_response, internal_error_response
+from handler_utils import api_handler
 from dynamodb_utils import get_item
 from ownership import require_own_profile
 from profile_schema import validate_attribute_upload_request, ProfileSchemaError, get_user_role_flags
@@ -28,6 +29,7 @@ def _ext_from_content_type(content_type: str) -> str:
     return {'jpeg': 'jpg'}.get(suffix, suffix)
 
 
+@api_handler('Failed to generate attribute upload URL')
 def lambda_handler(event, context):
     try:
         log_event(logger, event)
@@ -58,7 +60,7 @@ def lambda_handler(event, context):
 
         try:
             size_bytes = int(size_bytes)
-        except Exception:
+        except (TypeError, ValueError, OverflowError):
             return bad_request_response('sizeBytes must be an integer')
 
         validate_attribute_upload_request(attr_key, content_type, size_bytes)
@@ -87,6 +89,3 @@ def lambda_handler(event, context):
 
     except ProfileSchemaError as exc:
         return error_response(exc.code, exc.message, status_code=exc.status_code)
-    except Exception as exc:
-        logger.error("Error generating attribute upload URL: %s", exc, exc_info=True)
-        return internal_error_response('Failed to generate attribute upload URL')

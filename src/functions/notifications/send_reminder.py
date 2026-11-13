@@ -6,7 +6,8 @@ from logger import get_logger, log_event
 from models import TourRiderStatus, is_cancelled_checkin_item
 from notification_service import notify
 from rbac import Permission, require_permission
-from response import bad_request_response, error_response, internal_error_response, success_response
+from response import bad_request_response, error_response, success_response
+from handler_utils import api_handler
 
 sys.path.insert(0, '/opt/python')
 
@@ -67,6 +68,7 @@ def _event_not_started_riders(tour_id, event_id, occurrence_id):
     )
 
 
+@api_handler('Failed to send reminder')
 def lambda_handler(event, context):
     try:
         log_event(logger, event)
@@ -128,6 +130,3 @@ def lambda_handler(event, context):
         )
     except ValueError as exc:
         return bad_request_response(str(exc))
-    except Exception as exc:
-        logger.error('send reminder failed: %s', str(exc), exc_info=True)
-        return internal_error_response('Failed to send reminder')

@@ -20,7 +20,8 @@ import sys
 import json
 
 from logger import get_logger, log_event
-from response import bad_request_response, internal_error_response, validation_error_response
+from response import bad_request_response, validation_error_response
+from handler_utils import api_handler
 from validation import (
     validate_rider_id,
     validate_ride_id,
@@ -38,6 +39,7 @@ sys.path.insert(0, '/opt/python')
 logger = get_logger(__name__)
 
 
+@api_handler('Failed to create check-in')
 def lambda_handler(event, context):
     """
     Create a check-in record
@@ -189,6 +191,3 @@ def lambda_handler(event, context):
     
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")
-    except Exception as e:
-        logger.error("Error creating check-in: %s", e, exc_info=True)
-        return internal_error_response("Failed to create check-in")

@@ -7,7 +7,8 @@ from boto3.dynamodb.conditions import Attr, Key
 
 from notification_common import get_jwt_claim, get_profile_id_for_rider, get_user_groups, parse_json_body
 from logger import get_logger, log_event
-from response import bad_request_response, internal_error_response, success_response
+from response import bad_request_response, success_response
+from handler_utils import api_handler
 from models import utc_now_iso
 
 sys.path.insert(0, '/opt/python')
@@ -35,6 +36,7 @@ def _scan_all_with_token(table, token: str):
     return items
 
 
+@api_handler('Failed to register device')
 def lambda_handler(event, context):
     try:
         log_event(logger, event)
@@ -114,6 +116,3 @@ def lambda_handler(event, context):
 
     except ValueError as exc:
         return bad_request_response(str(exc))
-    except Exception as exc:
-        logger.error('register device failed: %s', str(exc), exc_info=True)
-        return internal_error_response('Failed to register device')

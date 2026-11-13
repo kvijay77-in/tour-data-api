@@ -13,8 +13,8 @@ from response import (
     success_response,
     validation_error_response,
     conflict_response,
-    internal_error_response,
 )
+from handler_utils import api_handler
 from usermgmt_common import (
     audit_log,
     cognito_error_response,
@@ -50,6 +50,7 @@ def _create_attributes(body):
     return attrs
 
 
+@api_handler("Failed to create user")
 def lambda_handler(event, context):
     target_user_sub = None
     try:
@@ -212,5 +213,4 @@ def lambda_handler(event, context):
             target_cognito_user_id=target_user_sub,
             extra={"reason": str(exc)},
         )
-        logger.error("Error creating managed user: %s", str(exc), exc_info=True)
-        return internal_error_response("Failed to create user")
+        raise  # api_handler logs it and returns the standard 500

@@ -8,11 +8,13 @@ Route: GET /v1/tours/{tourId}/artifacts
 import os
 import sys
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from dynamodb_utils import get_item, query_tour_items
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
 from response import bad_request_response, internal_error_response, not_found_response, success_response
+from handler_utils import api_handler
 from validation import ValidationError, validate_tour_id
 
 
@@ -24,6 +26,7 @@ DEFAULT_EXPIRY_SECONDS = 900
 MAX_EXPIRY_SECONDS = 3600
 
 
+@api_handler('Failed to fetch artifacts')
 def lambda_handler(event, context):
     """
     Get artifacts manifest for a tour.
@@ -41,93 +44,88 @@ def lambda_handler(event, context):
     - 404: Tour not found
     - 500: Server error
     """
+    log_event(logger, event)
+
+    deny = require_permission(event, Permission.READ)
+    if deny:
+        return deny
+
+    # Extract path and query parameters
+    tour_id = (event.get('pathParameters') or {}).get('tourId')
+
+    if not tour_id:
+        return bad_request_response("tourId is required in path")
+
     try:
-        log_event(logger, event)
+        validate_tour_id(tour_id)
+    except ValidationError as exc:
+        return bad_request_response(exc.message, exc.details)
 
-        deny = require_permission(event, Permission.READ)
-        if deny:
-            return deny
+    # Verify tour exists
+    tour = get_item(table_name_env='TOUR_MASTER_TABLE', key={'tourId': tour_id})
+    if not tour:
+        return not_found_response('Tour', tour_id)
 
-        # Extract path and query parameters
-        tour_id = (event.get('pathParameters') or {}).get('tourId')
+    # Parse expiry
+    expires_in = DEFAULT_EXPIRY_SECONDS
+    expires_in_param = (event.get('queryStringParameters') or {}).get('expiresIn')
+    if expires_in_param:
+        try:
+            expires_in = int(expires_in_param)
+        except (TypeError, ValueError):
+            return bad_request_response("expiresIn must be an integer")
+        if expires_in < 60 or expires_in > MAX_EXPIRY_SECONDS:
+            return bad_request_response(
+                f"expiresIn must be between 60 and {MAX_EXPIRY_SECONDS} seconds"
+            )
 
-        if not tour_id:
-            return bad_request_response("tourId is required in path")
+    # Query artifacts for this tour
+    artifacts = query_tour_items(
+        table_type='Artifacts',
+        tour_id=tour_id,
+        key_condition_expression='artifactFor = :artifactFor',
+        expression_values={':artifactFor': tour_id},
+    )
+
+    # Filter by artifactId if provided
+    artifact_id_filter = (event.get('queryStringParameters') or {}).get('artifactId')
+    if artifact_id_filter:
+        artifacts = [a for a in artifacts if a.get('artifactId') == artifact_id_filter]
+        if not artifacts:
+            return success_response([])
+
+    # Build response with presigned URLs
+    bucket_name = os.environ.get('ARTIFACTS_BUCKET')
+    if not bucket_name:
+        return internal_error_response('Artifacts bucket not configured')
+
+    manifest = []
+    for artifact in artifacts:
+        s3_key = artifact.get('s3Key')
+        if not s3_key:
+            logger.warning("Artifact missing s3Key: %s", artifact.get('artifactId'))
+            continue
 
         try:
-            validate_tour_id(tour_id)
-        except ValidationError as exc:
-            return bad_request_response(exc.message, exc.details)
+            download_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket_name, 'Key': s3_key},
+                ExpiresIn=expires_in,
+            )
 
-        # Verify tour exists
-        tour = get_item(table_name_env='TOUR_MASTER_TABLE', key={'tourId': tour_id})
-        if not tour:
-            return not_found_response('Tour', tour_id)
+            manifest.append({
+                'artifactId': artifact.get('artifactId'),
+                's3Key': s3_key,
+                'contentType': artifact.get('contentType'),
+                'version': artifact.get('version'),
+                'title': artifact.get('title'),
+                'downloadUrl': download_url,
+                'expiresIn': expires_in,
+                'createdAt': artifact.get('createdAt'),
+                'updatedAt': artifact.get('updatedAt'),
+            })
+        except (ClientError, BotoCoreError) as exc:
+            logger.error("Error generating presigned URL for %s: %s", s3_key, exc, exc_info=True)
+            continue
 
-        # Parse expiry
-        expires_in = DEFAULT_EXPIRY_SECONDS
-        expires_in_param = (event.get('queryStringParameters') or {}).get('expiresIn')
-        if expires_in_param:
-            try:
-                expires_in = int(expires_in_param)
-            except (TypeError, ValueError):
-                return bad_request_response("expiresIn must be an integer")
-            if expires_in < 60 or expires_in > MAX_EXPIRY_SECONDS:
-                return bad_request_response(
-                    f"expiresIn must be between 60 and {MAX_EXPIRY_SECONDS} seconds"
-                )
-
-        # Query artifacts for this tour
-        artifacts = query_tour_items(
-            table_type='Artifacts',
-            tour_id=tour_id,
-            key_condition_expression='artifactFor = :artifactFor',
-            expression_values={':artifactFor': tour_id},
-        )
-
-        # Filter by artifactId if provided
-        artifact_id_filter = (event.get('queryStringParameters') or {}).get('artifactId')
-        if artifact_id_filter:
-            artifacts = [a for a in artifacts if a.get('artifactId') == artifact_id_filter]
-            if not artifacts:
-                return success_response([])
-
-        # Build response with presigned URLs
-        bucket_name = os.environ.get('ARTIFACTS_BUCKET')
-        if not bucket_name:
-            return internal_error_response('Artifacts bucket not configured')
-
-        manifest = []
-        for artifact in artifacts:
-            s3_key = artifact.get('s3Key')
-            if not s3_key:
-                logger.warning("Artifact missing s3Key: %s", artifact.get('artifactId'))
-                continue
-
-            try:
-                download_url = s3_client.generate_presigned_url(
-                    'get_object',
-                    Params={'Bucket': bucket_name, 'Key': s3_key},
-                    ExpiresIn=expires_in,
-                )
-
-                manifest.append({
-                    'artifactId': artifact.get('artifactId'),
-                    's3Key': s3_key,
-                    'contentType': artifact.get('contentType'),
-                    'version': artifact.get('version'),
-                    'title': artifact.get('title'),
-                    'downloadUrl': download_url,
-                    'expiresIn': expires_in,
-                    'createdAt': artifact.get('createdAt'),
-                    'updatedAt': artifact.get('updatedAt'),
-                })
-            except Exception as exc:
-                logger.error("Error generating presigned URL for %s: %s", s3_key, exc, exc_info=True)
-                continue
-
-        return success_response(manifest)
-
-    except Exception as exc:
-        logger.error("Error fetching tour artifacts: %s", exc, exc_info=True)
-        return internal_error_response('Failed to fetch artifacts')
+    return success_response(manifest)

@@ -8,6 +8,7 @@ import boto3
 
 from logger import get_logger, log_event
 from response import success_response, bad_request_response, not_found_response, error_response, internal_error_response
+from handler_utils import api_handler
 from dynamodb_utils import get_item
 from ownership import require_own_profile, is_rider_api_request
 from profile_schema import (
@@ -24,6 +25,7 @@ logger = get_logger(__name__)
 s3_client = boto3.client('s3')
 
 
+@api_handler('Failed to generate attribute download URL')
 def lambda_handler(event, context):
     try:
         log_event(logger, event)
@@ -77,6 +79,3 @@ def lambda_handler(event, context):
 
     except ProfileSchemaError as exc:
         return error_response(exc.code, exc.message, status_code=exc.status_code)
-    except Exception as exc:
-        logger.error("Error generating attribute download URL: %s", exc, exc_info=True)
-        return internal_error_response('Failed to generate attribute download URL')
