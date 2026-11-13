@@ -15,7 +15,7 @@ from response import (
     success_response, bad_request_response, not_found_response,
     conflict_response, internal_error_response
 )
-from dynamodb_utils import get_item, get_tour_item, put_tour_item, query_tour_items
+from dynamodb_utils import get_item, put_tour_item, query_tour_items
 from validation import (
     validate_tour_id, validate_required_fields, ValidationError
 )

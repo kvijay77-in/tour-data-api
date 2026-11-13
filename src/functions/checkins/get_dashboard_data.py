@@ -26,10 +26,12 @@ from response import (
 from dynamodb_utils import (
     get_tour_item, query_tour_items, scan_tour_items, batch_get_items
 )
-from validation import validate_tour_id, validate_ride_id, ValidationError
+from validation import (
+    validate_tour_id, validate_ride_id, ValidationError,
+    build_emergency_contact_from_profile
+)
 from rbac import require_permission, Permission
 from models import is_cancelled_checkin_item
-from validation import build_emergency_contact_from_profile
 
 sys.path.insert(0, '/opt/python')
 

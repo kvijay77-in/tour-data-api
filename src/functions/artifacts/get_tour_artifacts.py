@@ -5,10 +5,8 @@ Queries the tour-specific Artifacts table and returns presigned download URLs.
 Route: GET /v1/tours/{tourId}/artifacts
 """
 
-import json
 import os
 import sys
-
 import boto3
 
 from dynamodb_utils import get_item, query_tour_items

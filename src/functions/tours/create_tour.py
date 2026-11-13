@@ -6,15 +6,12 @@ provisions tour-specific DynamoDB tables.
 """
 
 import sys
-
 import json
-import os
-
 import boto3
 
 from logger import get_logger, log_event
 from response import (
-    success_response, error_response, bad_request_response,
+    success_response, bad_request_response,
     conflict_response, internal_error_response, validation_exception_response
 )
 from dynamodb_utils import get_item, put_item
@@ -22,7 +19,7 @@ from validation import (
     validate_tour_id, validate_iso_date, validate_required_fields,
     validate_ride_count, validate_optional_bool, ValidationError
 )
-from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
+from models import TourStatus, utc_now_iso
 from tour_provisioning import provision_tour_tables
 from rbac import require_permission, Permission
 

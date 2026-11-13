@@ -154,7 +154,7 @@ def _resolve_tokens(item: Dict[str, Any]) -> List[str]:
         return rider_tokens + mgmt_tokens
 
     if audience.startswith('TOUR#') and '#GROUP#' in audience:
-        group = audience.split('#')[-1]
+        group = audience.split('#', maxsplit=1)[-1]
         return _query_mgmt_tokens_for_group(group)
 
     return []

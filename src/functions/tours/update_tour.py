@@ -68,9 +68,9 @@ def _validate_update_fields(updates, merged_tour):
     if 'status' in updates:
         try:
             merged_tour['status'] = TourStatus(updates['status'].upper()).value
-        except (AttributeError, ValueError):
+        except (AttributeError, ValueError) as exc:
             valid_statuses = ', '.join(status.value for status in TourStatus)
-            raise ValidationError(f"Invalid status. Must be one of: {valid_statuses}")
+            raise ValidationError(f"Invalid status. Must be one of: {valid_statuses}") from exc
 
 
 def lambda_handler(event, context):

@@ -24,11 +24,11 @@ def _parse_stage_number(stage_number_raw):
     """Parse and validate stageNumber path parameter."""
     try:
         stage_number = int(stage_number_raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as exc:
         raise ValidationError(
             f"Invalid stage number: {stage_number_raw}. Must be a non-negative integer",
             {"field": "stageNumber", "value": stage_number_raw}
-        )
+        ) from exc
 
     if stage_number < 0:
         raise ValidationError(

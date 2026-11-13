@@ -6,7 +6,7 @@ Returns the currently active tour using the StatusIndex GSI.
 
 import sys
 
-from logger import get_logger
+from logger import get_logger, log_event
 from self_service_policy import apply_tour_defaults
 from response import success_response, error_response, internal_error_response
 from dynamodb_utils import query_items
@@ -30,6 +30,7 @@ def lambda_handler(event, context):
     """
     try:
         logger.info("Getting active tour")
+        log_event(logger, event)
         
         # Use StatusIndex GSI to query for ACTIVE tours
         items = query_items(

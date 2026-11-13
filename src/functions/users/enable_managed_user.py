@@ -17,9 +17,8 @@ from usermgmt_common import (
     get_management_user_pool_id,
     get_user_by_sub,
     require_admin_only,
-    validate_cognito_user_id,
 )
-from validation import ValidationError
+from validation import ValidationError, validate_cognito_user_id
 
 sys.path.insert(0, '/opt/python')
 

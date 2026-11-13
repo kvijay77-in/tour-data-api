@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 RULE_CACHE_TTL_SECONDS = 300
 _RULE_CACHE: Dict[str, Tuple[float, Optional[Dict[str, Any]]]] = {}
-_NOTIFICATION_LIMITS_CACHE: Tuple[float, Dict[str, int]] | None = None
+_NOTIFICATION_LIMITS_CACHE: Dict[str, Tuple[float, Dict[str, int]]] = {}
 
 CATEGORY_VALUES = {"ANNOUNCEMENT", "ALERT", "PERSONAL", "SYSTEM"}
 PRIORITY_VALUES = {"URGENT", "NORMAL"}
@@ -186,10 +186,10 @@ def _load_rule(rule_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _get_notification_limits() -> Dict[str, int]:
-    global _NOTIFICATION_LIMITS_CACHE
     now = time.time()
-    if _NOTIFICATION_LIMITS_CACHE and now - _NOTIFICATION_LIMITS_CACHE[0] < RULE_CACHE_TTL_SECONDS:
-        return _NOTIFICATION_LIMITS_CACHE[1]
+    cached = _NOTIFICATION_LIMITS_CACHE.get("value")
+    if cached and now - cached[0] < RULE_CACHE_TTL_SECONDS:
+        return cached[1]
 
     limits = {
         "maxTitleLength": DEFAULT_MAX_TITLE_LENGTH,
@@ -208,7 +208,7 @@ def _get_notification_limits() -> Dict[str, int]:
     except Exception as exc:  # pragma: no cover - permission/availability fallback
         logger.warning("notification limits lookup failed; using defaults error=%s", str(exc))
 
-    _NOTIFICATION_LIMITS_CACHE = (now, limits)
+    _NOTIFICATION_LIMITS_CACHE["value"] = (now, limits)
     return limits
 
 

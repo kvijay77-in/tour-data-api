@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError
 from logger import get_logger
 from rbac import get_user_groups as get_request_user_groups
 from response import error_response, forbidden_response
-from validation import ValidationError, validate_cognito_user_id, validate_email
+from validation import ValidationError
 
 
 logger = get_logger(__name__)

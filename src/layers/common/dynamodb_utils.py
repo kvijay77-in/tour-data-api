@@ -7,9 +7,9 @@ Supports two table resolution patterns:
 """
 
 import os
-import boto3
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
+import boto3
 from botocore.exceptions import ClientError
 
 

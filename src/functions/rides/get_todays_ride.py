@@ -8,7 +8,7 @@ Route: GET /v1/tours/{tourId}/rides/today
 import sys
 
 from logger import get_logger
-from response import success_response, not_found_response, error_response, bad_request_response, internal_error_response
+from response import success_response, error_response, bad_request_response, internal_error_response
 from validation import validate_tour_id, ValidationError
 from dynamodb_utils import get_item, query_tour_items
 from self_service_policy import build_ride_self_service

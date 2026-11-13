@@ -25,11 +25,10 @@ from usermgmt_common import (
     normalize_name,
     parse_json_body,
     require_admin_only,
-    validate_cognito_user_id,
     validate_phone_number,
     validate_roles,
 )
-from validation import ValidationError, validate_email
+from validation import ValidationError, validate_email, validate_cognito_user_id
 
 sys.path.insert(0, '/opt/python')
 

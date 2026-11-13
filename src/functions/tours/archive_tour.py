@@ -16,7 +16,7 @@ from botocore.exceptions import ClientError
 
 from logger import get_logger, log_event
 from response import (
-    success_response, error_response, bad_request_response,
+    success_response, bad_request_response,
     not_found_response, internal_error_response
 )
 from dynamodb_utils import get_item, put_item, get_tour_table_name

@@ -6,18 +6,18 @@ import json
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 import boto3
 from boto3.dynamodb.conditions import Key
 
-from dynamodb_utils import get_item, get_table, get_tour_table_name
+from dynamodb_utils import get_item, get_table
 from logger import get_logger
 from models import utc_now_iso
 from response import bad_request_response
 
 logger = get_logger(__name__)
-_NOTIFICATION_ARCHIVE_CFG_CACHE: tuple[float, int] | None = None
+_NOTIFICATION_ARCHIVE_CFG_CACHE: dict[str, tuple[float, int]] = {}
 DEFAULT_ARCHIVE_AFTER_READ_HOURS = 48
 
 
@@ -51,8 +51,8 @@ def get_profile_id_for_rider(event: Dict[str, Any]) -> Optional[str]:
 def parse_json_body(event: Dict[str, Any]) -> Dict[str, Any]:
     try:
         return json.loads(event.get("body") or "{}")
-    except json.JSONDecodeError:
-        raise ValueError("Invalid JSON in request body")
+    except json.JSONDecodeError as exc:
+        raise ValueError("Invalid JSON in request body") from exc
 
 
 def parse_limit(value: Optional[str], default: int = 50, max_value: int = 200) -> int:
@@ -60,10 +60,10 @@ def parse_limit(value: Optional[str], default: int = 50, max_value: int = 200) -
         return default
     try:
         parsed = int(value)
-    except (TypeError, ValueError):
-        raise ValueError("limit must be an integer")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("limit must be an integer") from exc
     if parsed <= 0 or parsed > max_value:
-        raise ValueError(f"limit must be between 1 and {max_value}")
+        raise ValueError(f"limit must be between 1 and {max_value}") from exc
     return parsed
 
 
@@ -75,8 +75,8 @@ def parse_iso_datetime(value: str, field: str) -> datetime:
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc)
-    except ValueError:
-        raise ValueError(f"{field} must be a valid ISO datetime")
+    except ValueError as exc:
+        raise ValueError(f"{field} must be a valid ISO datetime") from exc
 
 
 def get_state_row(table_name: str, state_key: str) -> Optional[Dict[str, Any]]:
@@ -148,10 +148,10 @@ def to_archive_table_name(table_name: str) -> Optional[str]:
 
 
 def get_archive_after_read_hours() -> int:
-    global _NOTIFICATION_ARCHIVE_CFG_CACHE
     now = time.time()
-    if _NOTIFICATION_ARCHIVE_CFG_CACHE and now - _NOTIFICATION_ARCHIVE_CFG_CACHE[0] < 300:
-        return _NOTIFICATION_ARCHIVE_CFG_CACHE[1]
+    cached = _NOTIFICATION_ARCHIVE_CFG_CACHE.get("value")
+    if cached and now - cached[0] < 300:
+        return cached[1]
     value = DEFAULT_ARCHIVE_AFTER_READ_HOURS
     try:
         config = get_item("APP_CONFIG_TABLE", {"configType": "NOTIFICATION", "configId": "LIMITS"}) or {}
@@ -161,7 +161,7 @@ def get_archive_after_read_hours() -> int:
             value = parsed
     except Exception:
         value = DEFAULT_ARCHIVE_AFTER_READ_HOURS
-    _NOTIFICATION_ARCHIVE_CFG_CACHE = (now, value)
+    _NOTIFICATION_ARCHIVE_CFG_CACHE["value"] = (now, value)
     return value
 
 

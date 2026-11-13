@@ -5,7 +5,6 @@ Queries the tour-specific Artifacts table for a ride and returns presigned downl
 Route: GET /v1/tours/{tourId}/rides/{rideId}/artifacts
 """
 
-import json
 import os
 import sys
 

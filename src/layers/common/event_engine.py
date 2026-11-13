@@ -11,7 +11,6 @@ import uuid
 from dataclasses import fields as dataclass_fields
 from datetime import date as calendar_date, timedelta
 from decimal import Decimal
-from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import unquote_plus
 
@@ -27,14 +26,11 @@ from dynamodb_utils import (
     query_items,
     query_tour_items,
     scan_tour_items,
-    update_tour_item,
 )
 from models import (
     ActivityDefinition,
     ActivityOverride,
     BaggageStatus,
-    CheckInMethod,
-    DietaryPreference,
     EventActivityRecord,
     EventDefinition,
     EventOccurrence,
@@ -52,10 +48,8 @@ from models import (
 )
 from response import (
     bad_request_response,
-    conflict_response,
     error_response,
     internal_error_response,
-    not_found_response,
     not_modified_response,
     success_response,
 )
@@ -64,7 +58,6 @@ from validation import (
     build_emergency_contact_from_profile,
     validate_activity_id,
     validate_allowed_type_codes,
-    validate_baggage_status,
     validate_cognito_user_id,
     validate_event_id,
     validate_event_occurrence_status,
