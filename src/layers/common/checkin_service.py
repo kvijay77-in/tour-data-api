@@ -310,23 +310,21 @@ def create_checkin(
 
     put_tour_item(table_type='CheckIn', tour_id=tour_id, item=checkin_item)
 
-    try:
-        notify(
-            rule_id='CHECKIN_CREATED',
-            tour_id=tour_id,
-            context={
-                'tourId': tour_id,
-                'riderId': rider_id,
-                'rideId': ride_id,
-                'stageNumber': stage_number,
-                'checkInId': check_in_id,
-                'status': checkin_response.get('status'),
-                'timestamp': timestamp,
-            },
-            actor=checked_in_by,
-        )
-    except Exception as notify_exc:  # pragma: no cover - safeguard only
-        logger.warning('check-in notification trigger failed: %s', str(notify_exc))
+    # notify() never raises, so a notification problem cannot fail the check-in.
+    notify(
+        rule_id='CHECKIN_CREATED',
+        tour_id=tour_id,
+        context={
+            'tourId': tour_id,
+            'riderId': rider_id,
+            'rideId': ride_id,
+            'stageNumber': stage_number,
+            'checkInId': check_in_id,
+            'status': checkin_response.get('status'),
+            'timestamp': timestamp,
+        },
+        actor=checked_in_by,
+    )
 
     logger.info("Check-in created successfully: %s", check_in_id)
     return success_response(checkin_response, status_code=201)
@@ -366,22 +364,20 @@ def cancel_checkin(
         expression_names={'#status': 'status'}
     )
 
-    try:
-        notify(
-            rule_id='CHECKIN_CANCELLED',
-            tour_id=tour_id,
-            context={
-                'tourId': tour_id,
-                'riderId': existing.get('riderId'),
-                'rideId': ride_id,
-                'stageNumber': existing.get('stageNumber'),
-                'checkInId': checkin_id,
-                'status': CheckInStatus.CANCELLED.value,
-                'cancelledAt': cancelled_at,
-            },
-            actor=cancelled_by,
-        )
-    except Exception as notify_exc:  # pragma: no cover - safeguard only
-        logger.warning('cancel check-in notification trigger failed: %s', str(notify_exc))
+    # notify() never raises, so a notification problem cannot fail the cancel.
+    notify(
+        rule_id='CHECKIN_CANCELLED',
+        tour_id=tour_id,
+        context={
+            'tourId': tour_id,
+            'riderId': existing.get('riderId'),
+            'rideId': ride_id,
+            'stageNumber': existing.get('stageNumber'),
+            'checkInId': checkin_id,
+            'status': CheckInStatus.CANCELLED.value,
+            'cancelledAt': cancelled_at,
+        },
+        actor=cancelled_by,
+    )
 
     return updated

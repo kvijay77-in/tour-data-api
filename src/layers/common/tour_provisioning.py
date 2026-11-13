@@ -482,7 +482,8 @@ def provision_tour_tables(dynamodb_client, tour_id, ignore_existing=False):
                             ]
                         },
                     )
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            # Intentionally broad: any failure to create the push sender mapping should not block tour provisioning.
             logger.warning(
                 "Unable to create push sender mapping for tour=%s table=%s error=%s",
                 tour_id,

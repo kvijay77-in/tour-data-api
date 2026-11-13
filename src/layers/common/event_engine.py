@@ -1106,24 +1106,22 @@ def record_activity(
     notification_config = event_definition.get("notificationConfig") or {}
     completion_after = _rider_event_completion_reached(rider_id, event_definition, occurrence, records + [item])
     if notification_config.get("completionNotifyEnabled") and not completion_before and completion_after:
-        try:
-            notify(
-                rule_id=notification_config.get("completionRuleId") or "EVENT_COMPLETED_BY_RIDER",
-                tour_id=tour_id,
-                context={
-                    "tourId": tour_id,
-                    "eventId": event_id,
-                    "eventName": event_definition.get("eventName"),
-                    "occurrenceId": occurrence_id,
-                    "riderId": rider_id,
-                    "activityId": body["activityId"],
-                    "timestamp": body["timestamp"],
-                },
-                audience_override=[f"TOUR#{tour_id}#RIDER#{rider_id}"],
-                actor=recorded_by,
-            )
-        except Exception as notify_exc:  # pragma: no cover - safeguard only
-            logger.warning("event completion notify trigger failed: %s", str(notify_exc))
+        # notify() never raises, so a notification problem cannot fail the activity record.
+        notify(
+            rule_id=notification_config.get("completionRuleId") or "EVENT_COMPLETED_BY_RIDER",
+            tour_id=tour_id,
+            context={
+                "tourId": tour_id,
+                "eventId": event_id,
+                "eventName": event_definition.get("eventName"),
+                "occurrenceId": occurrence_id,
+                "riderId": rider_id,
+                "activityId": body["activityId"],
+                "timestamp": body["timestamp"],
+            },
+            audience_override=[f"TOUR#{tour_id}#RIDER#{rider_id}"],
+            actor=recorded_by,
+        )
     return success_response(item, status_code=201)
 
 

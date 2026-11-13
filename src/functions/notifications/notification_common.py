@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import boto3
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import BotoCoreError, ClientError
 
 from dynamodb_utils import get_item, get_table
 from logger import get_logger
@@ -117,7 +118,7 @@ def query_audience_items_from_archive(table_name: str, audience: str, since: Opt
         return []
     try:
         return query_audience_items(archive_table_name, audience, since, limit)
-    except Exception:
+    except (ClientError, BotoCoreError):
         return []
 
 
@@ -159,7 +160,7 @@ def get_archive_after_read_hours() -> int:
         parsed = int(cfg.get("archiveAfterReadHours", DEFAULT_ARCHIVE_AFTER_READ_HOURS))
         if parsed > 0:
             value = parsed
-    except Exception:
+    except (ClientError, BotoCoreError, ValueError, TypeError, AttributeError):
         value = DEFAULT_ARCHIVE_AFTER_READ_HOURS
     _NOTIFICATION_ARCHIVE_CFG_CACHE["value"] = (now, value)
     return value
@@ -184,7 +185,7 @@ def archive_read_items_for_audience(
             ScanIndexForward=True,
             Limit=max(1, limit),
         ).get("Items", [])
-    except Exception as exc:
+    except (ClientError, BotoCoreError) as exc:
         logger.warning("Archive query failed table=%s audience=%s: %s", table_name, audience, str(exc))
         return 0
     moved = 0
@@ -202,7 +203,7 @@ def archive_read_items_for_audience(
         try:
             archive_table.put_item(Item=row)
             table.delete_item(Key={"audience": row["audience"], "sk": row["sk"]})
-        except Exception as exc:
+        except (ClientError, BotoCoreError) as exc:
             logger.warning("Archive move failed table=%s audience=%s: %s", table_name, audience, str(exc))
             continue
         moved += 1

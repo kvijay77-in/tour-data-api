@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 import boto3
 from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.types import TypeDeserializer
+from botocore.exceptions import BotoCoreError, ClientError
 
 from notification_common import split_base_token
 from logger import get_logger, log_event
@@ -179,7 +180,7 @@ def _push(messages: List[Dict[str, Any]], rider: bool) -> None:
     token_param_name = os.environ['EXPO_TOKEN_PARAM_RIDER' if rider else 'EXPO_TOKEN_PARAM_MGMT']
     try:
         access_token = _get_ssm_parameter(token_param_name)
-    except Exception as exc:
+    except (ClientError, BotoCoreError) as exc:
         logger.warning('expo token param missing/unavailable: %s (%s)', token_param_name, str(exc))
         return
 
