@@ -431,8 +431,8 @@ def notify(
         _batch_write(items_by_table)
         return notification_id
     except (
-        Exception
-    ) as exc:  # pylint: disable=broad-exception-caught  # never raise to caller
+        Exception  # pylint: disable=broad-exception-caught  # never raise to caller
+    ) as exc:
         logger.error(
             "notification_service.notify failed ruleId=%s tourId=%s error=%s",
             rule_id,
