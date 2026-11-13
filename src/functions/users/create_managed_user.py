@@ -29,7 +29,7 @@ from usermgmt_common import (
 )
 from validation import ValidationError, validate_email
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 
 logger = get_logger(__name__)
@@ -120,13 +120,17 @@ def lambda_handler(event, context):
                 assigned_roles.append(role)
             except ClientError as role_exc:
                 failed_roles.append(role)
-                role_error_message = role_exc.response.get("Error", {}).get("Message", str(role_exc))
+                role_error_message = role_exc.response.get("Error", {}).get(
+                    "Message", str(role_exc)
+                )
                 break
 
         if failed_roles:
             rollback_succeeded = False
             try:
-                cognito.admin_delete_user(UserPoolId=user_pool_id, Username=created_username)
+                cognito.admin_delete_user(
+                    UserPoolId=user_pool_id, Username=created_username
+                )
                 rollback_succeeded = True
             except ClientError:
                 rollback_succeeded = False

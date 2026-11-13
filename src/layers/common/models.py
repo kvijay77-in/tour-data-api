@@ -20,34 +20,36 @@ from enum import Enum
 
 def utc_now_iso() -> str:
     """Return current UTC time as ISO 8601 string with Z suffix.
-    
+
     Uses timezone-aware datetime.now(timezone.utc) instead of the
     deprecated datetime.utcnow().
-    
+
     Returns:
         Whole-second UTC timestamp, e.g. '2026-03-01T17:00:00Z'
     """
-    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def utc_today_iso() -> str:
     """Return current UTC date as ISO 8601 string (YYYY-MM-DD).
-    
+
     Uses timezone-aware datetime to guarantee UTC date regardless of
     server locale.
-    
+
     Returns:
         UTC date string, e.g. '2026-03-01'
     """
-    return datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
 # ============================================================================
 # ENUMS
 # ============================================================================
 
+
 class TourStatus(str, Enum):
     """Tour status values - flow: PLANNING -> PROVISIONING -> ACTIVE -> COMPLETED -> ARCHIVED"""
+
     PLANNING = "PLANNING"
     PROVISIONING = "PROVISIONING"
     ACTIVE = "ACTIVE"
@@ -57,6 +59,7 @@ class TourStatus(str, Enum):
 
 class RideStatus(str, Enum):
     """Ride status values"""
+
     OPEN = "OPEN"
     STARTED = "STARTED"
     PLANNED = "PLANNED"
@@ -67,6 +70,7 @@ class RideStatus(str, Enum):
 
 class StageType(str, Enum):
     """Stage type values"""
+
     START = "START"
     PIT_STOP = "PIT_STOP"
     FINISH = "FINISH"
@@ -74,12 +78,14 @@ class StageType(str, Enum):
 
 class PitStopStatus(str, Enum):
     """Pit stop status values"""
+
     OPEN = "OPEN"
     CLOSED = "CLOSED"
 
 
 class CheckInMethod(str, Enum):
     """Check-in method values"""
+
     QR_SCAN = "QR_SCAN"
     MANUAL = "MANUAL"
     FALLBACK = "FALLBACK"
@@ -93,6 +99,7 @@ SELF_SERVICE_METHOD = CheckInMethod.SELF_SERVICE.value
 
 class CheckInStatus(str, Enum):
     """Check-in status values (derived)"""
+
     NOT_CHECKED_IN = "NOT_CHECKED_IN"
     CHECKED_IN = "CHECKED_IN"
     FLOAT = "FLOAT"
@@ -103,6 +110,7 @@ class CheckInStatus(str, Enum):
 
 class UserRole(str, Enum):
     """User role values"""
+
     ADMINISTRATOR = "ADMINISTRATOR"
     SUPER_USER = "SUPER_USER"
     HOTEL_STAFF = "HOTEL_STAFF"
@@ -112,6 +120,7 @@ class UserRole(str, Enum):
 
 class TourRiderStatus(str, Enum):
     """Tour rider registration status"""
+
     PENDING = "PENDING"
     REGISTERED = "REGISTERED"
     ACTIVE = "ACTIVE"
@@ -121,6 +130,7 @@ class TourRiderStatus(str, Enum):
 
 class NotificationType(str, Enum):
     """Notification type values"""
+
     TOUR_ANNOUNCEMENT = "TOUR_ANNOUNCEMENT"
     RIDE_UPDATE = "RIDE_UPDATE"
     SAFETY_ALERT = "SAFETY_ALERT"
@@ -131,6 +141,7 @@ class NotificationType(str, Enum):
 
 class RiderGender(str, Enum):
     """Supported rider gender values"""
+
     MALE = "Male"
     FEMALE = "Female"
     OTHER = "Other"
@@ -139,18 +150,21 @@ class RiderGender(str, Enum):
 
 class ArtifactCategory(str, Enum):
     """Artifact category scope values."""
+
     TOUR = "tour"
     RIDE = "ride"
 
 
 class DietaryPreference(str, Enum):
     """Supported rider dietary preferences."""
+
     VEG = "VEG"
     NON_VEG = "NON_VEG"
 
 
 class BaggageStatus(str, Enum):
     """Tour rider baggage custody status."""
+
     ACTIVE = "ACTIVE"
     RETAINED = "RETAINED"
     WITH_RIDER = "WITH_RIDER"
@@ -158,12 +172,14 @@ class BaggageStatus(str, Enum):
 
 class EventType(str, Enum):
     """Event repetition type values."""
+
     SINGLE = "SINGLE"
     REPEATING = "REPEATING"
 
 
 class EventOccurrenceStatus(str, Enum):
     """Event occurrence lifecycle states."""
+
     PLANNED = "PLANNED"
     ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"
@@ -172,6 +188,7 @@ class EventOccurrenceStatus(str, Enum):
 
 class EventRecordOutcome(str, Enum):
     """Event activity record outcomes."""
+
     COMPLETED = "COMPLETED"
     OPTED_OUT = "OPTED_OUT"
     FLAGGED = "FLAGGED"
@@ -179,6 +196,7 @@ class EventRecordOutcome(str, Enum):
 
 class HotelUploadStatus(str, Enum):
     """Hotel allocation CSV upload lifecycle states."""
+
     PENDING = "PENDING"
     VALIDATING = "VALIDATING"
     REJECTED = "REJECTED"
@@ -190,25 +208,26 @@ class HotelUploadStatus(str, Enum):
 # ============================================================================
 
 TOUR_TABLE_TYPES = [
-    'TourRider',
-    'Ride',
-    'CheckIn',
-    'User',
-    'Notification',
-    'NotificationArchive',
-    'Artifacts',
-    'Event',
-    'EventOccurrence',
-    'EventActivityLogs',
-    'EventRegistration',
-    'Hotel',
-    'RoomAllocation',
+    "TourRider",
+    "Ride",
+    "CheckIn",
+    "User",
+    "Notification",
+    "NotificationArchive",
+    "Artifacts",
+    "Event",
+    "EventOccurrence",
+    "EventActivityLogs",
+    "EventRegistration",
+    "Hotel",
+    "RoomAllocation",
 ]
 
 
 # ============================================================================
 # DATA CLASSES
 # ============================================================================
+
 
 @dataclass
 class RiderProfile:
@@ -217,6 +236,7 @@ class RiderProfile:
     Stored in shared RiderProfile table.
     Partition key: profileId
     """
+
     profileId: str
     name: str
     email: str
@@ -230,16 +250,18 @@ class RiderProfile:
     photoS3Key: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary with normalized optional personalCode."""
         data = asdict(self)
-        personal_code = data.get('personalCode')
+        personal_code = data.get("personalCode")
         if isinstance(personal_code, str):
             normalized_personal_code = personal_code.strip().upper()
-            data['personalCode'] = normalized_personal_code if normalized_personal_code else None
+            data["personalCode"] = (
+                normalized_personal_code if normalized_personal_code else None
+            )
         return {k: v for k, v in data.items() if v is not None}
-    
+
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         return self.to_dict()
@@ -252,6 +274,7 @@ class RiderCognitoUser:
     Stored in shared RiderCognitoUser table.
     Partition key: cognitoUserName
     """
+
     cognitoUserName: str
     profileId: str
 
@@ -271,6 +294,7 @@ class Tour:
     Partition key: tourId
     tourId is free-form (e.g., TOT-2026, TDF2026)
     """
+
     tourId: str
     name: str
     startDate: str
@@ -282,13 +306,13 @@ class Tour:
     archivedAt: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         data = asdict(self)
-        data['status'] = self.status.value
+        data["status"] = self.status.value
         return {k: v for k, v in data.items() if v is not None}
-    
+
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         return self.to_dict()
@@ -301,6 +325,7 @@ class TourRider:
     Stored in tour-specific TourRider-{tourId} table.
     Partition key: riderId
     """
+
     riderId: str
     profileId: str
     status: TourRiderStatus
@@ -317,13 +342,13 @@ class TourRider:
     baggageExitNote: Optional[str] = None
     createdAt: str = field(default_factory=utc_now_iso)
     updatedAt: str = field(default_factory=utc_now_iso)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         data = asdict(self)
-        data['status'] = self.status.value
+        data["status"] = self.status.value
         return {k: v for k, v in data.items() if v is not None}
-    
+
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         return self.to_dict()
@@ -332,6 +357,7 @@ class TourRider:
 @dataclass
 class Stage:
     """Stage information within a ride"""
+
     stageId: str
     stageNumber: int
     type: StageType
@@ -343,19 +369,20 @@ class Stage:
     pitStopStatus: Optional[PitStopStatus] = None
     openedAt: Optional[str] = None
     closedAt: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         data = asdict(self)
-        data['type'] = self.type.value
+        data["type"] = self.type.value
         if self.pitStopStatus is not None:
-            data['pitStopStatus'] = self.pitStopStatus.value
+            data["pitStopStatus"] = self.pitStopStatus.value
         return {k: v for k, v in data.items() if v is not None}
 
 
 @dataclass
 class RideFloat:
     """Float vehicle/stage mapping within a ride."""
+
     floatNo: int
     floatToStage: int
 
@@ -371,6 +398,7 @@ class Ride:
     Stored in tour-specific Ride-{tourId} table.
     Partition key: rideId
     """
+
     rideId: str
     date: str
     rideNo: int
@@ -391,16 +419,16 @@ class Ride:
     openedAt: Optional[str] = None
     completedAt: Optional[str] = None
     closedAt: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         data = asdict(self)
-        data['status'] = self.status.value
-        data['stages'] = [stage.to_dict() for stage in self.stages]
+        data["status"] = self.status.value
+        data["stages"] = [stage.to_dict() for stage in self.stages]
         if self.floats is not None:
-            data['floats'] = [ride_float.to_dict() for ride_float in self.floats]
+            data["floats"] = [ride_float.to_dict() for ride_float in self.floats]
         return {k: v for k, v in data.items() if v is not None}
-    
+
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         return self.to_dict()
@@ -413,6 +441,7 @@ class CheckIn:
     Stored in tour-specific CheckIn-{tourId} table.
     Partition key: rideId, Sort key: checkInId (<riderId>#<stageNumber>#<timestamp>)
     """
+
     checkInId: str
     riderId: str
     rideId: str
@@ -437,7 +466,7 @@ class CheckIn:
         """Build the stable sort key format used in CheckIn DynamoDB table."""
         stage_for_key = self.stageNumber if self.stageNumber is not None else 0
         return f"{self.riderId}#{stage_for_key:03d}#{self.timestamp}"
-    
+
     def get_status(self) -> CheckInStatus:
         """Derive check-in status from flags"""
         if self.cancelledAt is not None:
@@ -450,33 +479,33 @@ class CheckIn:
             return CheckInStatus.FLOAT
         else:
             return CheckInStatus.CHECKED_IN
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to API/DynamoDB dictionary using camelCase attributes."""
         data = {
-            'checkInId': self._composite_checkin_id(),
-            'riderId': self.riderId,
-            'rideId': self.rideId,
-            'timestamp': self.timestamp,
-            'checkedInBy': self.checkedInBy,
-            'method': self.method.value,
-            'isNotRiding': self.isNotRiding,
-            'isFloat': self.isFloat,
-            'floatNo': self.floatNo,
-            'isQuitRiding': self.isQuitRiding,
-            'isManualEntry': self.isManualEntry,
-            'createdAt': self.createdAt,
-            'status': self.get_status().value,
-            'stageNumber': self.stageNumber,
-            'stageId': self.stageId,
-            'notes': self.notes,
-            'location': self.location,
-            'prevStatus': self.prevStatus,
-            'cancelledBy': self.cancelledBy,
-            'cancelledAt': self.cancelledAt,
+            "checkInId": self._composite_checkin_id(),
+            "riderId": self.riderId,
+            "rideId": self.rideId,
+            "timestamp": self.timestamp,
+            "checkedInBy": self.checkedInBy,
+            "method": self.method.value,
+            "isNotRiding": self.isNotRiding,
+            "isFloat": self.isFloat,
+            "floatNo": self.floatNo,
+            "isQuitRiding": self.isQuitRiding,
+            "isManualEntry": self.isManualEntry,
+            "createdAt": self.createdAt,
+            "status": self.get_status().value,
+            "stageNumber": self.stageNumber,
+            "stageId": self.stageId,
+            "notes": self.notes,
+            "location": self.location,
+            "prevStatus": self.prevStatus,
+            "cancelledBy": self.cancelledBy,
+            "cancelledAt": self.cancelledAt,
         }
         return {k: v for k, v in data.items() if v is not None}
-    
+
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         return self.to_dict()
@@ -489,6 +518,7 @@ class User:
     Stored in tour-specific User-{tourId} table.
     Partition key: userId
     """
+
     userId: str
     username: str
     email: str
@@ -503,13 +533,13 @@ class User:
     createdAt: str = field(default_factory=utc_now_iso)
     updatedBy: Optional[str] = None
     updatedAt: str = field(default_factory=utc_now_iso)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         data = asdict(self)
-        data['role'] = self.role.value if isinstance(self.role, UserRole) else self.role
+        data["role"] = self.role.value if isinstance(self.role, UserRole) else self.role
         return {k: v for k, v in data.items() if v is not None}
-    
+
     def to_dynamodb_item(self) -> Dict[str, Any]:
         """Convert to DynamoDB item format"""
         return self.to_dict()
@@ -522,6 +552,7 @@ class Notification:
     Stored in tour-specific Notification-{tourId} table.
     Partition key: notificationId
     """
+
     notificationId: str
     type: NotificationType
     title: str
@@ -535,7 +566,7 @@ class Notification:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         data = asdict(self)
-        data['type'] = self.type.value
+        data["type"] = self.type.value
         return {k: v for k, v in data.items() if v is not None}
 
     def to_dynamodb_item(self) -> Dict[str, Any]:
@@ -546,6 +577,7 @@ class Notification:
 @dataclass
 class ActivityDefinition:
     """Embedded activity configuration for an event definition."""
+
     activityId: str
     name: str
     sequenceNo: int
@@ -561,14 +593,15 @@ class ActivityDefinition:
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
-        if data.get('selfServiceAllowed') is None:
-            data.pop('selfServiceAllowed', None)
+        if data.get("selfServiceAllowed") is None:
+            data.pop("selfServiceAllowed", None)
         return data
 
 
 @dataclass
 class EventDefinition:
     """Event definition item stored in Event-{tourId}."""
+
     eventId: str
     eventName: str
     eventType: EventType
@@ -585,14 +618,15 @@ class EventDefinition:
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
-        data['eventType'] = self.eventType.value
-        data['activities'] = [activity.to_dict() for activity in self.activities]
+        data["eventType"] = self.eventType.value
+        data["activities"] = [activity.to_dict() for activity in self.activities]
         return {k: v for k, v in data.items() if v is not None}
 
 
 @dataclass
 class ActivityOverride:
     """Per-activity occurrence override."""
+
     activityId: str
     enabled: Optional[bool] = None
     selfServiceAllowed: Optional[bool] = None
@@ -609,6 +643,7 @@ class ActivityOverride:
 @dataclass
 class EventOccurrence:
     """Concrete event occurrence item."""
+
     eventId: str
     dateSeq: str
     occurrenceId: str
@@ -630,14 +665,17 @@ class EventOccurrence:
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
-        data['status'] = self.status.value
-        data['activityOverrides'] = [override.to_dict() for override in self.activityOverrides]
+        data["status"] = self.status.value
+        data["activityOverrides"] = [
+            override.to_dict() for override in self.activityOverrides
+        ]
         return {k: v for k, v in data.items() if v is not None}
 
 
 @dataclass
 class EventActivityRecord:
     """Activity completion/scan record item."""
+
     occurrenceId: str
     recordId: str
     eventId: str
@@ -662,13 +700,14 @@ class EventActivityRecord:
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
-        data['outcome'] = self.outcome.value
+        data["outcome"] = self.outcome.value
         return {k: v for k, v in data.items() if v is not None}
 
 
 @dataclass
 class Hotel:
     """Hotel master item."""
+
     hotelId: str
     name: str
     city: str
@@ -685,6 +724,7 @@ class Hotel:
 @dataclass
 class RoomAllocation:
     """Per-rider per-night hotel allocation item."""
+
     stayDate: str
     riderId: str
     hotelId: str
@@ -707,71 +747,72 @@ class RoomAllocation:
 # HELPER FUNCTIONS
 # ============================================================================
 
+
 def create_stage_from_dict(data: Dict[str, Any]) -> Stage:
     """Create Stage object from dictionary"""
     return Stage(
-        stageId=data['stageId'],
-        stageNumber=data['stageNumber'],
-        type=StageType(data['type']),
-        name=data['name'],
-        location=data.get('location'),
-        distanceFromStart=data.get('distanceFromStart'),
-        estimatedOpenTime=data.get('estimatedOpenTime'),
-        pitStopDuration=data.get('pitStopDuration'),
+        stageId=data["stageId"],
+        stageNumber=data["stageNumber"],
+        type=StageType(data["type"]),
+        name=data["name"],
+        location=data.get("location"),
+        distanceFromStart=data.get("distanceFromStart"),
+        estimatedOpenTime=data.get("estimatedOpenTime"),
+        pitStopDuration=data.get("pitStopDuration"),
         pitStopStatus=(
-            PitStopStatus(data['pitStopStatus'])
-            if data.get('pitStopStatus') is not None else None
+            PitStopStatus(data["pitStopStatus"])
+            if data.get("pitStopStatus") is not None
+            else None
         ),
-        openedAt=data.get('openedAt'),
-        closedAt=data.get('closedAt')
+        openedAt=data.get("openedAt"),
+        closedAt=data.get("closedAt"),
     )
 
 
 def create_ride_float_from_dict(data: Dict[str, Any]) -> RideFloat:
     """Create RideFloat object from dictionary"""
-    return RideFloat(
-        floatNo=data['floatNo'],
-        floatToStage=data['floatToStage']
-    )
+    return RideFloat(floatNo=data["floatNo"], floatToStage=data["floatToStage"])
 
 
 def create_ride_from_dynamodb_item(item: Dict[str, Any]) -> Ride:
     """Create Ride object from DynamoDB item"""
-    stages = [create_stage_from_dict(stage) for stage in item.get('stages', [])]
-    floats = [create_ride_float_from_dict(ride_float) for ride_float in item.get('floats', [])]
-    
+    stages = [create_stage_from_dict(stage) for stage in item.get("stages", [])]
+    floats = [
+        create_ride_float_from_dict(ride_float) for ride_float in item.get("floats", [])
+    ]
+
     return Ride(
-        rideId=item['rideId'],
-        date=item['date'],
-        rideNo=item['rideNo'],
-        name=item['name'],
-        startLocation=item['startLocation'],
-        finishLocation=item['finishLocation'],
-        totalDistance=item['totalDistance'],
-        flagOffTime=item['flagOffTime'],
-        status=RideStatus(item['status']),
+        rideId=item["rideId"],
+        date=item["date"],
+        rideNo=item["rideNo"],
+        name=item["name"],
+        startLocation=item["startLocation"],
+        finishLocation=item["finishLocation"],
+        totalDistance=item["totalDistance"],
+        flagOffTime=item["flagOffTime"],
+        status=RideStatus(item["status"]),
         stages=stages,
         floats=floats or None,
-        openTime=item.get('openTime'),
-        closeTime=item.get('closeTime'),
-        description=item.get('description'),
-        createdAt=item.get('createdAt', ''),
-        updatedAt=item.get('updatedAt', ''),
-        startedAt=item.get('startedAt'),
-        openedAt=item.get('openedAt'),
-        completedAt=item.get('completedAt'),
-        closedAt=item.get('closedAt')
+        openTime=item.get("openTime"),
+        closeTime=item.get("closeTime"),
+        description=item.get("description"),
+        createdAt=item.get("createdAt", ""),
+        updatedAt=item.get("updatedAt", ""),
+        startedAt=item.get("startedAt"),
+        openedAt=item.get("openedAt"),
+        completedAt=item.get("completedAt"),
+        closedAt=item.get("closedAt"),
     )
 
 
 def is_cancelled_checkin_item(item: Dict[str, Any]) -> bool:
     """Return True when a persisted check-in item represents a cancelled record."""
-    status = item.get('status') or item.get('Status')
+    status = item.get("status") or item.get("Status")
     if status == CheckInStatus.CANCELLED.value:
         return True
 
-    cancelled_at = item.get('cancelledAt')
+    cancelled_at = item.get("cancelledAt")
     if cancelled_at is None:
-        cancelled_at = item.get('cancelled_at')
+        cancelled_at = item.get("cancelled_at")
 
     return cancelled_at is not None

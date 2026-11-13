@@ -25,13 +25,13 @@ from usermgmt_common import (
 )
 from validation import ValidationError
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 
 logger = get_logger(__name__)
 
 
-@api_handler('Failed to list users')
+@api_handler("Failed to list users")
 def lambda_handler(event, context):
     try:
         log_event(logger, event)

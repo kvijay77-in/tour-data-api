@@ -9,32 +9,48 @@ from notification_common import get_jwt_claim, get_profile_id_for_rider
 from logger import get_logger, log_event
 from handler_utils import api_handler
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource("dynamodb")
 
 
-@api_handler('Failed to delete device')
+@api_handler("Failed to delete device")
 def lambda_handler(event, context):
     log_event(logger, event)
-    token = (event.get('pathParameters') or {}).get('token')
+    token = (event.get("pathParameters") or {}).get("token")
     if not token:
-        return {'statusCode': 204, 'headers': {'Access-Control-Allow-Origin': '*'}, 'body': ''}
+        return {
+            "statusCode": 204,
+            "headers": {"Access-Control-Allow-Origin": "*"},
+            "body": "",
+        }
 
-    scope = os.environ.get('NOTIFICATION_SCOPE', 'mgmt')
-    if scope == 'rider':
+    scope = os.environ.get("NOTIFICATION_SCOPE", "mgmt")
+    if scope == "rider":
         profile_id = get_profile_id_for_rider(event)
         if profile_id:
-            table = dynamodb.Table(os.environ['RIDER_PUSH_DEVICE_TABLE'])
-            table.delete_item(Key={'profileId': profile_id, 'token': token})
+            table = dynamodb.Table(os.environ["RIDER_PUSH_DEVICE_TABLE"])
+            table.delete_item(Key={"profileId": profile_id, "token": token})
     else:
-        cognito_sub = get_jwt_claim(event, 'sub')
+        cognito_sub = get_jwt_claim(event, "sub")
         if cognito_sub:
-            table = dynamodb.Table(os.environ['MGMT_PUSH_DEVICE_TABLE'])
-            rows = table.query(KeyConditionExpression=Key('cognitoSub').eq(cognito_sub)).get('Items', [])
+            table = dynamodb.Table(os.environ["MGMT_PUSH_DEVICE_TABLE"])
+            rows = table.query(
+                KeyConditionExpression=Key("cognitoSub").eq(cognito_sub)
+            ).get("Items", [])
             for row in rows:
-                if row.get('token') == token or row.get('deviceToken') == token:
-                    table.delete_item(Key={'cognitoSub': cognito_sub, 'token': row['token']})
+                if row.get("token") == token or row.get("deviceToken") == token:
+                    table.delete_item(
+                        Key={"cognitoSub": cognito_sub, "token": row["token"]}
+                    )
 
-    return {'statusCode': 204, 'headers': {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type,Authorization', 'Access-Control-Allow-Methods': 'DELETE,OPTIONS'}, 'body': ''}
+    return {
+        "statusCode": 204,
+        "headers": {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type,Authorization",
+            "Access-Control-Allow-Methods": "DELETE,OPTIONS",
+        },
+        "body": "",
+    }

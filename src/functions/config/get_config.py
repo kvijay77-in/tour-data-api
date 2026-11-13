@@ -34,7 +34,7 @@ from dynamodb_utils import scan_items, query_items
 from rbac import Permission, require_permission
 from profile_schema import get_definitions_version
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
 
@@ -43,13 +43,15 @@ def _parse_config_types(raw_value: str) -> List[str]:
     if not raw_value:
         return []
 
-    entries = [part.strip().upper() for part in raw_value.split(',') if part.strip()]
+    entries = [part.strip().upper() for part in raw_value.split(",") if part.strip()]
     if not entries:
         return []
 
-    if any(entry == 'ALL' for entry in entries):
+    if any(entry == "ALL" for entry in entries):
         if len(entries) > 1:
-            raise ValueError("configType=ALL cannot be combined with other configType values")
+            raise ValueError(
+                "configType=ALL cannot be combined with other configType values"
+            )
         return []
 
     # Preserve stable order and drop duplicates.
@@ -68,10 +70,10 @@ def _query_enabled_by_type(config_types: List[str]):
     items = []
     for config_type in config_types:
         typed_items = query_items(
-            table_name_env='APP_CONFIG_TABLE',
-            key_condition_expression='configType = :ct',
-            expression_values={':ct': config_type, ':enabled': True},
-            filter_expression='enabled = :enabled',
+            table_name_env="APP_CONFIG_TABLE",
+            key_condition_expression="configType = :ct",
+            expression_values={":ct": config_type, ":enabled": True},
+            filter_expression="enabled = :enabled",
         )
         items.extend(typed_items)
     return items
@@ -79,13 +81,13 @@ def _query_enabled_by_type(config_types: List[str]):
 
 def _query_all_enabled():
     return scan_items(
-        table_name_env='APP_CONFIG_TABLE',
-        filter_expression='enabled = :enabled',
-        expression_values={':enabled': True},
+        table_name_env="APP_CONFIG_TABLE",
+        filter_expression="enabled = :enabled",
+        expression_values={":enabled": True},
     )
 
 
-@api_handler('Failed to retrieve config')
+@api_handler("Failed to retrieve config")
 def lambda_handler(event, context):
     log_event(logger, event)
 
@@ -93,8 +95,8 @@ def lambda_handler(event, context):
     if deny:
         return deny
 
-    query_params = event.get('queryStringParameters') or {}
-    raw_config_type = (query_params.get('configType') or '').strip()
+    query_params = event.get("queryStringParameters") or {}
+    raw_config_type = (query_params.get("configType") or "").strip()
 
     try:
         config_types = _parse_config_types(raw_config_type)
@@ -105,30 +107,32 @@ def lambda_handler(event, context):
         items = _query_enabled_by_type(config_types)
         if not items:
             return error_response(
-                error_code='INVALID_CONFIG_TYPE',
-                message='Missing or Invalid configType',
+                error_code="INVALID_CONFIG_TYPE",
+                message="Missing or Invalid configType",
                 status_code=404,
             )
     else:
         items = _query_all_enabled()
 
-    items.sort(key=lambda item: (item.get('configType', ''), item.get('configId', '')))
+    items.sort(key=lambda item: (item.get("configType", ""), item.get("configId", "")))
 
     payload = {
-        'items': items,
-        'definitionsVersion': get_definitions_version(),
+        "items": items,
+        "definitionsVersion": get_definitions_version(),
     }
 
     payload_json = json.dumps(payload, sort_keys=True, cls=DecimalEncoder)
     etag = f'"{hashlib.md5(payload_json.encode()).hexdigest()}"'
 
-    request_headers = event.get('headers', {}) or {}
-    if_none_match = request_headers.get('if-none-match') or request_headers.get('If-None-Match')
+    request_headers = event.get("headers", {}) or {}
+    if_none_match = request_headers.get("if-none-match") or request_headers.get(
+        "If-None-Match"
+    )
     if if_none_match and if_none_match == etag:
         response = not_modified_response()
-        response['headers']['ETag'] = etag
+        response["headers"]["ETag"] = etag
         return response
 
     response = success_response(payload)
-    response['headers']['ETag'] = etag
+    response["headers"]["ETag"] = etag
     return response

@@ -24,7 +24,7 @@ from usermgmt_common import (
 )
 from validation import ValidationError, validate_cognito_user_id
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 
 logger = get_logger(__name__)
@@ -48,7 +48,12 @@ def lambda_handler(event, context):
         if not user:
             return cognito_error_response(
                 ClientError(
-                    {"Error": {"Code": "UserNotFoundException", "Message": "User not found"}},
+                    {
+                        "Error": {
+                            "Code": "UserNotFoundException",
+                            "Message": "User not found",
+                        }
+                    },
                     "AdminDeleteUser",
                 )
             )

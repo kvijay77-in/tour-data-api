@@ -15,19 +15,19 @@ from dynamodb_utils import scan_tour_items
 from models import UserRole
 from rbac import Permission, is_pit_stop_group, require_permission
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
 
 
-@api_handler('Failed to list users')
+@api_handler("Failed to list users")
 def lambda_handler(event, context):
     """
     List all users (admin/staff) for a tour
-    
+
     Path parameter: tourId (e.g., TOT-2026)
     Query parameter: role (optional - ADMINISTRATOR, SUPER_USER, HOTEL_STAFF, GUEST, RIDER, or PS_<n>_USER)
-    
+
     Returns:
     - 200: List of users (may be empty)
     - 400: Invalid tour ID or role
@@ -39,21 +39,21 @@ def lambda_handler(event, context):
         return deny
 
     # Extract tour ID from path parameters
-    tour_id = event.get('pathParameters', {}).get('tourId')
-    
+    tour_id = event.get("pathParameters", {}).get("tourId")
+
     if not tour_id:
         return bad_request_response("tourId is required in path")
-    
+
     # Validate tour ID
     try:
         validate_tour_id(tour_id)
     except ValidationError as e:
         return bad_request_response(str(e))
-    
+
     # Get optional role filter from query parameters
-    query_params = event.get('queryStringParameters') or {}
-    role_filter = query_params.get('role')
-    
+    query_params = event.get("queryStringParameters") or {}
+    role_filter = query_params.get("role")
+
     # Validate role if provided
     if role_filter:
         valid_roles = [r.value for r in UserRole]
@@ -61,27 +61,20 @@ def lambda_handler(event, context):
             return bad_request_response(
                 f"Invalid role. Must be one of: {', '.join(valid_roles)} or PS_<n>_USER"
             )
-    
+
     # Scan all users from tour-specific User table
     logger.info("Querying users for tour: %s", tour_id)
-    
+
     if role_filter:
         users = scan_tour_items(
-            table_type='User',
+            table_type="User",
             tour_id=tour_id,
-            filter_expression='#role = :role',
-            expression_values={':role': role_filter},
-            expression_names={'#role': 'role'}
+            filter_expression="#role = :role",
+            expression_values={":role": role_filter},
+            expression_names={"#role": "role"},
         )
     else:
-        users = scan_tour_items(
-            table_type='User',
-            tour_id=tour_id
-        )
-    
+        users = scan_tour_items(table_type="User", tour_id=tour_id)
+
     logger.info("Successfully retrieved %s users for tour %s", len(users), tour_id)
-    return success_response({
-        'users': users,
-        'count': len(users),
-        'tourId': tour_id
-    })
+    return success_response({"users": users, "count": len(users), "tourId": tour_id})

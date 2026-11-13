@@ -15,54 +15,57 @@ import boto3
 from botocore.exceptions import ClientError
 
 from logger import get_logger, log_event
-from response import (
-    success_response, bad_request_response,
-    not_found_response
-)
+from response import success_response, bad_request_response, not_found_response
 from handler_utils import api_handler
 from dynamodb_utils import get_item, put_item, get_tour_table_name
 from validation import validate_tour_id, ValidationError
 from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from rbac import require_permission, Permission
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
 
-dynamodb_client = boto3.client('dynamodb')
-s3_client = boto3.client('s3')
+dynamodb_client = boto3.client("dynamodb")
+s3_client = boto3.client("s3")
 
 
 def _export_table_to_s3(table_name, tour_id, table_type):
     """Export table data to S3 as JSON (simple scan-based export)"""
-    bucket = os.environ.get('PHOTOS_BUCKET')
+    bucket = os.environ.get("PHOTOS_BUCKET")
     if not bucket:
         logger.warning("PHOTOS_BUCKET not set, skipping S3 export")
         return None
-    
+
     try:
         # Scan all items from the table
-        paginator = dynamodb_client.get_paginator('scan')
+        paginator = dynamodb_client.get_paginator("scan")
         items = []
         for page in paginator.paginate(TableName=table_name):
-            items.extend(page.get('Items', []))
-        
+            items.extend(page.get("Items", []))
+
         if not items:
             logger.info("No items to export from %s", table_name)
             return None
-        
+
         # Write to S3
         key = f"archives/{tour_id}/{table_type}.json"
         s3_client.put_object(
             Bucket=bucket,
             Key=key,
             Body=json.dumps(items, default=str),
-            ContentType='application/json'
+            ContentType="application/json",
         )
-        
-        logger.info("Exported %s items from %s to s3://%s/%s", len(items), table_name, bucket, key)
+
+        logger.info(
+            "Exported %s items from %s to s3://%s/%s",
+            len(items),
+            table_name,
+            bucket,
+            key,
+        )
         return key
-    
+
     except ClientError as e:
         logger.error("Error exporting %s to S3: %s", table_name, e)
         return None
@@ -74,7 +77,7 @@ def _delete_table(table_name):
         dynamodb_client.delete_table(TableName=table_name)
         logger.info("Delete initiated for table: %s", table_name)
     except ClientError as e:
-        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+        if e.response["Error"]["Code"] == "ResourceNotFoundException":
             logger.warning("Table %s does not exist, skipping", table_name)
         else:
             raise
@@ -84,19 +87,19 @@ def _wait_for_table_deletion(table_names, max_wait=90):
     """Wait for all tables to be deleted"""
     start = time.time()
     pending = set(table_names)
-    
+
     while pending and (time.time() - start) < max_wait:
         for table_name in list(pending):
             try:
                 dynamodb_client.describe_table(TableName=table_name)
             except ClientError as e:
-                if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                if e.response["Error"]["Code"] == "ResourceNotFoundException":
                     logger.info("Table %s deleted", table_name)
                     pending.discard(table_name)
-        
+
         if pending:
             time.sleep(3)
-    
+
     if pending:
         logger.warning("Tables still pending deletion after %ss: %s", max_wait, pending)
 
@@ -105,14 +108,14 @@ def _wait_for_table_deletion(table_names, max_wait=90):
 def lambda_handler(event, context):
     """
     Archive a completed tour
-    
+
     Path Parameters:
         tourId: Tour identifier
-    
+
     Query Parameters:
         exportToS3: Whether to export data to S3 before deletion (default: true)
         deleteTables: Whether to delete tour-specific tables (default: true)
-    
+
     Steps:
         1. Verify tour exists and status is COMPLETED or ACTIVE
         2. Optionally export tour-specific table data to S3
@@ -120,50 +123,52 @@ def lambda_handler(event, context):
         4. Update Tour status to ARCHIVED
     """
     log_event(logger, event)
-    
+
     # Enforce RBAC — only TOUR_MANAGE permission may archive tours
     deny = require_permission(event, Permission.TOUR_MANAGE)
     if deny:
         return deny
-    
+
     # Extract tour ID from path parameters
-    tour_id = event.get('pathParameters', {}).get('tourId')
-    
+    tour_id = event.get("pathParameters", {}).get("tourId")
+
     if not tour_id:
         return bad_request_response("tourId is required in path")
-    
+
     try:
         validate_tour_id(tour_id)
     except ValidationError as e:
         return bad_request_response(str(e))
-    
+
     # Parse query parameters
-    query_params = event.get('queryStringParameters') or {}
-    export_to_s3 = query_params.get('exportToS3', 'true').lower() == 'true'
-    delete_tables = query_params.get('deleteTables', 'true').lower() == 'true'
-    
+    query_params = event.get("queryStringParameters") or {}
+    export_to_s3 = query_params.get("exportToS3", "true").lower() == "true"
+    delete_tables = query_params.get("deleteTables", "true").lower() == "true"
+
     # Get tour record
-    tour = get_item(
-        table_name_env='TOUR_MASTER_TABLE',
-        key={'tourId': tour_id}
-    )
-    
+    tour = get_item(table_name_env="TOUR_MASTER_TABLE", key={"tourId": tour_id})
+
     if not tour:
         return not_found_response("Tour", tour_id)
-    
+
     # Validate tour status (allow archiving from COMPLETED or ACTIVE)
-    current_status = tour.get('status')
+    current_status = tour.get("status")
     if current_status == TourStatus.ARCHIVED.value:
         return bad_request_response(f"Tour '{tour_id}' is already archived")
-    
+
     if current_status not in [TourStatus.ACTIVE.value, TourStatus.COMPLETED.value]:
         return bad_request_response(
             f"Tour '{tour_id}' must be in ACTIVE or COMPLETED status to archive. "
             f"Current status: {current_status}"
         )
-    
-    logger.info("Archiving tour: %s (export=%s, delete=%s)", tour_id, export_to_s3, delete_tables)
-    
+
+    logger.info(
+        "Archiving tour: %s (export=%s, delete=%s)",
+        tour_id,
+        export_to_s3,
+        delete_tables,
+    )
+
     # Export to S3 if requested
     exported_keys = {}
     if export_to_s3:
@@ -172,7 +177,7 @@ def lambda_handler(event, context):
             key = _export_table_to_s3(table_name, tour_id, table_type)
             if key:
                 exported_keys[table_type] = key
-    
+
     # Delete tour-specific tables if requested
     deleted_tables = []
     if delete_tables:
@@ -180,25 +185,27 @@ def lambda_handler(event, context):
             table_name = get_tour_table_name(table_type, tour_id)
             _delete_table(table_name)
             deleted_tables.append(table_name)
-        
+
         if deleted_tables:
             _wait_for_table_deletion(deleted_tables)
-    
+
     # Update tour status to ARCHIVED
     now = utc_now_iso()
-    tour['status'] = TourStatus.ARCHIVED.value
-    tour['archivedAt'] = now
-    tour['updatedAt'] = now
-    
+    tour["status"] = TourStatus.ARCHIVED.value
+    tour["archivedAt"] = now
+    tour["updatedAt"] = now
+
     if exported_keys:
-        tour['archiveExportKeys'] = exported_keys
-    
-    put_item('TOUR_MASTER_TABLE', tour)
-    
+        tour["archiveExportKeys"] = exported_keys
+
+    put_item("TOUR_MASTER_TABLE", tour)
+
     logger.info("Tour %s archived successfully", tour_id)
-    
-    return success_response({
-        'tour': tour,
-        'exportedTables': list(exported_keys.keys()) if exported_keys else [],
-        'deletedTables': len(deleted_tables)
-    })
+
+    return success_response(
+        {
+            "tour": tour,
+            "exportedTables": list(exported_keys.keys()) if exported_keys else [],
+            "deletedTables": len(deleted_tables),
+        }
+    )

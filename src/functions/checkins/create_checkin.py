@@ -28,25 +28,25 @@ from validation import (
     validate_required_fields,
     validate_tour_id,
     validate_iso_datetime,
-    ValidationError
+    ValidationError,
 )
 from models import CheckInMethod, SELF_SERVICE_METHOD
 from checkin_service import create_checkin
 from rbac import Permission, require_permission
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
 
 
-@api_handler('Failed to create check-in')
+@api_handler("Failed to create check-in")
 def lambda_handler(event, context):
     """
     Create a check-in record
-    
+
     Path Parameters:
         tourId: Tour identifier
-    
+
     Body:
         riderId: Rider ID (required)
         rideId: Ride ID (required)
@@ -61,44 +61,46 @@ def lambda_handler(event, context):
     """
     try:
         log_event(logger, event)
-        
+
         # Enforce RBAC — CHECKIN permission required; GUEST may not create check-ins
         deny = require_permission(event, Permission.CHECKIN)
         if deny:
             return deny
-        
+
         # Extract tour ID from path parameters
-        tour_id = event.get('pathParameters', {}).get('tourId')
-        
+        tour_id = event.get("pathParameters", {}).get("tourId")
+
         if not tour_id:
             return bad_request_response("tourId is required in path")
-        
+
         try:
             validate_tour_id(tour_id)
         except ValidationError as e:
             return bad_request_response(str(e))
-        
+
         # Parse request body
         try:
-            body = json.loads(event.get('body', '{}'))
+            body = json.loads(event.get("body", "{}"))
         except json.JSONDecodeError:
             return bad_request_response("Invalid JSON in request body")
-        
+
         # Validate required fields
         try:
-            validate_required_fields(body, ['riderId', 'rideId', 'method'])
+            validate_required_fields(body, ["riderId", "rideId", "method"])
         except ValidationError as e:
             return bad_request_response(str(e))
-        
-        rider_id = body['riderId']
-        ride_id = body['rideId']
-        method = body['method']
-        is_not_riding = body.get('isNotRiding', False)
-        is_float = body.get('isFloat', False)
-        float_no = body.get('floatNo')
-        is_quit_riding = body.get('isQuitRiding', False)
-        notes = body.get('notes')
-        client_timestamp = body.get('timestamp')  # Optional: for offline-synced check-ins
+
+        rider_id = body["riderId"]
+        ride_id = body["rideId"]
+        method = body["method"]
+        is_not_riding = body.get("isNotRiding", False)
+        is_float = body.get("isFloat", False)
+        float_no = body.get("floatNo")
+        is_quit_riding = body.get("isQuitRiding", False)
+        notes = body.get("notes")
+        client_timestamp = body.get(
+            "timestamp"
+        )  # Optional: for offline-synced check-ins
 
         if not isinstance(is_float, bool):
             return bad_request_response("isFloat must be a boolean")
@@ -124,21 +126,21 @@ def lambda_handler(event, context):
                 return bad_request_response("floatNo must be a positive integer")
         elif float_no is not None:
             return bad_request_response("floatNo is only allowed when isFloat is true")
-        
+
         # Validate client-supplied timestamp if provided
         if client_timestamp:
             try:
-                validate_iso_datetime(client_timestamp, 'timestamp')
+                validate_iso_datetime(client_timestamp, "timestamp")
             except ValidationError as e:
                 return bad_request_response(str(e))
-        
+
         # Validate inputs
         try:
             validate_rider_id(rider_id)
             validate_ride_id(ride_id)
         except ValidationError as e:
             return bad_request_response(str(e))
-        
+
         # Validate method. SELF_SERVICE is reserved for Rider API self check-ins.
         if method == SELF_SERVICE_METHOD:
             return validation_error_response(
@@ -148,29 +150,40 @@ def lambda_handler(event, context):
         try:
             CheckInMethod(method)
         except ValueError:
-            valid_methods = [m.value for m in CheckInMethod if m.value != SELF_SERVICE_METHOD]
+            valid_methods = [
+                m.value for m in CheckInMethod if m.value != SELF_SERVICE_METHOD
+            ]
             return bad_request_response(
                 f"Invalid method. Must be one of: {', '.join(valid_methods)}"
             )
-        
+
         # MANUAL check-ins require CHECKIN_MANUAL permission (elevated privilege)
         if method == CheckInMethod.MANUAL.value:
             deny = require_permission(
                 event,
                 Permission.CHECKIN_MANUAL,
-                "Manual check-ins require elevated permissions"
+                "Manual check-ins require elevated permissions",
             )
             if deny:
                 return deny
-        
+
         logger.info(
-            "Creating check-in: rider=%s, ride=%s, isNotRiding=%s, isFloat=%s, isQuitRiding=%s", rider_id, ride_id, is_not_riding, is_float, is_quit_riding
+            "Creating check-in: rider=%s, ride=%s, isNotRiding=%s, isFloat=%s, isQuitRiding=%s",
+            rider_id,
+            ride_id,
+            is_not_riding,
+            is_float,
+            is_quit_riding,
         )
 
         # Get checked-in-by from request context (JWT authorizer)
-        checked_in_by = event.get('requestContext', {}).get(
-            'authorizer', {}
-        ).get('jwt', {}).get('claims', {}).get('sub', 'system')
+        checked_in_by = (
+            event.get("requestContext", {})
+            .get("authorizer", {})
+            .get("jwt", {})
+            .get("claims", {})
+            .get("sub", "system")
+        )
 
         # Shared validation and write (also used by rider self check-in)
         return create_checkin(
@@ -180,7 +193,7 @@ def lambda_handler(event, context):
             rider_id=rider_id,
             method=method,
             checked_in_by=checked_in_by,
-            stage_number_input=body.get('stageNumber'),
+            stage_number_input=body.get("stageNumber"),
             is_not_riding=is_not_riding,
             is_float=is_float,
             float_no=float_no,
@@ -188,6 +201,6 @@ def lambda_handler(event, context):
             client_timestamp=client_timestamp,
             notes=notes,
         )
-    
+
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")

@@ -16,13 +16,13 @@ from usermgmt_common import (
     require_admin_only,
 )
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 
 logger = get_logger(__name__)
 
 
-@api_handler('Failed to list role groups')
+@api_handler("Failed to list role groups")
 def lambda_handler(event, context):
     log_event(logger, event)
 

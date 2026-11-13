@@ -22,12 +22,12 @@ from rbac import Permission, require_permission
 from rider_identity import require_own_rider_data
 from botocore.exceptions import ClientError
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
 
 
-@api_handler('Failed to get rider ride check-ins')
+@api_handler("Failed to get rider ride check-ins")
 def lambda_handler(event, context):
     """Get all check-ins for a rider filtered by rideNo within a tour."""
     try:
@@ -35,13 +35,15 @@ def lambda_handler(event, context):
         if deny:
             return deny
 
-        path_params = event.get('pathParameters', {})
-        tour_id = path_params.get('tourId')
-        rider_id = path_params.get('riderId')
-        ride_no_raw = path_params.get('rideNo')
+        path_params = event.get("pathParameters", {})
+        tour_id = path_params.get("tourId")
+        rider_id = path_params.get("riderId")
+        ride_no_raw = path_params.get("rideNo")
 
         if not tour_id or not rider_id or ride_no_raw is None:
-            return bad_request_response("tourId, riderId and rideNo are required in path")
+            return bad_request_response(
+                "tourId, riderId and rideNo are required in path"
+            )
 
         try:
             validate_tour_id(tour_id)
@@ -61,60 +63,61 @@ def lambda_handler(event, context):
             return deny
 
         tour_rider = get_tour_item(
-            table_type='TourRider',
-            tour_id=tour_id,
-            key={'riderId': rider_id}
+            table_type="TourRider", tour_id=tour_id, key={"riderId": rider_id}
         )
         if not tour_rider:
             return error_response(
-                error_code='RIDER_NOT_IN_TOUR',
+                error_code="RIDER_NOT_IN_TOUR",
                 message=f"Rider {rider_id} is not registered for this tour",
                 status_code=400,
             )
 
         rides = scan_tour_items(
-            table_type='Ride',
+            table_type="Ride",
             tour_id=tour_id,
-            filter_expression='rideNo = :rideNo',
-            expression_values={':rideNo': ride_no},
+            filter_expression="rideNo = :rideNo",
+            expression_values={":rideNo": ride_no},
         )
-        ride_ids = {ride.get('rideId') for ride in rides if ride.get('rideId')}
+        ride_ids = {ride.get("rideId") for ride in rides if ride.get("rideId")}
 
         rider_checkins = query_tour_items(
-            table_type='CheckIn',
+            table_type="CheckIn",
             tour_id=tour_id,
-            key_condition_expression='riderId = :rid',
-            expression_values={':rid': rider_id},
-            index_name='RiderIdIndex'
+            key_condition_expression="riderId = :rid",
+            expression_values={":rid": rider_id},
+            index_name="RiderIdIndex",
         )
 
         checkins = [
-            checkin for checkin in rider_checkins
-            if checkin.get('rideId') in ride_ids
+            checkin
+            for checkin in rider_checkins
+            if checkin.get("rideId") in ride_ids
             and not is_cancelled_checkin_item(checkin)
         ]
-        checkins.sort(key=lambda c: c.get('timestamp', ''))
+        checkins.sort(key=lambda c: c.get("timestamp", ""))
 
-        return success_response({
-            'tourId': tour_id,
-            'riderId': rider_id,
-            'rideNo': ride_no,
-            'checkIns': checkins,
-            'count': len(checkins),
-        })
+        return success_response(
+            {
+                "tourId": tour_id,
+                "riderId": rider_id,
+                "rideNo": ride_no,
+                "checkIns": checkins,
+                "count": len(checkins),
+            }
+        )
 
     except ClientError as e:
-        if e.response.get('Error', {}).get('Code') == 'ResourceNotFoundException':
+        if e.response.get("Error", {}).get("Code") == "ResourceNotFoundException":
             # No check-in data exists for this tour yet: return an empty list, not an error.
-            path_params = event.get('pathParameters') or {}
+            path_params = event.get("pathParameters") or {}
             empty = {
-                'tourId': path_params.get('tourId'),
-                'riderId': path_params.get('riderId'),
-                'checkIns': [],
-                'count': 0,
+                "tourId": path_params.get("tourId"),
+                "riderId": path_params.get("riderId"),
+                "checkIns": [],
+                "count": 0,
             }
-            if 'rideNo' in path_params:
-                empty['rideNo'] = int(path_params['rideNo'])
+            if "rideNo" in path_params:
+                empty["rideNo"] = int(path_params["rideNo"])
             return success_response(empty)
         logger.error("Error getting rider check-ins: %s", e, exc_info=True)
         return internal_error_response("Failed to get rider check-ins")

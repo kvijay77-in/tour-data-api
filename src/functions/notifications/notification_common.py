@@ -42,10 +42,14 @@ def get_user_groups(event: Dict[str, Any]) -> List[str]:
 
 
 def get_profile_id_for_rider(event: Dict[str, Any]) -> Optional[str]:
-    cognito_username = get_jwt_claim(event, "cognito:username") or get_jwt_claim(event, "username")
+    cognito_username = get_jwt_claim(event, "cognito:username") or get_jwt_claim(
+        event, "username"
+    )
     if not cognito_username:
         return None
-    mapping = get_item("RIDER_COGNITO_USER_TABLE", {"cognitoUserName": cognito_username})
+    mapping = get_item(
+        "RIDER_COGNITO_USER_TABLE", {"cognitoUserName": cognito_username}
+    )
     return mapping.get("profileId") if mapping else None
 
 
@@ -98,7 +102,9 @@ def set_state_row(table_name: str, state_key: str, read_at: str) -> None:
     )
 
 
-def query_audience_items(table_name: str, audience: str, since: Optional[str], limit: int) -> List[Dict[str, Any]]:
+def query_audience_items(
+    table_name: str, audience: str, since: Optional[str], limit: int
+) -> List[Dict[str, Any]]:
     table = boto3.resource("dynamodb").Table(table_name)
     key_expr = Key("audience").eq(audience)
     if since:
@@ -112,7 +118,9 @@ def query_audience_items(table_name: str, audience: str, since: Optional[str], l
     return resp.get("Items", [])
 
 
-def query_audience_items_from_archive(table_name: str, audience: str, since: Optional[str], limit: int) -> List[Dict[str, Any]]:
+def query_audience_items_from_archive(
+    table_name: str, audience: str, since: Optional[str], limit: int
+) -> List[Dict[str, Any]]:
     archive_table_name = to_archive_table_name(table_name)
     if not archive_table_name:
         return []
@@ -155,7 +163,12 @@ def get_archive_after_read_hours() -> int:
         return cached[1]
     value = DEFAULT_ARCHIVE_AFTER_READ_HOURS
     try:
-        config = get_item("APP_CONFIG_TABLE", {"configType": "NOTIFICATION", "configId": "LIMITS"}) or {}
+        config = (
+            get_item(
+                "APP_CONFIG_TABLE", {"configType": "NOTIFICATION", "configId": "LIMITS"}
+            )
+            or {}
+        )
         cfg = config.get("config") or {}
         parsed = int(cfg.get("archiveAfterReadHours", DEFAULT_ARCHIVE_AFTER_READ_HOURS))
         if parsed > 0:
@@ -186,7 +199,12 @@ def archive_read_items_for_audience(
             Limit=max(1, limit),
         ).get("Items", [])
     except (ClientError, BotoCoreError) as exc:
-        logger.warning("Archive query failed table=%s audience=%s: %s", table_name, audience, str(exc))
+        logger.warning(
+            "Archive query failed table=%s audience=%s: %s",
+            table_name,
+            audience,
+            str(exc),
+        )
         return 0
     moved = 0
     cutoff = datetime.now(timezone.utc).timestamp() - max(1, archive_after_hours) * 3600
@@ -204,13 +222,20 @@ def archive_read_items_for_audience(
             archive_table.put_item(Item=row)
             table.delete_item(Key={"audience": row["audience"], "sk": row["sk"]})
         except (ClientError, BotoCoreError) as exc:
-            logger.warning("Archive move failed table=%s audience=%s: %s", table_name, audience, str(exc))
+            logger.warning(
+                "Archive move failed table=%s audience=%s: %s",
+                table_name,
+                audience,
+                str(exc),
+            )
             continue
         moved += 1
     return moved
 
 
-def normalize_notification_item(item: Dict[str, Any], last_read_at: Optional[str]) -> Dict[str, Any]:
+def normalize_notification_item(
+    item: Dict[str, Any], last_read_at: Optional[str]
+) -> Dict[str, Any]:
     created_at = item.get("createdAt") or str(item.get("sk", "")).split("#", 1)[0]
     return {
         "notificationId": item.get("notificationId"),
@@ -232,9 +257,13 @@ def dedupe_notifications(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not notification_id:
             continue
         current = deduped.get(notification_id)
-        if current is None or (item.get("createdAt") or "") > (current.get("createdAt") or ""):
+        if current is None or (item.get("createdAt") or "") > (
+            current.get("createdAt") or ""
+        ):
             deduped[notification_id] = item
-    return sorted(deduped.values(), key=lambda row: row.get("createdAt", ""), reverse=True)
+    return sorted(
+        deduped.values(), key=lambda row: row.get("createdAt", ""), reverse=True
+    )
 
 
 def own_table_for_scope(scope: str) -> str:

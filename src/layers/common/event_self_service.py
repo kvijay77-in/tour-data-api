@@ -39,20 +39,29 @@ from validation import (
 )
 
 SELF_RECORD_FIELDS = {"activityId", "timestamp", "outcome", "variantSelected"}
-SELF_RECORD_OUTCOMES = {EventRecordOutcome.COMPLETED.value, EventRecordOutcome.OPTED_OUT.value}
+SELF_RECORD_OUTCOMES = {
+    EventRecordOutcome.COMPLETED.value,
+    EventRecordOutcome.OPTED_OUT.value,
+}
 
 
-def _validation_error(message: str, details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _validation_error(
+    message: str, details: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     return error_response("VALIDATION_ERROR", message, status_code=400, details=details)
 
 
-def _occurrence_path(event: Dict[str, Any]) -> Tuple[Optional[Tuple[str, str, str]], Optional[Dict[str, Any]]]:
+def _occurrence_path(
+    event: Dict[str, Any],
+) -> Tuple[Optional[Tuple[str, str, str]], Optional[Dict[str, Any]]]:
     params = event.get("pathParameters") or {}
     tour_id = params.get("tourId")
     event_id = params.get("eventId")
     occurrence_id = params.get("occurrenceId")
     if not tour_id or not event_id or not occurrence_id:
-        return None, bad_request_response("tourId, eventId and occurrenceId are required in path")
+        return None, bad_request_response(
+            "tourId, eventId and occurrenceId are required in path"
+        )
     try:
         validate_tour_id(tour_id)
         validate_event_id(event_id)
@@ -60,7 +69,9 @@ def _occurrence_path(event: Dict[str, Any]) -> Tuple[Optional[Tuple[str, str, st
     except ValidationError as exc:
         return None, bad_request_response(exc.message, exc.details)
     if not occurrence_id.startswith(f"{event_id}#"):
-        return None, error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
+        return None, error_response(
+            "OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404
+        )
     return (tour_id, event_id, occurrence_id), None
 
 
@@ -68,17 +79,31 @@ def _load_event_and_occurrence(
     tour_id: str,
     event_id: str,
     occurrence_id: str,
-) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+) -> Tuple[
+    Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]]
+]:
     event_definition = _get_event_definition(tour_id, event_id)
     if not event_definition:
-        return None, None, error_response("EVENT_NOT_FOUND", "Event not found.", status_code=404)
+        return (
+            None,
+            None,
+            error_response("EVENT_NOT_FOUND", "Event not found.", status_code=404),
+        )
     occurrence = _get_occurrence(tour_id, event_id, occurrence_id)
     if not occurrence:
-        return None, None, error_response("OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404)
+        return (
+            None,
+            None,
+            error_response(
+                "OCCURRENCE_NOT_FOUND", "Occurrence not found.", status_code=404
+            ),
+        )
     return event_definition, occurrence, None
 
 
-def _check_registration_open(event_definition: Dict[str, Any], occurrence: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _check_registration_open(
+    event_definition: Dict[str, Any], occurrence: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
     """Registration rules shared by rider and staff register/un-register."""
     if event_definition.get("registrationEnabled") is not True:
         return error_response(
@@ -111,7 +136,10 @@ def _register(
             tour_id, event_id, occurrence_id, rider_id, registered_by, source
         )
     except ClientError as exc:
-        if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+        if (
+            exc.response.get("Error", {}).get("Code")
+            != "ConditionalCheckFailedException"
+        ):
             raise
         existing = event_registration.get_registration(tour_id, occurrence_id, rider_id)
         if existing:
@@ -128,7 +156,9 @@ def _unregister(tour_id: str, occurrence_id: str, rider_id: str) -> Dict[str, An
             status_code=404,
         )
     event_registration.delete_registration(tour_id, occurrence_id, rider_id)
-    return success_response({"occurrenceId": occurrence_id, "riderId": rider_id, "registered": False})
+    return success_response(
+        {"occurrenceId": occurrence_id, "riderId": rider_id, "registered": False}
+    )
 
 
 def _rider_request_context(event: Dict[str, Any]):
@@ -154,13 +184,16 @@ def _rider_request_context(event: Dict[str, Any]):
 # Rider API: own registration
 # ---------------------------------------------------------------------------
 
+
 def register_self(event: Dict[str, Any]) -> Dict[str, Any]:
     """POST .../occurrences/{occurrenceId}/registration (Rider API)."""
     path, _body, identity, error = _rider_request_context(event)
     if error:
         return error
     tour_id, event_id, occurrence_id = path
-    event_definition, occurrence, error = _load_event_and_occurrence(tour_id, event_id, occurrence_id)
+    event_definition, occurrence, error = _load_event_and_occurrence(
+        tour_id, event_id, occurrence_id
+    )
     if error:
         return error
     error = _check_registration_open(event_definition, occurrence)
@@ -182,7 +215,9 @@ def unregister_self(event: Dict[str, Any]) -> Dict[str, Any]:
     if error:
         return error
     tour_id, event_id, occurrence_id = path
-    event_definition, occurrence, error = _load_event_and_occurrence(tour_id, event_id, occurrence_id)
+    event_definition, occurrence, error = _load_event_and_occurrence(
+        tour_id, event_id, occurrence_id
+    )
     if error:
         return error
     error = _check_registration_open(event_definition, occurrence)
@@ -195,13 +230,16 @@ def unregister_self(event: Dict[str, Any]) -> Dict[str, Any]:
 # Mgmt API: staff-managed registrations
 # ---------------------------------------------------------------------------
 
+
 def list_registrations(event: Dict[str, Any]) -> Dict[str, Any]:
     """GET .../occurrences/{occurrenceId}/registrations (Mgmt API)."""
     path, error = _occurrence_path(event)
     if error:
         return error
     tour_id, event_id, occurrence_id = path
-    event_definition, _occurrence, error = _load_event_and_occurrence(tour_id, event_id, occurrence_id)
+    event_definition, _occurrence, error = _load_event_and_occurrence(
+        tour_id, event_id, occurrence_id
+    )
     if error:
         return error
     registration_enabled = event_definition.get("registrationEnabled") is True
@@ -217,7 +255,9 @@ def list_registrations(event: Dict[str, Any]) -> Dict[str, Any]:
                 "registeredBy": item.get("registeredBy"),
                 "source": item.get("source"),
             }
-            for item in sorted(registrations, key=lambda item: item.get("riderId") or "")
+            for item in sorted(
+                registrations, key=lambda item: item.get("riderId") or ""
+            )
         ]
     return success_response(
         {
@@ -238,8 +278,17 @@ def _rider_names(tour_id: str, rider_ids) -> Dict[str, Optional[str]]:
         tour_rider = get_tour_item("TourRider", tour_id, {"riderId": rider_id}) or {}
         if tour_rider.get("profileId"):
             profile_ids[rider_id] = tour_rider["profileId"]
-    keys = [{"profileId": profile_id} for profile_id in sorted(set(profile_ids.values()))]
-    profiles = {item.get("profileId"): item for item in batch_get_items("RIDER_PROFILE_TABLE", keys)} if keys else {}
+    keys = [
+        {"profileId": profile_id} for profile_id in sorted(set(profile_ids.values()))
+    ]
+    profiles = (
+        {
+            item.get("profileId"): item
+            for item in batch_get_items("RIDER_PROFILE_TABLE", keys)
+        }
+        if keys
+        else {}
+    )
     return {
         rider_id: (profiles.get(profile_id) or {}).get("name")
         for rider_id, profile_id in profile_ids.items()
@@ -266,7 +315,9 @@ def staff_register(event: Dict[str, Any]) -> Dict[str, Any]:
     if error:
         return error
     tour_id, event_id, occurrence_id = path
-    event_definition, occurrence, error = _load_event_and_occurrence(tour_id, event_id, occurrence_id)
+    event_definition, occurrence, error = _load_event_and_occurrence(
+        tour_id, event_id, occurrence_id
+    )
     if error:
         return error
     error = _check_registration_open(event_definition, occurrence)
@@ -274,7 +325,9 @@ def staff_register(event: Dict[str, Any]) -> Dict[str, Any]:
         return error
     tour_rider = get_tour_item("TourRider", tour_id, {"riderId": rider_id})
     if not event_registration.is_active_rider(tour_rider):
-        return error_response("RIDER_NOT_FOUND", "Rider not found on this tour.", status_code=404)
+        return error_response(
+            "RIDER_NOT_FOUND", "Rider not found on this tour.", status_code=404
+        )
     return _register(
         tour_id,
         event_id,
@@ -291,7 +344,9 @@ def staff_unregister(event: Dict[str, Any]) -> Dict[str, Any]:
     if error:
         return error
     tour_id, event_id, occurrence_id = path
-    event_definition, occurrence, error = _load_event_and_occurrence(tour_id, event_id, occurrence_id)
+    event_definition, occurrence, error = _load_event_and_occurrence(
+        tour_id, event_id, occurrence_id
+    )
     if error:
         return error
     error = _check_registration_open(event_definition, occurrence)
@@ -303,6 +358,7 @@ def staff_unregister(event: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Rider API: self-service activity records
 # ---------------------------------------------------------------------------
+
 
 def create_self_record(event: Dict[str, Any]) -> Dict[str, Any]:
     """POST .../occurrences/{occurrenceId}/self-records (Rider API)."""
@@ -332,7 +388,9 @@ def create_self_record(event: Dict[str, Any]) -> Dict[str, Any]:
             )
         variant = body.get("variantSelected")
         if variant is not None and not isinstance(variant, str):
-            raise ValidationError("variantSelected must be a string", {"field": "variantSelected"})
+            raise ValidationError(
+                "variantSelected must be a string", {"field": "variantSelected"}
+            )
     except ValidationError as exc:
         return _validation_error(exc.message, exc.details)
 
@@ -366,21 +424,37 @@ def cancel_self_record(event: Dict[str, Any]) -> Dict[str, Any]:
     if not record_id:
         return bad_request_response("recordId is required in path")
 
-    event_definition, occurrence, error = _load_event_and_occurrence(tour_id, event_id, occurrence_id)
+    event_definition, occurrence, error = _load_event_and_occurrence(
+        tour_id, event_id, occurrence_id
+    )
     if error:
         return error
-    record = get_tour_item("EventActivityLogs", tour_id, {"occurrenceId": occurrence_id, "recordId": record_id})
+    record = get_tour_item(
+        "EventActivityLogs",
+        tour_id,
+        {"occurrenceId": occurrence_id, "recordId": record_id},
+    )
     if not record:
         return error_response("RECORD_NOT_FOUND", "Record not found.", status_code=404)
     if record.get("riderId") != identity["riderId"]:
-        return error_response("NOT_OWN_RECORD", "You can only cancel your own activity records.", status_code=403)
+        return error_response(
+            "NOT_OWN_RECORD",
+            "You can only cancel your own activity records.",
+            status_code=403,
+        )
     if occurrence.get("status") != EventOccurrenceStatus.ACTIVE.value:
-        return error_response("OCCURRENCE_NOT_ACTIVE", "Occurrence is not active.", status_code=409)
-    activity = _get_activity(event_definition, record.get("activityId")) or {"activityId": record.get("activityId")}
+        return error_response(
+            "OCCURRENCE_NOT_ACTIVE", "Occurrence is not active.", status_code=409
+        )
+    activity = _get_activity(event_definition, record.get("activityId")) or {
+        "activityId": record.get("activityId")
+    }
     if not _activity_self_service(event_definition, occurrence, activity):
         return error_response(
             "SELF_SERVICE_NOT_ALLOWED",
             "Self-service is not allowed for this activity.",
             status_code=403,
         )
-    return cancel_record(tour_id, record, identity["profileId"], (body or {}).get("cancelReason"))
+    return cancel_record(
+        tour_id, record, identity["profileId"], (body or {}).get("cancelReason")
+    )

@@ -16,7 +16,6 @@ from rbac import get_user_groups as get_request_user_groups
 from response import error_response, forbidden_response
 from validation import ValidationError
 
-
 logger = get_logger(__name__)
 
 E164_PATTERN = re.compile(r"^\+[1-9]\d{1,14}$")
@@ -117,7 +116,9 @@ def list_pool_groups(cognito_client, user_pool_id: str) -> List[str]:
     return sorted(groups)
 
 
-def validate_roles(roles: Any, valid_groups: Set[str], field_name: str = "roles") -> List[str]:
+def validate_roles(
+    roles: Any, valid_groups: Set[str], field_name: str = "roles"
+) -> List[str]:
     """Validate role list against dynamic Cognito groups."""
     if not isinstance(roles, list):
         raise ValidationError(f"{field_name} must be an array")
@@ -257,4 +258,6 @@ def map_cognito_error(exc: ClientError) -> Tuple[str, str, int]:
 def cognito_error_response(exc: ClientError):
     """Build standardized error response from Cognito ClientError."""
     error_code, message, status_code = map_cognito_error(exc)
-    return error_response(error_code=error_code, message=message, status_code=status_code)
+    return error_response(
+        error_code=error_code, message=message, status_code=status_code
+    )

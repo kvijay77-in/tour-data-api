@@ -1,10 +1,11 @@
 """Mgmt API: staff un-registers a rider from an event occurrence."""
+
 import sys
 
 from rbac import Permission, require_permission
 from event_self_service import staff_unregister
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 
 def lambda_handler(event, context):

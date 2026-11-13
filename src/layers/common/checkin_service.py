@@ -11,7 +11,12 @@ from __future__ import annotations
 import uuid
 from typing import Any, Dict, List, Optional
 
-from dynamodb_utils import get_tour_item, put_tour_item, query_tour_items, update_tour_item
+from dynamodb_utils import (
+    get_tour_item,
+    put_tour_item,
+    query_tour_items,
+    update_tour_item,
+)
 from logger import get_logger
 from models import (
     CheckIn,
@@ -33,7 +38,6 @@ from response import (
 )
 from validation import ValidationError, validate_stage_number
 
-
 logger = get_logger(__name__)
 
 
@@ -49,18 +53,18 @@ def read_value(item, camel_key, snake_key=None, default=None):
 def normalize_keys_to_camel_case(payload):
     """Normalize known legacy snake_case check-in keys to camelCase recursively."""
     key_map = {
-        'check_in_id': 'checkInId',
-        'rider_id': 'riderId',
-        'ride_id': 'rideId',
-        'checked_in_by': 'checkedInBy',
-        'stage_number': 'stageNumber',
-        'stage_id': 'stageId',
-        'is_not_riding': 'isNotRiding',
-        'is_float': 'isFloat',
-        'float_no': 'floatNo',
-        'is_quit_riding': 'isQuitRiding',
-        'is_manual_entry': 'isManualEntry',
-        'created_at': 'createdAt',
+        "check_in_id": "checkInId",
+        "rider_id": "riderId",
+        "ride_id": "rideId",
+        "checked_in_by": "checkedInBy",
+        "stage_number": "stageNumber",
+        "stage_id": "stageId",
+        "is_not_riding": "isNotRiding",
+        "is_float": "isFloat",
+        "float_no": "floatNo",
+        "is_quit_riding": "isQuitRiding",
+        "is_manual_entry": "isManualEntry",
+        "created_at": "createdAt",
     }
 
     if isinstance(payload, list):
@@ -76,7 +80,9 @@ def normalize_keys_to_camel_case(payload):
     return payload
 
 
-def authorize_pit_stop_role_checkin(event, stage_number, stage_type, is_not_riding, is_quit_riding):
+def authorize_pit_stop_role_checkin(
+    event, stage_number, stage_type, is_not_riding, is_quit_riding
+):
     """Enforce stage-aware check-in access for pit-stop-only users."""
     assigned_stage_numbers = get_user_pit_stop_stage_numbers(event)
     if not assigned_stage_numbers:
@@ -92,14 +98,14 @@ def authorize_pit_stop_role_checkin(event, stage_number, stage_type, is_not_ridi
         return error_response(
             error_code="PIT_STOP_ROLE_STAGE_MISMATCH",
             message="Pit stop users may only perform Quit Riding or assigned PIT_STOP regular check-ins.",
-            status_code=403
+            status_code=403,
         )
 
     if stage_type != StageType.PIT_STOP.value:
         return error_response(
             error_code="PIT_STOP_ROLE_STAGE_MISMATCH",
             message="Pit stop users may only perform regular check-ins for PIT_STOP stages.",
-            status_code=403
+            status_code=403,
         )
 
     if stage_number not in assigned_stage_numbers:
@@ -109,22 +115,24 @@ def authorize_pit_stop_role_checkin(event, stage_number, stage_type, is_not_ridi
                 f"Pit stop user is not authorized for stage {stage_number}. "
                 f"Assigned stages: {sorted(assigned_stage_numbers)}"
             ),
-            status_code=403
+            status_code=403,
         )
 
     return None
 
 
-def list_rider_ride_checkins(tour_id: str, ride_id: str, rider_id: str, include_cancelled: bool = False) -> List[Dict[str, Any]]:
+def list_rider_ride_checkins(
+    tour_id: str, ride_id: str, rider_id: str, include_cancelled: bool = False
+) -> List[Dict[str, Any]]:
     """Return the rider's check-ins for one ride (cancelled ones excluded by default)."""
     items = query_tour_items(
-        table_type='CheckIn',
+        table_type="CheckIn",
         tour_id=tour_id,
-        key_condition_expression='riderId = :riderId',
-        expression_values={':riderId': rider_id},
-        index_name='RiderIdIndex',
+        key_condition_expression="riderId = :riderId",
+        expression_values={":riderId": rider_id},
+        index_name="RiderIdIndex",
     )
-    items = [item for item in items if read_value(item, 'rideId', 'ride_id') == ride_id]
+    items = [item for item in items if read_value(item, "rideId", "ride_id") == ride_id]
     if include_cancelled:
         return items
     return [item for item in items if not is_cancelled_checkin_item(item)]
@@ -157,28 +165,32 @@ def create_checkin(
     stage_type = None
 
     if ride is None:
-        ride = get_tour_item(table_type='Ride', tour_id=tour_id, key={'rideId': ride_id})
+        ride = get_tour_item(
+            table_type="Ride", tour_id=tour_id, key={"rideId": ride_id}
+        )
     if not ride:
         return not_found_response("Ride", ride_id)
 
     # Check if ride is closed
-    if ride.get('status') == RideStatus.CLOSED.value:
-        closed_at = ride.get('closedAt')
+    if ride.get("status") == RideStatus.CLOSED.value:
+        closed_at = ride.get("closedAt")
         # Allow late-sync: accept check-ins captured before ride was closed
         if client_timestamp and closed_at and client_timestamp < closed_at:
             logger.info(
-                "Late-sync accepted: check-in timestamp %s predates ride closure %s", client_timestamp, closed_at
+                "Late-sync accepted: check-in timestamp %s predates ride closure %s",
+                client_timestamp,
+                closed_at,
             )
         else:
             return error_response(
                 error_code="RIDE_CLOSED",
                 message=f"Ride {ride_id} is closed. No further check-ins allowed.",
-                status_code=409
+                status_code=409,
             )
 
     # Validate stage number only for normal check-ins.
     # Not Riding / Quit Riding entries do not require stage attributes.
-    stages = ride.get('stages', [])
+    stages = ride.get("stages", [])
     total_stages = len(stages)
     stage_id = None
     requires_stage = not is_not_riding and not is_quit_riding
@@ -200,16 +212,18 @@ def create_checkin(
             return bad_request_response(str(e))
 
         stage = stages[stage_number]
-        stage_id = stage.get('stageId')
-        stage_type = stage.get('type')
+        stage_id = stage.get("stageId")
+        stage_type = stage.get("type")
 
     # Verify rider is registered for this tour
-    tour_rider = get_tour_item(table_type='TourRider', tour_id=tour_id, key={'riderId': rider_id})
+    tour_rider = get_tour_item(
+        table_type="TourRider", tour_id=tour_id, key={"riderId": rider_id}
+    )
     if not tour_rider:
         return error_response(
             error_code="RIDER_NOT_IN_TOUR",
             message=f"Rider {rider_id} is not registered for this tour",
-            status_code=400
+            status_code=400,
         )
 
     deny = authorize_pit_stop_role_checkin(
@@ -227,60 +241,78 @@ def create_checkin(
 
     # Check for Not Riding conflicts
     if is_not_riding:
-        nr_checkins = [c for c in active_checkins if read_value(c, 'isNotRiding', 'is_not_riding', False)]
+        nr_checkins = [
+            c
+            for c in active_checkins
+            if read_value(c, "isNotRiding", "is_not_riding", False)
+        ]
         if nr_checkins:
             return conflict_response(
                 f"Rider {rider_id} already marked as Not Riding for this ride",
-                error_code="DUPLICATE_NOT_RIDING"
+                error_code="DUPLICATE_NOT_RIDING",
             )
 
     # Check if rider already marked as Not Riding (can't check in normally)
     if not is_not_riding and not is_quit_riding:
-        nr_checkins = [c for c in active_checkins if read_value(c, 'isNotRiding', 'is_not_riding', False)]
+        nr_checkins = [
+            c
+            for c in active_checkins
+            if read_value(c, "isNotRiding", "is_not_riding", False)
+        ]
         if nr_checkins:
             return conflict_response(
                 f"Rider {rider_id} is marked as Not Riding. Cannot check in.",
-                error_code="RIDER_NOT_RIDING"
+                error_code="RIDER_NOT_RIDING",
             )
 
     # Check if rider already quit (latest check-in has isQuitRiding=true)
     if active_checkins:
         sorted_checkins = sorted(
             active_checkins,
-            key=lambda x: read_value(x, 'timestamp', default=''),
-            reverse=True
+            key=lambda x: read_value(x, "timestamp", default=""),
+            reverse=True,
         )
         latest_qr = next(
-            (c for c in sorted_checkins if read_value(c, 'isQuitRiding', 'is_quit_riding', False)),
-            None
+            (
+                c
+                for c in sorted_checkins
+                if read_value(c, "isQuitRiding", "is_quit_riding", False)
+            ),
+            None,
         )
         if latest_qr:
-            qr_timestamp = read_value(latest_qr, 'timestamp', default='')
+            qr_timestamp = read_value(latest_qr, "timestamp", default="")
             # Timestamp-based validation: accept if check-in was captured
             # before the rider quit (supports offline-synced check-ins)
             if client_timestamp and client_timestamp < qr_timestamp:
                 logger.info(
-                    "Timestamp-based acceptance: check-in at %s predates quit-riding at %s for rider %s", client_timestamp, qr_timestamp, rider_id
+                    "Timestamp-based acceptance: check-in at %s predates quit-riding at %s for rider %s",
+                    client_timestamp,
+                    qr_timestamp,
+                    rider_id,
                 )
             else:
                 return conflict_response(
                     f"Rider {rider_id} has quit riding. No further check-ins allowed.",
-                    error_code="RIDER_QUIT_RIDING"
+                    error_code="RIDER_QUIT_RIDING",
                 )
 
     # Check for duplicate check-in (same rider + same stage, normal check-ins only)
     if not is_not_riding and not is_quit_riding:
         duplicate = next(
-            (c for c in active_checkins
-             if read_value(c, 'stageNumber', 'stage_number') == stage_number
-             and not read_value(c, 'isNotRiding', 'is_not_riding', False)
-             and not read_value(c, 'isQuitRiding', 'is_quit_riding', False)),
-            None
+            (
+                c
+                for c in active_checkins
+                if read_value(c, "stageNumber", "stage_number") == stage_number
+                and not read_value(c, "isNotRiding", "is_not_riding", False)
+                and not read_value(c, "isQuitRiding", "is_quit_riding", False)
+            ),
+            None,
         )
         if duplicate:
             return conflict_response(
                 f"Rider {rider_id} already checked in at stage {stage_number}",
-                error_code="DUPLICATE_CHECKIN"
+                error_code="DUPLICATE_CHECKIN",
             )
 
     # Use client-supplied timestamp for offline-synced check-ins, otherwise server time
@@ -301,27 +333,27 @@ def create_checkin(
         floatNo=float_no,
         isQuitRiding=is_quit_riding,
         isManualEntry=(method == CheckInMethod.MANUAL.value),
-        notes=notes
+        notes=notes,
     )
 
     # Enforce camelCase storage/response keys even if legacy serializers emit snake_case.
     checkin_item = normalize_keys_to_camel_case(checkin.to_dynamodb_item())
     checkin_response = normalize_keys_to_camel_case(checkin.to_dict())
 
-    put_tour_item(table_type='CheckIn', tour_id=tour_id, item=checkin_item)
+    put_tour_item(table_type="CheckIn", tour_id=tour_id, item=checkin_item)
 
     # notify() never raises, so a notification problem cannot fail the check-in.
     notify(
-        rule_id='CHECKIN_CREATED',
+        rule_id="CHECKIN_CREATED",
         tour_id=tour_id,
         context={
-            'tourId': tour_id,
-            'riderId': rider_id,
-            'rideId': ride_id,
-            'stageNumber': stage_number,
-            'checkInId': check_in_id,
-            'status': checkin_response.get('status'),
-            'timestamp': timestamp,
+            "tourId": tour_id,
+            "riderId": rider_id,
+            "rideId": ride_id,
+            "stageNumber": stage_number,
+            "checkInId": check_in_id,
+            "status": checkin_response.get("status"),
+            "timestamp": timestamp,
         },
         actor=checked_in_by,
     )
@@ -342,40 +374,40 @@ def cancel_checkin(
     Only ``status``, ``prevStatus``, ``cancelledBy`` and ``cancelledAt`` change.
     Returns the full updated record.
     """
-    checkin_id = existing.get('checkInId')
+    checkin_id = existing.get("checkInId")
     cancelled_at = utc_now_iso()
 
     updated = update_tour_item(
-        table_type='CheckIn',
+        table_type="CheckIn",
         tour_id=tour_id,
-        key={'rideId': ride_id, 'checkInId': checkin_id},
+        key={"rideId": ride_id, "checkInId": checkin_id},
         update_expression=(
-            'SET prevStatus = :prevStatus, '
-            'cancelledBy = :cancelledBy, '
-            'cancelledAt = :cancelledAt, '
-            '#status = :status'
+            "SET prevStatus = :prevStatus, "
+            "cancelledBy = :cancelledBy, "
+            "cancelledAt = :cancelledAt, "
+            "#status = :status"
         ),
         expression_values={
-            ':prevStatus': prev_status,
-            ':cancelledBy': cancelled_by,
-            ':cancelledAt': cancelled_at,
-            ':status': CheckInStatus.CANCELLED.value,
+            ":prevStatus": prev_status,
+            ":cancelledBy": cancelled_by,
+            ":cancelledAt": cancelled_at,
+            ":status": CheckInStatus.CANCELLED.value,
         },
-        expression_names={'#status': 'status'}
+        expression_names={"#status": "status"},
     )
 
     # notify() never raises, so a notification problem cannot fail the cancel.
     notify(
-        rule_id='CHECKIN_CANCELLED',
+        rule_id="CHECKIN_CANCELLED",
         tour_id=tour_id,
         context={
-            'tourId': tour_id,
-            'riderId': existing.get('riderId'),
-            'rideId': ride_id,
-            'stageNumber': existing.get('stageNumber'),
-            'checkInId': checkin_id,
-            'status': CheckInStatus.CANCELLED.value,
-            'cancelledAt': cancelled_at,
+            "tourId": tour_id,
+            "riderId": existing.get("riderId"),
+            "rideId": ride_id,
+            "stageNumber": existing.get("stageNumber"),
+            "checkInId": checkin_id,
+            "status": CheckInStatus.CANCELLED.value,
+            "cancelledAt": cancelled_at,
         },
         actor=cancelled_by,
     )

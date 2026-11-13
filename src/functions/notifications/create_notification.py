@@ -11,23 +11,19 @@ import json
 import uuid
 
 from logger import get_logger, log_event
-from response import (
-    success_response, bad_request_response
-)
+from response import success_response, bad_request_response
 from handler_utils import api_handler
 from dynamodb_utils import put_tour_item
-from validation import (
-    validate_tour_id, validate_required_fields, ValidationError
-)
+from validation import validate_tour_id, validate_required_fields, ValidationError
 from models import NotificationType, utc_now_iso
 from rbac import require_permission, Permission
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
 
 
-@api_handler('Failed to create notification')
+@api_handler("Failed to create notification")
 def lambda_handler(event, context):
     """
     Create a notification for a tour
@@ -56,7 +52,7 @@ def lambda_handler(event, context):
         return deny
 
     # Extract tour ID from path parameters
-    tour_id = event.get('pathParameters', {}).get('tourId')
+    tour_id = event.get("pathParameters", {}).get("tourId")
 
     if not tour_id:
         return bad_request_response("tourId is required in path")
@@ -68,18 +64,18 @@ def lambda_handler(event, context):
 
     # Parse request body
     try:
-        body = json.loads(event.get('body', '{}'))
+        body = json.loads(event.get("body", "{}"))
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")
 
     # Validate required fields
     try:
-        validate_required_fields(body, ['type', 'title', 'message'])
+        validate_required_fields(body, ["type", "title", "message"])
     except ValidationError as e:
         return bad_request_response(str(e))
 
     # Validate notification type
-    notification_type = body['type']
+    notification_type = body["type"]
     try:
         NotificationType(notification_type)
     except ValueError:
@@ -89,35 +85,35 @@ def lambda_handler(event, context):
         )
 
     # Get created-by from request context (JWT authorizer)
-    created_by = event.get('requestContext', {}).get(
-        'authorizer', {}
-    ).get('jwt', {}).get('claims', {}).get('sub', 'system')
+    created_by = (
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("jwt", {})
+        .get("claims", {})
+        .get("sub", "system")
+    )
 
     notification_id = str(uuid.uuid4())
     now = utc_now_iso()
 
     item = {
-        'notificationId': notification_id,
-        'type': notification_type,
-        'title': body['title'],
-        'message': body['message'],
-        'createdBy': created_by,
-        'readBy': [],
-        'createdAt': now
+        "notificationId": notification_id,
+        "type": notification_type,
+        "title": body["title"],
+        "message": body["message"],
+        "createdBy": created_by,
+        "readBy": [],
+        "createdAt": now,
     }
 
     # Optional fields
-    if body.get('targetRiderId'):
-        item['targetRiderId'] = body['targetRiderId']
-    if body.get('expiresAt'):
-        item['expiresAt'] = body['expiresAt']
+    if body.get("targetRiderId"):
+        item["targetRiderId"] = body["targetRiderId"]
+    if body.get("expiresAt"):
+        item["expiresAt"] = body["expiresAt"]
 
     logger.info("Creating notification %s for tour %s", notification_id, tour_id)
-    put_tour_item(
-        table_type='Notification',
-        tour_id=tour_id,
-        item=item
-    )
+    put_tour_item(table_type="Notification", tour_id=tour_id, item=item)
 
     logger.info("Successfully created notification %s", notification_id)
     return success_response(item, status_code=201)

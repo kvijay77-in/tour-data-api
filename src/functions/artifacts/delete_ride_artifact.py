@@ -8,16 +8,20 @@ import boto3
 from dynamodb_utils import get_tour_item, get_tour_table
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
-from response import bad_request_response, internal_error_response, not_found_response, success_response
+from response import (
+    bad_request_response,
+    internal_error_response,
+    not_found_response,
+    success_response,
+)
 from handler_utils import api_handler
 
-
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 logger = get_logger(__name__)
-s3_client = boto3.client('s3')
+s3_client = boto3.client("s3")
 
 
-@api_handler('Failed to delete artifact')
+@api_handler("Failed to delete artifact")
 def lambda_handler(event, context):
     log_event(logger, event)
 
@@ -25,41 +29,43 @@ def lambda_handler(event, context):
     if deny:
         return deny
 
-    tour_id = (event.get('pathParameters') or {}).get('tourId')
-    ride_id = (event.get('pathParameters') or {}).get('rideId')
-    artifact_id = (event.get('pathParameters') or {}).get('artifactId')
+    tour_id = (event.get("pathParameters") or {}).get("tourId")
+    ride_id = (event.get("pathParameters") or {}).get("rideId")
+    artifact_id = (event.get("pathParameters") or {}).get("artifactId")
 
     if not tour_id:
-        return bad_request_response('tourId is required in path')
+        return bad_request_response("tourId is required in path")
     if not ride_id:
-        return bad_request_response('rideId is required in path')
+        return bad_request_response("rideId is required in path")
     if not artifact_id:
-        return bad_request_response('artifactId is required in path')
+        return bad_request_response("artifactId is required in path")
 
-    artifact_for = f'{tour_id}#{ride_id}'
+    artifact_for = f"{tour_id}#{ride_id}"
     existing = get_tour_item(
-        table_type='Artifacts',
+        table_type="Artifacts",
         tour_id=tour_id,
-        key={'artifactFor': artifact_for, 'artifactId': artifact_id},
+        key={"artifactFor": artifact_for, "artifactId": artifact_id},
     )
     if not existing:
-        return not_found_response('Artifact', f'{artifact_for}/{artifact_id}')
+        return not_found_response("Artifact", f"{artifact_for}/{artifact_id}")
 
-    bucket_name = os.environ.get('ARTIFACTS_BUCKET')
+    bucket_name = os.environ.get("ARTIFACTS_BUCKET")
     if not bucket_name:
-        return internal_error_response('Artifacts bucket not configured')
+        return internal_error_response("Artifacts bucket not configured")
 
-    s3_key = existing.get('s3Key')
+    s3_key = existing.get("s3Key")
     if s3_key:
         s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
 
-    get_tour_table('Artifacts', tour_id).delete_item(
-        Key={'artifactFor': artifact_for, 'artifactId': artifact_id}
+    get_tour_table("Artifacts", tour_id).delete_item(
+        Key={"artifactFor": artifact_for, "artifactId": artifact_id}
     )
 
-    return success_response({
-        'artifactFor': artifact_for,
-        'artifactId': artifact_id,
-        'deleted': True,
-        's3Key': s3_key,
-    })
+    return success_response(
+        {
+            "artifactFor": artifact_for,
+            "artifactId": artifact_id,
+            "deleted": True,
+            "s3Key": s3_key,
+        }
+    )

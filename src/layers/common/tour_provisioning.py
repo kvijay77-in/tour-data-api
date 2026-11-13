@@ -31,254 +31,253 @@ from dynamodb_utils import get_tour_table_name
 from logger import get_logger
 from models import TOUR_TABLE_TYPES
 
-
-TABLE_ALREADY_EXISTS_CODE = 'ResourceInUseException'
+TABLE_ALREADY_EXISTS_CODE = "ResourceInUseException"
 logger = get_logger(__name__)
 
 
 # Table definitions for tour-specific tables
 TOUR_TABLE_DEFINITIONS = {
-    'TourRider': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'riderId', 'AttributeType': 'S'},
-            {'AttributeName': 'profileId', 'AttributeType': 'S'},
+    "TourRider": {
+        "AttributeDefinitions": [
+            {"AttributeName": "riderId", "AttributeType": "S"},
+            {"AttributeName": "profileId", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'riderId', 'KeyType': 'HASH'},
+        "KeySchema": [
+            {"AttributeName": "riderId", "KeyType": "HASH"},
         ],
-        'GlobalSecondaryIndexes': [
+        "GlobalSecondaryIndexes": [
             {
-                'IndexName': 'ProfileIdIndex',
-                'KeySchema': [
-                    {'AttributeName': 'profileId', 'KeyType': 'HASH'},
+                "IndexName": "ProfileIdIndex",
+                "KeySchema": [
+                    {"AttributeName": "profileId", "KeyType": "HASH"},
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
+                "Projection": {"ProjectionType": "ALL"},
             },
         ],
     },
-    'Ride': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'rideId', 'AttributeType': 'S'},
-            {'AttributeName': 'date', 'AttributeType': 'S'},
-            {'AttributeName': 'status', 'AttributeType': 'S'},
+    "Ride": {
+        "AttributeDefinitions": [
+            {"AttributeName": "rideId", "AttributeType": "S"},
+            {"AttributeName": "date", "AttributeType": "S"},
+            {"AttributeName": "status", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'rideId', 'KeyType': 'HASH'},
+        "KeySchema": [
+            {"AttributeName": "rideId", "KeyType": "HASH"},
         ],
-        'GlobalSecondaryIndexes': [
+        "GlobalSecondaryIndexes": [
             {
-                'IndexName': 'DateIndex',
-                'KeySchema': [
-                    {'AttributeName': 'date', 'KeyType': 'HASH'},
+                "IndexName": "DateIndex",
+                "KeySchema": [
+                    {"AttributeName": "date", "KeyType": "HASH"},
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
+                "Projection": {"ProjectionType": "ALL"},
             },
             {
-                'IndexName': 'StatusIndex',
-                'KeySchema': [
-                    {'AttributeName': 'status', 'KeyType': 'HASH'},
-                    {'AttributeName': 'date', 'KeyType': 'RANGE'},
+                "IndexName": "StatusIndex",
+                "KeySchema": [
+                    {"AttributeName": "status", "KeyType": "HASH"},
+                    {"AttributeName": "date", "KeyType": "RANGE"},
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
-            },
-        ],
-    },
-    'CheckIn': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'rideId', 'AttributeType': 'S'},
-            {'AttributeName': 'checkInId', 'AttributeType': 'S'},
-            {'AttributeName': 'riderId', 'AttributeType': 'S'},
-            {'AttributeName': 'timestamp', 'AttributeType': 'S'},
-        ],
-        'KeySchema': [
-            {'AttributeName': 'rideId', 'KeyType': 'HASH'},
-            {'AttributeName': 'checkInId', 'KeyType': 'RANGE'},
-        ],
-        'GlobalSecondaryIndexes': [
-            {
-                'IndexName': 'RiderIdIndex',
-                'KeySchema': [
-                    {'AttributeName': 'riderId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
-                ],
-                'Projection': {'ProjectionType': 'ALL'},
+                "Projection": {"ProjectionType": "ALL"},
             },
         ],
     },
-    'User': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'userId', 'AttributeType': 'S'},
-            {'AttributeName': 'email', 'AttributeType': 'S'},
+    "CheckIn": {
+        "AttributeDefinitions": [
+            {"AttributeName": "rideId", "AttributeType": "S"},
+            {"AttributeName": "checkInId", "AttributeType": "S"},
+            {"AttributeName": "riderId", "AttributeType": "S"},
+            {"AttributeName": "timestamp", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'userId', 'KeyType': 'HASH'},
+        "KeySchema": [
+            {"AttributeName": "rideId", "KeyType": "HASH"},
+            {"AttributeName": "checkInId", "KeyType": "RANGE"},
         ],
-        'GlobalSecondaryIndexes': [
+        "GlobalSecondaryIndexes": [
             {
-                'IndexName': 'EmailIndex',
-                'KeySchema': [
-                    {'AttributeName': 'email', 'KeyType': 'HASH'},
+                "IndexName": "RiderIdIndex",
+                "KeySchema": [
+                    {"AttributeName": "riderId", "KeyType": "HASH"},
+                    {"AttributeName": "timestamp", "KeyType": "RANGE"},
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
+                "Projection": {"ProjectionType": "ALL"},
             },
         ],
     },
-    'Notification': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'audience', 'AttributeType': 'S'},
-            {'AttributeName': 'sk', 'AttributeType': 'S'},
+    "User": {
+        "AttributeDefinitions": [
+            {"AttributeName": "userId", "AttributeType": "S"},
+            {"AttributeName": "email", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'audience', 'KeyType': 'HASH'},
-            {'AttributeName': 'sk', 'KeyType': 'RANGE'},
+        "KeySchema": [
+            {"AttributeName": "userId", "KeyType": "HASH"},
         ],
-        'TimeToLiveSpecification': {
-            'AttributeName': 'expiresAt',
-            'Enabled': True,
+        "GlobalSecondaryIndexes": [
+            {
+                "IndexName": "EmailIndex",
+                "KeySchema": [
+                    {"AttributeName": "email", "KeyType": "HASH"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            },
+        ],
+    },
+    "Notification": {
+        "AttributeDefinitions": [
+            {"AttributeName": "audience", "AttributeType": "S"},
+            {"AttributeName": "sk", "AttributeType": "S"},
+        ],
+        "KeySchema": [
+            {"AttributeName": "audience", "KeyType": "HASH"},
+            {"AttributeName": "sk", "KeyType": "RANGE"},
+        ],
+        "TimeToLiveSpecification": {
+            "AttributeName": "expiresAt",
+            "Enabled": True,
         },
-        'StreamSpecification': {
-            'StreamEnabled': True,
-            'StreamViewType': 'NEW_IMAGE',
-        },
-    },
-    'NotificationArchive': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'audience', 'AttributeType': 'S'},
-            {'AttributeName': 'sk', 'AttributeType': 'S'},
-        ],
-        'KeySchema': [
-            {'AttributeName': 'audience', 'KeyType': 'HASH'},
-            {'AttributeName': 'sk', 'KeyType': 'RANGE'},
-        ],
-        'TimeToLiveSpecification': {
-            'AttributeName': 'expiresAt',
-            'Enabled': True,
+        "StreamSpecification": {
+            "StreamEnabled": True,
+            "StreamViewType": "NEW_IMAGE",
         },
     },
-    'Artifacts': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'artifactFor', 'AttributeType': 'S'},
-            {'AttributeName': 'artifactId', 'AttributeType': 'S'},
+    "NotificationArchive": {
+        "AttributeDefinitions": [
+            {"AttributeName": "audience", "AttributeType": "S"},
+            {"AttributeName": "sk", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'artifactFor', 'KeyType': 'HASH'},
-            {'AttributeName': 'artifactId', 'KeyType': 'RANGE'},
+        "KeySchema": [
+            {"AttributeName": "audience", "KeyType": "HASH"},
+            {"AttributeName": "sk", "KeyType": "RANGE"},
+        ],
+        "TimeToLiveSpecification": {
+            "AttributeName": "expiresAt",
+            "Enabled": True,
+        },
+    },
+    "Artifacts": {
+        "AttributeDefinitions": [
+            {"AttributeName": "artifactFor", "AttributeType": "S"},
+            {"AttributeName": "artifactId", "AttributeType": "S"},
+        ],
+        "KeySchema": [
+            {"AttributeName": "artifactFor", "KeyType": "HASH"},
+            {"AttributeName": "artifactId", "KeyType": "RANGE"},
         ],
     },
-    'Event': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'eventId', 'AttributeType': 'S'},
+    "Event": {
+        "AttributeDefinitions": [
+            {"AttributeName": "eventId", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'eventId', 'KeyType': 'HASH'},
+        "KeySchema": [
+            {"AttributeName": "eventId", "KeyType": "HASH"},
         ],
     },
-    'EventOccurrence': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'eventId', 'AttributeType': 'S'},
-            {'AttributeName': 'dateSeq', 'AttributeType': 'S'},
-            {'AttributeName': 'date', 'AttributeType': 'S'},
-            {'AttributeName': 'status', 'AttributeType': 'S'},
+    "EventOccurrence": {
+        "AttributeDefinitions": [
+            {"AttributeName": "eventId", "AttributeType": "S"},
+            {"AttributeName": "dateSeq", "AttributeType": "S"},
+            {"AttributeName": "date", "AttributeType": "S"},
+            {"AttributeName": "status", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'eventId', 'KeyType': 'HASH'},
-            {'AttributeName': 'dateSeq', 'KeyType': 'RANGE'},
+        "KeySchema": [
+            {"AttributeName": "eventId", "KeyType": "HASH"},
+            {"AttributeName": "dateSeq", "KeyType": "RANGE"},
         ],
-        'GlobalSecondaryIndexes': [
+        "GlobalSecondaryIndexes": [
             {
-                'IndexName': 'DateIndex',
-                'KeySchema': [
-                    {'AttributeName': 'date', 'KeyType': 'HASH'},
-                    {'AttributeName': 'eventId', 'KeyType': 'RANGE'},
+                "IndexName": "DateIndex",
+                "KeySchema": [
+                    {"AttributeName": "date", "KeyType": "HASH"},
+                    {"AttributeName": "eventId", "KeyType": "RANGE"},
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
+                "Projection": {"ProjectionType": "ALL"},
             },
             {
-                'IndexName': 'StatusIndex',
-                'KeySchema': [
-                    {'AttributeName': 'status', 'KeyType': 'HASH'},
-                    {'AttributeName': 'date', 'KeyType': 'RANGE'},
+                "IndexName": "StatusIndex",
+                "KeySchema": [
+                    {"AttributeName": "status", "KeyType": "HASH"},
+                    {"AttributeName": "date", "KeyType": "RANGE"},
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
-            },
-        ],
-    },
-    'EventActivityLogs': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'occurrenceId', 'AttributeType': 'S'},
-            {'AttributeName': 'recordId', 'AttributeType': 'S'},
-            {'AttributeName': 'riderId', 'AttributeType': 'S'},
-            {'AttributeName': 'timestamp', 'AttributeType': 'S'},
-        ],
-        'KeySchema': [
-            {'AttributeName': 'occurrenceId', 'KeyType': 'HASH'},
-            {'AttributeName': 'recordId', 'KeyType': 'RANGE'},
-        ],
-        'GlobalSecondaryIndexes': [
-            {
-                'IndexName': 'RiderTimestampIndex',
-                'KeySchema': [
-                    {'AttributeName': 'riderId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'timestamp', 'KeyType': 'RANGE'},
-                ],
-                'Projection': {'ProjectionType': 'ALL'},
+                "Projection": {"ProjectionType": "ALL"},
             },
         ],
     },
-    'EventRegistration': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'occurrenceId', 'AttributeType': 'S'},
-            {'AttributeName': 'riderId', 'AttributeType': 'S'},
+    "EventActivityLogs": {
+        "AttributeDefinitions": [
+            {"AttributeName": "occurrenceId", "AttributeType": "S"},
+            {"AttributeName": "recordId", "AttributeType": "S"},
+            {"AttributeName": "riderId", "AttributeType": "S"},
+            {"AttributeName": "timestamp", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'occurrenceId', 'KeyType': 'HASH'},
-            {'AttributeName': 'riderId', 'KeyType': 'RANGE'},
+        "KeySchema": [
+            {"AttributeName": "occurrenceId", "KeyType": "HASH"},
+            {"AttributeName": "recordId", "KeyType": "RANGE"},
         ],
-        'GlobalSecondaryIndexes': [
+        "GlobalSecondaryIndexes": [
             {
-                'IndexName': 'RiderIdIndex',
-                'KeySchema': [
-                    {'AttributeName': 'riderId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'occurrenceId', 'KeyType': 'RANGE'},
+                "IndexName": "RiderTimestampIndex",
+                "KeySchema": [
+                    {"AttributeName": "riderId", "KeyType": "HASH"},
+                    {"AttributeName": "timestamp", "KeyType": "RANGE"},
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
+                "Projection": {"ProjectionType": "ALL"},
             },
         ],
     },
-    'Hotel': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'hotelId', 'AttributeType': 'S'},
+    "EventRegistration": {
+        "AttributeDefinitions": [
+            {"AttributeName": "occurrenceId", "AttributeType": "S"},
+            {"AttributeName": "riderId", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'hotelId', 'KeyType': 'HASH'},
+        "KeySchema": [
+            {"AttributeName": "occurrenceId", "KeyType": "HASH"},
+            {"AttributeName": "riderId", "KeyType": "RANGE"},
+        ],
+        "GlobalSecondaryIndexes": [
+            {
+                "IndexName": "RiderIdIndex",
+                "KeySchema": [
+                    {"AttributeName": "riderId", "KeyType": "HASH"},
+                    {"AttributeName": "occurrenceId", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            },
         ],
     },
-    'RoomAllocation': {
-        'AttributeDefinitions': [
-            {'AttributeName': 'stayDate', 'AttributeType': 'S'},
-            {'AttributeName': 'riderId', 'AttributeType': 'S'},
-            {'AttributeName': 'hotelId', 'AttributeType': 'S'},
+    "Hotel": {
+        "AttributeDefinitions": [
+            {"AttributeName": "hotelId", "AttributeType": "S"},
         ],
-        'KeySchema': [
-            {'AttributeName': 'stayDate', 'KeyType': 'HASH'},
-            {'AttributeName': 'riderId', 'KeyType': 'RANGE'},
+        "KeySchema": [
+            {"AttributeName": "hotelId", "KeyType": "HASH"},
         ],
-        'GlobalSecondaryIndexes': [
+    },
+    "RoomAllocation": {
+        "AttributeDefinitions": [
+            {"AttributeName": "stayDate", "AttributeType": "S"},
+            {"AttributeName": "riderId", "AttributeType": "S"},
+            {"AttributeName": "hotelId", "AttributeType": "S"},
+        ],
+        "KeySchema": [
+            {"AttributeName": "stayDate", "KeyType": "HASH"},
+            {"AttributeName": "riderId", "KeyType": "RANGE"},
+        ],
+        "GlobalSecondaryIndexes": [
             {
-                'IndexName': 'RiderIdIndex',
-                'KeySchema': [
-                    {'AttributeName': 'riderId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'stayDate', 'KeyType': 'RANGE'},
+                "IndexName": "RiderIdIndex",
+                "KeySchema": [
+                    {"AttributeName": "riderId", "KeyType": "HASH"},
+                    {"AttributeName": "stayDate", "KeyType": "RANGE"},
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
+                "Projection": {"ProjectionType": "ALL"},
             },
             {
-                'IndexName': 'HotelDateIndex',
-                'KeySchema': [
-                    {'AttributeName': 'hotelId', 'KeyType': 'HASH'},
-                    {'AttributeName': 'stayDate', 'KeyType': 'RANGE'},
+                "IndexName": "HotelDateIndex",
+                "KeySchema": [
+                    {"AttributeName": "hotelId", "KeyType": "HASH"},
+                    {"AttributeName": "stayDate", "KeyType": "RANGE"},
                 ],
-                'Projection': {'ProjectionType': 'ALL'},
+                "Projection": {"ProjectionType": "ALL"},
             },
         ],
     },
@@ -296,18 +295,18 @@ def build_tour_table_tags(tour_id):
         List of tag dictionaries
     """
     tags = [
-        {'Key': 'Project', 'Value': 'tour-data-api'},
-        {'Key': 'Application', 'Value': 'TourManagement'},
-        {'Key': 'ManagedBy', 'Value': 'Lambda'},
-        {'Key': 'tourId', 'Value': tour_id},
+        {"Key": "Project", "Value": "tour-data-api"},
+        {"Key": "Application", "Value": "TourManagement"},
+        {"Key": "ManagedBy", "Value": "Lambda"},
+        {"Key": "tourId", "Value": tour_id},
     ]
 
-    environment = os.environ.get('ENVIRONMENT', 'dev')
-    tags.append({'Key': 'Environment', 'Value': environment})
+    environment = os.environ.get("ENVIRONMENT", "dev")
+    tags.append({"Key": "Environment", "Value": environment})
 
-    subscription_id = os.environ.get('SUBSCRIPTION_ID', '')
+    subscription_id = os.environ.get("SUBSCRIPTION_ID", "")
     if subscription_id:
-        tags.append({'Key': 'SubscriptionId', 'Value': subscription_id})
+        tags.append({"Key": "SubscriptionId", "Value": subscription_id})
 
     return tags
 
@@ -334,34 +333,36 @@ def _create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=Fal
     definition = TOUR_TABLE_DEFINITIONS[table_type]
 
     create_params = {
-        'TableName': table_name,
-        'AttributeDefinitions': definition['AttributeDefinitions'],
-        'KeySchema': definition['KeySchema'],
-        'BillingMode': 'PAY_PER_REQUEST',
-        'SSESpecification': {'Enabled': True},
-        'Tags': build_tour_table_tags(tour_id),
+        "TableName": table_name,
+        "AttributeDefinitions": definition["AttributeDefinitions"],
+        "KeySchema": definition["KeySchema"],
+        "BillingMode": "PAY_PER_REQUEST",
+        "SSESpecification": {"Enabled": True},
+        "Tags": build_tour_table_tags(tour_id),
     }
 
-    if definition.get('GlobalSecondaryIndexes'):
-        create_params['GlobalSecondaryIndexes'] = definition['GlobalSecondaryIndexes']
-    if definition.get('StreamSpecification'):
-        create_params['StreamSpecification'] = definition['StreamSpecification']
+    if definition.get("GlobalSecondaryIndexes"):
+        create_params["GlobalSecondaryIndexes"] = definition["GlobalSecondaryIndexes"]
+    if definition.get("StreamSpecification"):
+        create_params["StreamSpecification"] = definition["StreamSpecification"]
 
     def _is_new_notification_schema(description):
-        key_schema = description.get('Table', {}).get('KeySchema', [])
-        keys = [(k.get('AttributeName'), k.get('KeyType')) for k in key_schema]
-        return keys == [('audience', 'HASH'), ('sk', 'RANGE')]
+        key_schema = description.get("Table", {}).get("KeySchema", [])
+        keys = [(k.get("AttributeName"), k.get("KeyType")) for k in key_schema]
+        return keys == [("audience", "HASH"), ("sk", "RANGE")]
 
     try:
         dynamodb_client.create_table(**create_params)
     except ClientError as e:
-        if ignore_existing and e.response['Error']['Code'] == TABLE_ALREADY_EXISTS_CODE:
-            if table_type != 'Notification':
-                if definition.get('TimeToLiveSpecification'):
+        if ignore_existing and e.response["Error"]["Code"] == TABLE_ALREADY_EXISTS_CODE:
+            if table_type != "Notification":
+                if definition.get("TimeToLiveSpecification"):
                     try:
                         dynamodb_client.update_time_to_live(
                             TableName=table_name,
-                            TimeToLiveSpecification=definition['TimeToLiveSpecification'],
+                            TimeToLiveSpecification=definition[
+                                "TimeToLiveSpecification"
+                            ],
                         )
                     except ClientError:
                         pass
@@ -373,10 +374,15 @@ def _create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=Fal
                 return table_name, False
 
             scan = dynamodb_client.scan(TableName=table_name, Limit=1)
-            if scan.get('Items'):
+            if scan.get("Items"):
                 return table_name, False
 
-            if os.environ.get('ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE', 'false').lower() != 'true':
+            if (
+                os.environ.get(
+                    "ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE", "false"
+                ).lower()
+                != "true"
+            ):
                 logger.info(
                     "Legacy notification table detected for %s; skipping recreate because ALLOW_LEGACY_NOTIFICATION_TABLE_RECREATE is not true",
                     table_name,
@@ -384,7 +390,7 @@ def _create_tour_table(dynamodb_client, table_type, tour_id, ignore_existing=Fal
                 return table_name, False
 
             dynamodb_client.delete_table(TableName=table_name)
-            waiter = dynamodb_client.get_waiter('table_not_exists')
+            waiter = dynamodb_client.get_waiter("table_not_exists")
             waiter.wait(TableName=table_name)
             dynamodb_client.create_table(**create_params)
             return table_name, True
@@ -412,8 +418,8 @@ def wait_for_tour_tables(dynamodb_client, table_names, max_wait=90):
         for table_name in list(pending):
             try:
                 resp = dynamodb_client.describe_table(TableName=table_name)
-                status = resp['Table']['TableStatus']
-                if status == 'ACTIVE':
+                status = resp["Table"]["TableStatus"]
+                if status == "ACTIVE":
                     pending.discard(table_name)
             except ClientError:
                 pass  # Table may not exist yet
@@ -422,7 +428,9 @@ def wait_for_tour_tables(dynamodb_client, table_names, max_wait=90):
             time.sleep(3)
 
     if pending:
-        raise TimeoutError(f"Tables did not become ACTIVE within {max_wait}s: {pending}")
+        raise TimeoutError(
+            f"Tables did not become ACTIVE within {max_wait}s: {pending}"
+        )
 
 
 def provision_tour_tables(dynamodb_client, tour_id, ignore_existing=False):
@@ -453,30 +461,32 @@ def provision_tour_tables(dynamodb_client, tour_id, ignore_existing=False):
 
     wait_for_tour_tables(dynamodb_client, created_tables)
 
-    push_sender_arn = os.environ.get('PUSH_SENDER_FUNCTION_ARN')
+    push_sender_arn = os.environ.get("PUSH_SENDER_FUNCTION_ARN")
     if push_sender_arn:
         try:
-            notification_table = get_tour_table_name('Notification', tour_id)
-            stream_arn = dynamodb_client.describe_table(TableName=notification_table)['Table'].get('LatestStreamArn')
+            notification_table = get_tour_table_name("Notification", tour_id)
+            stream_arn = dynamodb_client.describe_table(TableName=notification_table)[
+                "Table"
+            ].get("LatestStreamArn")
             if stream_arn:
-                lambda_client = boto3.client('lambda')
+                lambda_client = boto3.client("lambda")
                 existing = lambda_client.list_event_source_mappings(
                     FunctionName=push_sender_arn,
                     EventSourceArn=stream_arn,
-                ).get('EventSourceMappings', [])
+                ).get("EventSourceMappings", [])
                 if not existing:
                     lambda_client.create_event_source_mapping(
                         EventSourceArn=stream_arn,
                         FunctionName=push_sender_arn,
-                        StartingPosition='LATEST',
+                        StartingPosition="LATEST",
                         BatchSize=100,
                         MaximumRetryAttempts=3,
                         FilterCriteria={
-                            'Filters': [
+                            "Filters": [
                                 {
-                                    'Pattern': (
-                                        '{\"eventName\":[\"INSERT\"],'
-                                        '\"dynamodb\":{\"NewImage\":{\"push\":{\"BOOL\":[true]}}}}'
+                                    "Pattern": (
+                                        '{"eventName":["INSERT"],'
+                                        '"dynamodb":{"NewImage":{"push":{"BOOL":[true]}}}}'
                                     )
                                 }
                             ]

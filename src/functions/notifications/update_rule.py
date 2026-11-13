@@ -10,13 +10,13 @@ from response import bad_request_response, not_found_response, success_response
 from handler_utils import api_handler
 from models import utc_now_iso
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource("dynamodb")
 
 
-@api_handler('Failed to update rule')
+@api_handler("Failed to update rule")
 def lambda_handler(event, context):
     try:
         log_event(logger, event)
@@ -24,21 +24,21 @@ def lambda_handler(event, context):
         if deny:
             return deny
 
-        rule_id = (event.get('pathParameters') or {}).get('ruleId')
+        rule_id = (event.get("pathParameters") or {}).get("ruleId")
         if not rule_id:
-            return bad_request_response('ruleId is required in path')
+            return bad_request_response("ruleId is required in path")
 
         body = parse_json_body(event)
-        validated = validate_rule_payload({**body, 'ruleId': rule_id}, partial=False)
+        validated = validate_rule_payload({**body, "ruleId": rule_id}, partial=False)
 
-        table = dynamodb.Table(__import__('os').environ['NOTIFICATION_RULE_TABLE'])
-        existing = table.get_item(Key={'ruleId': rule_id}).get('Item')
+        table = dynamodb.Table(__import__("os").environ["NOTIFICATION_RULE_TABLE"])
+        existing = table.get_item(Key={"ruleId": rule_id}).get("Item")
         if not existing:
-            return not_found_response('NotificationRule', rule_id)
+            return not_found_response("NotificationRule", rule_id)
 
-        validated['version'] = int(existing.get('version') or 0) + 1
-        validated['updatedAt'] = utc_now_iso()
-        validated['updatedBy'] = get_jwt_claim(event, 'sub', 'system')
+        validated["version"] = int(existing.get("version") or 0) + 1
+        validated["updatedAt"] = utc_now_iso()
+        validated["updatedBy"] = get_jwt_claim(event, "sub", "system")
 
         table.put_item(Item=validated)
         return success_response(validated)

@@ -14,20 +14,24 @@ from botocore.exceptions import BotoCoreError, ClientError
 from dynamodb_utils import get_item, get_tour_item, query_tour_items
 from logger import get_logger, log_event
 from rbac import Permission, require_permission
-from response import bad_request_response, internal_error_response, not_found_response, success_response
+from response import (
+    bad_request_response,
+    internal_error_response,
+    not_found_response,
+    success_response,
+)
 from handler_utils import api_handler
 from validation import ValidationError, validate_ride_id, validate_tour_id
 
-
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 logger = get_logger(__name__)
-s3_client = boto3.client('s3')
+s3_client = boto3.client("s3")
 
 DEFAULT_EXPIRY_SECONDS = 900
 MAX_EXPIRY_SECONDS = 3600
 
 
-@api_handler('Failed to fetch artifacts')
+@api_handler("Failed to fetch artifacts")
 def lambda_handler(event, context):
     """
     Get artifacts manifest for a ride.
@@ -53,8 +57,8 @@ def lambda_handler(event, context):
         return deny
 
     # Extract path and query parameters
-    tour_id = (event.get('pathParameters') or {}).get('tourId')
-    ride_id = (event.get('pathParameters') or {}).get('rideId')
+    tour_id = (event.get("pathParameters") or {}).get("tourId")
+    ride_id = (event.get("pathParameters") or {}).get("rideId")
 
     if not tour_id or not ride_id:
         return bad_request_response("tourId and rideId are required in path")
@@ -66,22 +70,18 @@ def lambda_handler(event, context):
         return bad_request_response(exc.message, exc.details)
 
     # Verify tour exists
-    tour = get_item(table_name_env='TOUR_MASTER_TABLE', key={'tourId': tour_id})
+    tour = get_item(table_name_env="TOUR_MASTER_TABLE", key={"tourId": tour_id})
     if not tour:
-        return not_found_response('Tour', tour_id)
+        return not_found_response("Tour", tour_id)
 
     # Verify ride exists
-    ride = get_tour_item(
-        table_type='Ride',
-        tour_id=tour_id,
-        key={'rideId': ride_id}
-    )
+    ride = get_tour_item(table_type="Ride", tour_id=tour_id, key={"rideId": ride_id})
     if not ride:
-        return not_found_response('Ride', ride_id)
+        return not_found_response("Ride", ride_id)
 
     # Parse expiry
     expires_in = DEFAULT_EXPIRY_SECONDS
-    expires_in_param = (event.get('queryStringParameters') or {}).get('expiresIn')
+    expires_in_param = (event.get("queryStringParameters") or {}).get("expiresIn")
     if expires_in_param:
         try:
             expires_in = int(expires_in_param)
@@ -95,51 +95,55 @@ def lambda_handler(event, context):
     # Query artifacts for this ride (artifactFor = tourId#rideId)
     artifact_for = f"{tour_id}#{ride_id}"
     artifacts = query_tour_items(
-        table_type='Artifacts',
+        table_type="Artifacts",
         tour_id=tour_id,
-        key_condition_expression='artifactFor = :artifactFor',
-        expression_values={':artifactFor': artifact_for},
+        key_condition_expression="artifactFor = :artifactFor",
+        expression_values={":artifactFor": artifact_for},
     )
 
     # Filter by artifactId if provided
-    artifact_id_filter = (event.get('queryStringParameters') or {}).get('artifactId')
+    artifact_id_filter = (event.get("queryStringParameters") or {}).get("artifactId")
     if artifact_id_filter:
-        artifacts = [a for a in artifacts if a.get('artifactId') == artifact_id_filter]
+        artifacts = [a for a in artifacts if a.get("artifactId") == artifact_id_filter]
         if not artifacts:
             return success_response([])
 
     # Build response with presigned URLs
-    bucket_name = os.environ.get('ARTIFACTS_BUCKET')
+    bucket_name = os.environ.get("ARTIFACTS_BUCKET")
     if not bucket_name:
-        return internal_error_response('Artifacts bucket not configured')
+        return internal_error_response("Artifacts bucket not configured")
 
     manifest = []
     for artifact in artifacts:
-        s3_key = artifact.get('s3Key')
+        s3_key = artifact.get("s3Key")
         if not s3_key:
-            logger.warning("Artifact missing s3Key: %s", artifact.get('artifactId'))
+            logger.warning("Artifact missing s3Key: %s", artifact.get("artifactId"))
             continue
 
         try:
             download_url = s3_client.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': bucket_name, 'Key': s3_key},
+                "get_object",
+                Params={"Bucket": bucket_name, "Key": s3_key},
                 ExpiresIn=expires_in,
             )
 
-            manifest.append({
-                'artifactId': artifact.get('artifactId'),
-                's3Key': s3_key,
-                'contentType': artifact.get('contentType'),
-                'version': artifact.get('version'),
-                'title': artifact.get('title'),
-                'downloadUrl': download_url,
-                'expiresIn': expires_in,
-                'createdAt': artifact.get('createdAt'),
-                'updatedAt': artifact.get('updatedAt'),
-            })
+            manifest.append(
+                {
+                    "artifactId": artifact.get("artifactId"),
+                    "s3Key": s3_key,
+                    "contentType": artifact.get("contentType"),
+                    "version": artifact.get("version"),
+                    "title": artifact.get("title"),
+                    "downloadUrl": download_url,
+                    "expiresIn": expires_in,
+                    "createdAt": artifact.get("createdAt"),
+                    "updatedAt": artifact.get("updatedAt"),
+                }
+            )
         except (ClientError, BotoCoreError) as exc:
-            logger.error("Error generating presigned URL for %s: %s", s3_key, exc, exc_info=True)
+            logger.error(
+                "Error generating presigned URL for %s: %s", s3_key, exc, exc_info=True
+            )
             continue
 
     return success_response(manifest)
