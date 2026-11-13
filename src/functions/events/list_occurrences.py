@@ -3,7 +3,7 @@ import sys
 from rbac import Permission, require_permission
 from event_engine import list_occurrences
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 
 def lambda_handler(event, context):

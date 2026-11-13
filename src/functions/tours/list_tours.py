@@ -13,28 +13,28 @@ from handler_utils import api_handler
 from dynamodb_utils import scan_items, query_items
 from models import TourStatus
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
 
 
-@api_handler('Failed to list tours')
+@api_handler("Failed to list tours")
 def lambda_handler(event, context):
     """
     List all tours with optional status filter
-    
+
     Query parameters (optional):
     - status: Filter by tour status (PLANNING, PROVISIONING, ACTIVE, COMPLETED, ARCHIVED)
-    
+
     Returns:
     - 200: List of tours (may be empty)
     - 400: Invalid status value
     - 500: Server error
     """
     # Extract query parameters
-    query_params = event.get('queryStringParameters') or {}
-    status_filter = query_params.get('status')
-    
+    query_params = event.get("queryStringParameters") or {}
+    status_filter = query_params.get("status")
+
     # Validate status if provided
     if status_filter:
         try:
@@ -45,29 +45,26 @@ def lambda_handler(event, context):
             return error_response(
                 error_code="INVALID_STATUS",
                 message=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
-                status_code=400
+                status_code=400,
             )
-    
-    logger.info("Listing tours with status filter: %s", status_filter or 'all')
-    
+
+    logger.info("Listing tours with status filter: %s", status_filter or "all")
+
     if status_filter:
         # Use StatusIndex GSI for efficient filtering
         items = query_items(
-            table_name_env='TOUR_MASTER_TABLE',
-            key_condition_expression='#status = :status',
-            expression_values={':status': status_filter},
-            expression_names={'#status': 'status'},
-            index_name='StatusIndex'
+            table_name_env="TOUR_MASTER_TABLE",
+            key_condition_expression="#status = :status",
+            expression_values={":status": status_filter},
+            expression_names={"#status": "status"},
+            index_name="StatusIndex",
         )
     else:
         # Get all tours via scan
-        items = scan_items(
-            table_name_env='TOUR_MASTER_TABLE'
-        )
-    
+        items = scan_items(table_name_env="TOUR_MASTER_TABLE")
+
     logger.info("Found %s tour(s)", len(items))
-    
-    return success_response({
-        'tours': [apply_tour_defaults(item) for item in items],
-        'count': len(items)
-    })
+
+    return success_response(
+        {"tours": [apply_tour_defaults(item) for item in items], "count": len(items)}
+    )

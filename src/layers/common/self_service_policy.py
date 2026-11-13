@@ -24,11 +24,10 @@ rides and events created before these settings existed resolve to the defaults.
 
 from typing import Any, Dict, List, Optional
 
-
 STAGE_TYPE_SELF_CHECKIN_DEFAULTS = {
-    'START': True,
-    'FINISH': True,
-    'PIT_STOP': False,
+    "START": True,
+    "FINISH": True,
+    "PIT_STOP": False,
 }
 
 
@@ -47,40 +46,50 @@ def _first_set(*values: Any) -> Optional[bool]:
 
 def stage_check_in_allowed(ride: Dict[str, Any], stage: Dict[str, Any]) -> bool:
     """Resolve whether a rider may self check in at a stage."""
-    resolved = _first_set(stage.get('selfCheckInAllowed'), ride.get('selfCheckInAllowed'))
+    resolved = _first_set(
+        stage.get("selfCheckInAllowed"), ride.get("selfCheckInAllowed")
+    )
     if resolved is not None:
         return resolved
-    return STAGE_TYPE_SELF_CHECKIN_DEFAULTS.get(stage.get('type'), False)
+    return STAGE_TYPE_SELF_CHECKIN_DEFAULTS.get(stage.get("type"), False)
 
 
 def not_riding_allowed(ride: Dict[str, Any]) -> bool:
     """Resolve whether a rider may self-report Not Riding for a ride."""
-    for stage in ride.get('stages') or []:
-        if stage.get('type') == 'START':
-            return _explicit_bool(stage.get('selfNotRidingAllowed')) is True
+    for stage in ride.get("stages") or []:
+        if stage.get("type") == "START":
+            return _explicit_bool(stage.get("selfNotRidingAllowed")) is True
     return False
 
 
 def quit_riding_allowed(ride: Dict[str, Any], tour: Optional[Dict[str, Any]]) -> bool:
     """Resolve whether a rider may self-report Quit Riding for a ride."""
-    resolved = _first_set(ride.get('selfQuitRidingAllowed'), (tour or {}).get('selfQuitRidingAllowed'))
+    resolved = _first_set(
+        ride.get("selfQuitRidingAllowed"), (tour or {}).get("selfQuitRidingAllowed")
+    )
     return resolved is True
 
 
-def build_ride_self_service(ride: Dict[str, Any], tour: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def build_ride_self_service(
+    ride: Dict[str, Any], tour: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
     """Build the calculated ``selfService`` object returned on ride responses."""
     stages: List[Dict[str, Any]] = []
-    for stage in sorted(ride.get('stages') or [], key=lambda item: int(item.get('stageNumber', 0))):
-        stages.append({
-            'stageNumber': int(stage.get('stageNumber', 0)),
-            'stageId': stage.get('stageId'),
-            'stageType': stage.get('type'),
-            'checkInAllowed': stage_check_in_allowed(ride, stage),
-        })
+    for stage in sorted(
+        ride.get("stages") or [], key=lambda item: int(item.get("stageNumber", 0))
+    ):
+        stages.append(
+            {
+                "stageNumber": int(stage.get("stageNumber", 0)),
+                "stageId": stage.get("stageId"),
+                "stageType": stage.get("type"),
+                "checkInAllowed": stage_check_in_allowed(ride, stage),
+            }
+        )
     return {
-        'quitRidingAllowed': quit_riding_allowed(ride, tour),
-        'notRidingAllowed': not_riding_allowed(ride),
-        'stages': stages,
+        "quitRidingAllowed": quit_riding_allowed(ride, tour),
+        "notRidingAllowed": not_riding_allowed(ride),
+        "stages": stages,
     }
 
 
@@ -92,10 +101,10 @@ def activity_self_service_allowed(
 ) -> bool:
     """Resolve rider self-service for one activity in one occurrence."""
     resolved = _first_set(
-        (override or {}).get('selfServiceAllowed'),
-        occurrence.get('selfServiceAllowed'),
-        activity.get('selfServiceAllowed'),
-        event_definition.get('selfServiceAllowed'),
+        (override or {}).get("selfServiceAllowed"),
+        occurrence.get("selfServiceAllowed"),
+        activity.get("selfServiceAllowed"),
+        event_definition.get("selfServiceAllowed"),
     )
     return resolved is True
 
@@ -105,5 +114,7 @@ def apply_tour_defaults(tour: Optional[Dict[str, Any]]) -> Optional[Dict[str, An
     if tour is None:
         return None
     result = dict(tour)
-    result['selfQuitRidingAllowed'] = _explicit_bool(tour.get('selfQuitRidingAllowed')) is True
+    result["selfQuitRidingAllowed"] = (
+        _explicit_bool(tour.get("selfQuitRidingAllowed")) is True
+    )
     return result

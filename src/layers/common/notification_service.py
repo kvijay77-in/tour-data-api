@@ -60,10 +60,14 @@ def validate_audience_expression(value: str, allow_placeholders: bool = False) -
     return any(pattern.fullmatch(candidate) for pattern in AUDIENCE_PATTERNS)
 
 
-def validate_audiences(audiences: Iterable[str], allow_placeholders: bool = False) -> List[str]:
+def validate_audiences(
+    audiences: Iterable[str], allow_placeholders: bool = False
+) -> List[str]:
     normalized = []
     for audience in audiences or []:
-        if not validate_audience_expression(audience, allow_placeholders=allow_placeholders):
+        if not validate_audience_expression(
+            audience, allow_placeholders=allow_placeholders
+        ):
             raise ValueError(f"Invalid audience expression: {audience}")
         normalized.append(audience)
     if not normalized:
@@ -71,7 +75,9 @@ def validate_audiences(audiences: Iterable[str], allow_placeholders: bool = Fals
     return normalized
 
 
-def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dict[str, Any]:
+def validate_rule_payload(
+    payload: Dict[str, Any], partial: bool = False
+) -> Dict[str, Any]:
     required = [
         "ruleId",
         "enabled",
@@ -98,14 +104,18 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
 
     if "ruleId" in validated:
         rule_id = validated["ruleId"]
-        if not isinstance(rule_id, str) or not re.fullmatch(r"[A-Z0-9_\-]{2,80}", rule_id):
+        if not isinstance(rule_id, str) or not re.fullmatch(
+            r"[A-Z0-9_\-]{2,80}", rule_id
+        ):
             raise ValueError("ruleId must match [A-Z0-9_-]{2,80}")
 
     if "category" in validated and validated["category"] not in CATEGORY_VALUES:
         raise ValueError(f"category must be one of {sorted(CATEGORY_VALUES)}")
 
     if "audiences" in validated:
-        validated["audiences"] = validate_audiences(validated["audiences"], allow_placeholders=True)
+        validated["audiences"] = validate_audiences(
+            validated["audiences"], allow_placeholders=True
+        )
 
     message_template = validated.get("messageTemplate")
     legacy_body_template = validated.get("bodyTemplate")
@@ -117,14 +127,22 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
         validated["messageTemplate"] = message_template
         validated["bodyTemplate"] = message_template
 
-    if "titleTemplate" in validated and (not isinstance(validated["titleTemplate"], str) or not validated["titleTemplate"]):
+    if "titleTemplate" in validated and (
+        not isinstance(validated["titleTemplate"], str)
+        or not validated["titleTemplate"]
+    ):
         raise ValueError("titleTemplate is required")
 
     if "priority" in validated and validated["priority"] not in PRIORITY_VALUES:
         raise ValueError(f"priority must be one of {sorted(PRIORITY_VALUES)}")
 
-    if "androidChannel" in validated and validated["androidChannel"] not in ANDROID_CHANNEL_VALUES:
-        raise ValueError(f"androidChannel must be one of {sorted(ANDROID_CHANNEL_VALUES)}")
+    if (
+        "androidChannel" in validated
+        and validated["androidChannel"] not in ANDROID_CHANNEL_VALUES
+    ):
+        raise ValueError(
+            f"androidChannel must be one of {sorted(ANDROID_CHANNEL_VALUES)}"
+        )
 
     if "ttlHours" in validated:
         ttl_hours = validated["ttlHours"]
@@ -138,7 +156,9 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
         if not isinstance(target.get("screen"), str) or not target.get("screen"):
             raise ValueError("target.screen is required")
         param_keys = target.get("paramKeys", [])
-        if not isinstance(param_keys, list) or any(not isinstance(v, str) for v in param_keys):
+        if not isinstance(param_keys, list) or any(
+            not isinstance(v, str) for v in param_keys
+        ):
             raise ValueError("target.paramKeys must be a string array")
 
     if "quietHours" in validated and validated["quietHours"] is not None:
@@ -146,7 +166,11 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
         if not isinstance(quiet, dict):
             raise ValueError("quietHours must be an object")
         for field in ("from", "to", "tz"):
-            if field not in quiet or not isinstance(quiet[field], str) or not quiet[field]:
+            if (
+                field not in quiet
+                or not isinstance(quiet[field], str)
+                or not quiet[field]
+            ):
                 raise ValueError(f"quietHours.{field} is required")
 
     for bool_field in ("enabled", "push", "allowOverride"):
@@ -158,7 +182,10 @@ def validate_rule_payload(payload: Dict[str, Any], partial: bool = False) -> Dic
     max_message = limits["maxMessageLength"]
     if "titleTemplate" in validated and len(validated["titleTemplate"]) > max_title:
         raise ValueError(f"titleTemplate length must be <= {max_title}")
-    if "messageTemplate" in validated and len(validated["messageTemplate"]) > max_message:
+    if (
+        "messageTemplate" in validated
+        and len(validated["messageTemplate"]) > max_message
+    ):
         raise ValueError(f"messageTemplate length must be <= {max_message}")
 
     return validated
@@ -198,17 +225,30 @@ def _get_notification_limits() -> Dict[str, int]:
         "maxMessageLength": DEFAULT_MAX_MESSAGE_LENGTH,
     }
     try:
-        config_item = get_item("APP_CONFIG_TABLE", {"configType": LIMITS_CONFIG_TYPE, "configId": LIMITS_CONFIG_ID})
+        config_item = get_item(
+            "APP_CONFIG_TABLE",
+            {"configType": LIMITS_CONFIG_TYPE, "configId": LIMITS_CONFIG_ID},
+        )
         if config_item and bool(config_item.get("enabled", True)):
             config = config_item.get("config") or {}
             title_length = int(config.get("maxTitleLength", DEFAULT_MAX_TITLE_LENGTH))
-            message_length = int(config.get("maxMessageLength", DEFAULT_MAX_MESSAGE_LENGTH))
+            message_length = int(
+                config.get("maxMessageLength", DEFAULT_MAX_MESSAGE_LENGTH)
+            )
             if title_length > 0:
                 limits["maxTitleLength"] = title_length
             if message_length > 0:
                 limits["maxMessageLength"] = message_length
-    except (ClientError, BotoCoreError, ValueError, TypeError, AttributeError) as exc:  # pragma: no cover - permission/availability fallback
-        logger.warning("notification limits lookup failed; using defaults error=%s", str(exc))
+    except (
+        ClientError,
+        BotoCoreError,
+        ValueError,
+        TypeError,
+        AttributeError,
+    ) as exc:  # pragma: no cover - permission/availability fallback
+        logger.warning(
+            "notification limits lookup failed; using defaults error=%s", str(exc)
+        )
 
     _NOTIFICATION_LIMITS_CACHE["value"] = (now, limits)
     return limits
@@ -218,7 +258,9 @@ def _render_template(template: str, context: Optional[Dict[str, Any]]) -> str:
     if not isinstance(template, str):
         return ""
     values = context or {}
-    safe_values = _SafeTemplateDict({key: "" if value is None else value for key, value in values.items()})
+    safe_values = _SafeTemplateDict(
+        {key: "" if value is None else value for key, value in values.items()}
+    )
     try:
         return template.format_map(safe_values)
     except (KeyError, IndexError, ValueError, TypeError, AttributeError):
@@ -242,7 +284,9 @@ def _resolve_tour_rider_to_profile(audience: str) -> Optional[str]:
     try:
         rider = get_tour_item("TourRider", tour_id, {"riderId": rider_id})
     except (ClientError, BotoCoreError, ValueError) as exc:
-        logger.warning("tour rider lookup failed: audience=%s error=%s", audience, str(exc))
+        logger.warning(
+            "tour rider lookup failed: audience=%s error=%s", audience, str(exc)
+        )
         return None
     if not rider:
         return None
@@ -272,7 +316,11 @@ def _route_audience(audience: str) -> List[Tuple[str, str]]:
     if audience.startswith("APP#RIDER") or audience.startswith("PROFILE#"):
         return [(rider_table, audience)] if rider_table else []
 
-    if audience.startswith("APP#MGMT") or audience.startswith("USER#") or audience.startswith("GROUP#"):
+    if (
+        audience.startswith("APP#MGMT")
+        or audience.startswith("USER#")
+        or audience.startswith("GROUP#")
+    ):
         return [(mgmt_table, audience)] if mgmt_table else []
 
     return []
@@ -348,7 +396,9 @@ def notify(
         if tour_id and "tourId" not in rendered_context:
             rendered_context["tourId"] = tour_id
 
-        rendered_audiences = [_render_template(str(audience), rendered_context) for audience in audiences]
+        rendered_audiences = [
+            _render_template(str(audience), rendered_context) for audience in audiences
+        ]
         validated_audiences = validate_audiences(rendered_audiences)
         notification_id = str(uuid.uuid4())
         created_at = utc_now_iso()
@@ -380,7 +430,9 @@ def notify(
 
         _batch_write(items_by_table)
         return notification_id
-    except Exception as exc:  # pylint: disable=broad-exception-caught  # never raise to caller
+    except (
+        Exception
+    ) as exc:  # pylint: disable=broad-exception-caught  # never raise to caller
         logger.error(
             "notification_service.notify failed ruleId=%s tourId=%s error=%s",
             rule_id,

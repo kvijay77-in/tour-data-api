@@ -15,8 +15,7 @@ from dynamodb_utils import get_item, query_tour_items
 from self_service_policy import build_ride_self_service
 from models import utc_today_iso
 
-
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 logger = get_logger(__name__)
 
 
@@ -24,9 +23,9 @@ logger = get_logger(__name__)
 def lambda_handler(event, context):
     """
     Get today's ride for a tour
-    
+
     Path parameter: tourId (e.g., TOT-2026)
-    
+
     Returns:
     - 200: Today's ride found, with the calculated read-only ``selfService`` permissions
     - 400: Invalid tour ID
@@ -34,43 +33,43 @@ def lambda_handler(event, context):
     - 500: Server error
     """
     # Extract tour ID from path parameters
-    tour_id = event.get('pathParameters', {}).get('tourId')
-    
+    tour_id = event.get("pathParameters", {}).get("tourId")
+
     if not tour_id:
         return bad_request_response("tourId is required in path")
-    
+
     # Validate tour ID
     try:
         validate_tour_id(tour_id)
     except ValidationError as e:
         return bad_request_response(str(e))
-    
+
     # Get today's date in ISO format (UTC-aware)
     today = utc_today_iso()
-    
+
     # Query rides for today using DateIndex GSI
     logger.info("Querying rides for tour %s on %s", tour_id, today)
     rides = query_tour_items(
-        table_type='Ride',
+        table_type="Ride",
         tour_id=tour_id,
-        key_condition_expression='#date = :date',
-        expression_values={':date': today},
-        expression_names={'#date': 'date'},
-        index_name='DateIndex'
+        key_condition_expression="#date = :date",
+        expression_values={":date": today},
+        expression_names={"#date": "date"},
+        index_name="DateIndex",
     )
-    
+
     if not rides:
         logger.info("No ride found for tour %s on %s", tour_id, today)
         return error_response(
             error_code="NO_ACTIVE_RIDE",
             message="No active ride found for today",
-            status_code=404
+            status_code=404,
         )
-    
+
     # Return first ride for today
     todays_ride = rides[0]
-    tour = get_item(table_name_env='TOUR_MASTER_TABLE', key={'tourId': tour_id})
-    todays_ride['selfService'] = build_ride_self_service(todays_ride, tour)
-    
-    logger.info("Successfully retrieved today's ride: %s", todays_ride.get('rideId'))
+    tour = get_item(table_name_env="TOUR_MASTER_TABLE", key={"tourId": tour_id})
+    todays_ride["selfService"] = build_ride_self_service(todays_ride, tour)
+
+    logger.info("Successfully retrieved today's ride: %s", todays_ride.get("rideId"))
     return success_response(todays_ride)

@@ -26,14 +26,18 @@ from checkin_service import cancel_checkin
 from dynamodb_utils import get_tour_item
 from rbac import Permission, require_permission
 from rider_identity import reject_client_rider_id
-from self_checkin_rules import check_self_cancel_allowed, derive_checkin_status, load_self_checkin_context
+from self_checkin_rules import (
+    check_self_cancel_allowed,
+    derive_checkin_status,
+    load_self_checkin_context,
+)
 
-sys.path.insert(0, '/opt/python')
+sys.path.insert(0, "/opt/python")
 
 logger = get_logger(__name__)
 
 
-@api_handler('Failed to cancel self check-in')
+@api_handler("Failed to cancel self check-in")
 def lambda_handler(event, context):
     """Cancel one of the calling rider's check-ins. Returns 200 with the cancelled record."""
     log_event(logger, event)
@@ -42,10 +46,10 @@ def lambda_handler(event, context):
     if deny:
         return deny
 
-    path_params = event.get('pathParameters') or {}
-    tour_id = path_params.get('tourId')
-    ride_id = path_params.get('rideId')
-    checkin_id = path_params.get('checkInId')
+    path_params = event.get("pathParameters") or {}
+    tour_id = path_params.get("tourId")
+    ride_id = path_params.get("rideId")
+    checkin_id = path_params.get("checkInId")
     if not tour_id or not ride_id or not checkin_id:
         return bad_request_response("tourId, rideId and checkInId are required in path")
     try:
@@ -55,13 +59,13 @@ def lambda_handler(event, context):
         return bad_request_response(str(e))
 
     try:
-        body = json.loads(event.get('body') or '{}')
+        body = json.loads(event.get("body") or "{}")
     except json.JSONDecodeError:
         return bad_request_response("Invalid JSON in request body")
     if not isinstance(body, dict):
         return validation_error_response("Request body must be a JSON object")
 
-    rejected = reject_client_rider_id(body, [event.get('queryStringParameters') or {}])
+    rejected = reject_client_rider_id(body, [event.get("queryStringParameters") or {}])
     if rejected:
         return rejected
 
@@ -71,12 +75,14 @@ def lambda_handler(event, context):
         return error
 
     existing = get_tour_item(
-        table_type='CheckIn',
+        table_type="CheckIn",
         tour_id=tour_id,
-        key={'rideId': ride_id, 'checkInId': checkin_id}
+        key={"rideId": ride_id, "checkInId": checkin_id},
     )
     if not existing:
-        return error_response('CHECKIN_NOT_FOUND', f"CheckIn '{checkin_id}' not found", 404)
+        return error_response(
+            "CHECKIN_NOT_FOUND", f"CheckIn '{checkin_id}' not found", 404
+        )
 
     error = check_self_cancel_allowed(self_context, existing)
     if error:
@@ -85,8 +91,8 @@ def lambda_handler(event, context):
     updated = cancel_checkin(
         tour_id=tour_id,
         ride_id=ride_id,
-        existing={**existing, 'checkInId': checkin_id},
+        existing={**existing, "checkInId": checkin_id},
         prev_status=derive_checkin_status(existing),
-        cancelled_by=self_context['identity']['profileId'],
+        cancelled_by=self_context["identity"]["profileId"],
     )
     return success_response(updated)

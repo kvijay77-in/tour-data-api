@@ -44,7 +44,6 @@ from logger import get_logger
 from response import forbidden_response
 from dynamodb_utils import get_tour_item
 
-
 logger = get_logger(__name__)
 
 
@@ -53,6 +52,7 @@ logger = get_logger(__name__)
 # These describe what an API endpoint/action requires — they are independent
 # of any frontend role or Cognito group name.
 # ============================================================================
+
 
 class Permission(str, Enum):
     """Functional API permissions — what each Lambda endpoint requires."""
@@ -172,7 +172,7 @@ GROUP_PERMISSIONS: Dict[str, List[Permission]] = {
     ],
 }
 
-PIT_STOP_GROUP_PATTERN = re.compile(r'^PS_(\d+)_USER$')
+PIT_STOP_GROUP_PATTERN = re.compile(r"^PS_(\d+)_USER$")
 PIT_STOP_GROUP_PERMISSIONS = {
     Permission.READ,
     Permission.CHECKIN,
@@ -196,6 +196,7 @@ LOW_PRIORITY_STANDARD_GROUPS = (
 # HELPERS — group extraction
 # ============================================================================
 
+
 def get_user_groups(event: Dict[str, Any]) -> List[str]:
     """
     Extract Cognito group membership from API Gateway JWT claims.
@@ -211,21 +212,20 @@ def get_user_groups(event: Dict[str, Any]) -> List[str]:
         claim is absent or the request context is missing.
     """
     jwt_claims = (
-        event
-        .get('requestContext', {})
-        .get('authorizer', {})
-        .get('jwt', {})
-        .get('claims', {})
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("jwt", {})
+        .get("claims", {})
     )
 
     # Prefer Cognito groups, but also tolerate common custom role claims.
     # Some clients/proxies serialize multi-value claims in different formats.
     claim_candidates = [
-        jwt_claims.get('cognito:groups'),
-        jwt_claims.get('groups'),
-        jwt_claims.get('custom:roles'),
-        jwt_claims.get('roles'),
-        jwt_claims.get('role'),
+        jwt_claims.get("cognito:groups"),
+        jwt_claims.get("groups"),
+        jwt_claims.get("custom:roles"),
+        jwt_claims.get("roles"),
+        jwt_claims.get("role"),
     ]
 
     parsed_groups: List[str] = []
@@ -259,7 +259,7 @@ def _parse_group_claim(groups_raw: Any) -> List[str]:
         return []
 
     # Handles JSON arrays like ["PS_1_USER", "PS_3_USER"]
-    if raw.startswith('[') and raw.endswith(']'):
+    if raw.startswith("[") and raw.endswith("]"):
         try:
             parsed = json.loads(raw)
             if isinstance(parsed, list):
@@ -268,10 +268,7 @@ def _parse_group_claim(groups_raw: Any) -> List[str]:
             raw = raw[1:-1]
 
     # Tolerate both comma and whitespace-delimited values.
-    groups = [
-        token.strip().strip("'\"")
-        for token in re.split(r'[\s,]+', raw)
-    ]
+    groups = [token.strip().strip("'\"") for token in re.split(r"[\s,]+", raw)]
     return [group for group in groups if group]
 
 
@@ -291,12 +288,12 @@ def has_any_group(user_groups: List[str], required_groups: List[str]) -> bool:
 
 def is_pit_stop_group(group_name: str) -> bool:
     """Return True when the group name follows the dynamic pit-stop pattern."""
-    return bool(PIT_STOP_GROUP_PATTERN.fullmatch(group_name or ''))
+    return bool(PIT_STOP_GROUP_PATTERN.fullmatch(group_name or ""))
 
 
 def get_pit_stop_stage_number(group_name: str) -> Optional[int]:
     """Extract the stage number from a pit-stop group like PS_3_USER."""
-    match = PIT_STOP_GROUP_PATTERN.fullmatch(group_name or '')
+    match = PIT_STOP_GROUP_PATTERN.fullmatch(group_name or "")
     if not match:
         return None
     return int(match.group(1))
@@ -353,6 +350,7 @@ def has_non_pit_stop_checkin_access(event: Dict[str, Any]) -> bool:
 # ============================================================================
 # PERMISSION RESOLUTION
 # ============================================================================
+
 
 def get_user_permissions(event: Dict[str, Any]) -> Set[Permission]:
     """
@@ -423,7 +421,7 @@ def require_permission(
         if deny:
             return deny
     """
-    route = event.get('rawPath') or event.get('routeKey') or 'unknown-route'
+    route = event.get("rawPath") or event.get("routeKey") or "unknown-route"
     user_groups = get_user_groups(event)
     user_permissions = get_user_permissions(event)
 
@@ -485,28 +483,28 @@ def require_event_assignment_access(
     """Enforce eventAssignments, assignedActivityIds, and hotel match restrictions for EVENT_SCAN."""
 
     user_id = (
-        event.get('requestContext', {})
-        .get('authorizer', {})
-        .get('jwt', {})
-        .get('claims', {})
-        .get('sub')
+        event.get("requestContext", {})
+        .get("authorizer", {})
+        .get("jwt", {})
+        .get("claims", {})
+        .get("sub")
     )
     if not user_id:
         return forbidden_response("Access denied. User identity is missing.")
 
-    user_record = get_tour_item('User', tour_id, {'userId': user_id})
+    user_record = get_tour_item("User", tour_id, {"userId": user_id})
     if not user_record:
         return forbidden_response("You are not assigned to this tour.")
 
-    event_id = occurrence.get('eventId')
-    occurrence_date = occurrence.get('date')
-    assignments = user_record.get('eventAssignments') or []
+    event_id = occurrence.get("eventId")
+    occurrence_date = occurrence.get("date")
+    assignments = user_record.get("eventAssignments") or []
     assignment_match = False
     for assignment in assignments:
-        if assignment.get('eventId') != event_id:
+        if assignment.get("eventId") != event_id:
             continue
-        dates = assignment.get('dates')
-        if dates == 'ALL' or dates == ["ALL"]:
+        dates = assignment.get("dates")
+        if dates == "ALL" or dates == ["ALL"]:
             assignment_match = True
             break
         if isinstance(dates, list) and occurrence_date in dates:
@@ -516,14 +514,24 @@ def require_event_assignment_access(
     if assignments and not assignment_match:
         return forbidden_response("You are not assigned to this event today.")
 
-    assigned_activity_ids = user_record.get('assignedActivityIds') or []
-    if assigned_activity_ids and activity_id and activity_id not in assigned_activity_ids:
+    assigned_activity_ids = user_record.get("assignedActivityIds") or []
+    if (
+        assigned_activity_ids
+        and activity_id
+        and activity_id not in assigned_activity_ids
+    ):
         return forbidden_response("You are not assigned to this event activity.")
 
     if is_baggage_event and rider_id:
         stay_date = occurrence_date
-        room_allocation = get_tour_item('RoomAllocation', tour_id, {'stayDate': stay_date, 'riderId': rider_id})
-        if not room_allocation or room_allocation.get('hotelId') != user_record.get('hotelId'):
-            return forbidden_response("This rider is not staying at your assigned hotel tonight.")
+        room_allocation = get_tour_item(
+            "RoomAllocation", tour_id, {"stayDate": stay_date, "riderId": rider_id}
+        )
+        if not room_allocation or room_allocation.get("hotelId") != user_record.get(
+            "hotelId"
+        ):
+            return forbidden_response(
+                "This rider is not staying at your assigned hotel tonight."
+            )
 
     return None
