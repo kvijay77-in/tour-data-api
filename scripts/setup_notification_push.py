@@ -152,7 +152,11 @@ def main() -> int:
         print(f"Seeding app config defaults in {app_config_table}...")
         _run_seed_script("seed_app_config.py", app_config_table, region)
 
-    if updated_count == 0 and not args.seed_notification_rules and not args.seed_app_config:
+    if (
+        updated_count == 0
+        and not args.seed_notification_rules
+        and not args.seed_app_config
+    ):
         print(
             "No changes made. Provide --rider-token/--mgmt-token (or env vars) "
             "and/or enable seeding flags."

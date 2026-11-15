@@ -83,20 +83,17 @@ def load_data(file_path, table_name, region=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Load JSON data into a DynamoDB table"
+    parser = argparse.ArgumentParser(description="Load JSON data into a DynamoDB table")
+    parser.add_argument(
+        "--file", required=True, help="Path to JSON file containing array of items"
     )
     parser.add_argument(
-        "--file", required=True,
-        help="Path to JSON file containing array of items"
+        "--table-name",
+        required=True,
+        help="DynamoDB table name (e.g., dev-RiderProfile)",
     )
     parser.add_argument(
-        "--table-name", required=True,
-        help="DynamoDB table name (e.g., dev-RiderProfile)"
-    )
-    parser.add_argument(
-        "--region", default=None,
-        help="AWS region (default: from AWS config)"
+        "--region", default=None, help="AWS region (default: from AWS config)"
     )
 
     args = parser.parse_args()

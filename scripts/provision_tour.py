@@ -34,19 +34,25 @@ import sys
 import boto3
 from botocore.exceptions import ClientError
 
-from validation import validate_tour_id, validate_iso_date, validate_ride_count, ValidationError
+from validation import (
+    validate_tour_id,
+    validate_iso_date,
+    validate_ride_count,
+    ValidationError,
+)
 from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
 from tour_provisioning import provision_tour_tables
 
-
 # Add common layer to path for shared utilities
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'layers', 'common'))
+sys.path.insert(
+    0, os.path.join(os.path.dirname(__file__), "..", "src", "layers", "common")
+)
 
 # Set a default region if not configured, to allow module-level boto3
 # initialization in dynamodb_utils.py. The script creates its own session
 # with the correct region for actual AWS operations.
-if not os.environ.get('AWS_DEFAULT_REGION') and not boto3.Session().region_name:
-    os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
+if not os.environ.get("AWS_DEFAULT_REGION") and not boto3.Session().region_name:
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 
 def get_tour_table_name_from_stack(stack_name):
@@ -59,13 +65,13 @@ def get_tour_table_name_from_stack(stack_name):
     Returns:
         TourMaster table name
     """
-    cf_client = boto3.client('cloudformation')
+    cf_client = boto3.client("cloudformation")
     try:
         response = cf_client.describe_stacks(StackName=stack_name)
-        outputs = response['Stacks'][0].get('Outputs', [])
+        outputs = response["Stacks"][0].get("Outputs", [])
         for output in outputs:
-            if output['OutputKey'] == 'TourMasterTableName':
-                return output['OutputValue']
+            if output["OutputKey"] == "TourMasterTableName":
+                return output["OutputValue"]
     except ClientError as e:
         print(f"Error: Could not describe stack '{stack_name}': {e}")
         sys.exit(1)
@@ -85,15 +91,17 @@ def get_push_sender_function_name(session, stack_name):
     Returns:
         Function name, or None if it cannot be resolved
     """
-    cf_client = session.client('cloudformation')
+    cf_client = session.client("cloudformation")
     try:
         response = cf_client.describe_stack_resource(
             StackName=stack_name,
-            LogicalResourceId='PushSenderFunction',
+            LogicalResourceId="PushSenderFunction",
         )
-        return response['StackResourceDetail']['PhysicalResourceId']
+        return response["StackResourceDetail"]["PhysicalResourceId"]
     except ClientError as e:
-        print(f"Warning: Could not resolve PushSenderFunction from stack '{stack_name}': {e}")
+        print(
+            f"Warning: Could not resolve PushSenderFunction from stack '{stack_name}': {e}"
+        )
         return None
 
 
@@ -123,8 +131,8 @@ def provision_tour(args):
         sys.exit(1)
 
     try:
-        validate_iso_date(start_date, 'start-date')
-        validate_iso_date(end_date, 'end-date')
+        validate_iso_date(start_date, "start-date")
+        validate_iso_date(end_date, "end-date")
     except ValidationError as e:
         print(f"Error: {e}")
         sys.exit(1)
@@ -134,32 +142,34 @@ def provision_tour(args):
         sys.exit(1)
 
     try:
-        validate_ride_count(ride_count, 'ride-count')
+        validate_ride_count(ride_count, "ride-count")
     except ValidationError as e:
         print(f"Error: {e}")
         sys.exit(1)
 
     # Set environment variables for shared utilities
-    os.environ['STACK_NAME'] = stack_name
-    os.environ['ENVIRONMENT'] = environment
+    os.environ["STACK_NAME"] = stack_name
+    os.environ["ENVIRONMENT"] = environment
     if subscription_id:
-        os.environ['SUBSCRIPTION_ID'] = subscription_id
+        os.environ["SUBSCRIPTION_ID"] = subscription_id
 
     # Initialize AWS clients
     session = boto3.Session(region_name=region) if region else boto3.Session()
-    dynamodb_client = session.client('dynamodb')
-    dynamodb_resource = session.resource('dynamodb')
+    dynamodb_client = session.client("dynamodb")
+    dynamodb_resource = session.resource("dynamodb")
 
     # Shared provisioning creates its own Lambda client from the default region.
     if region:
-        os.environ['AWS_DEFAULT_REGION'] = region
+        os.environ["AWS_DEFAULT_REGION"] = region
 
     push_sender_function = get_push_sender_function_name(session, stack_name)
     if push_sender_function:
-        os.environ['PUSH_SENDER_FUNCTION_ARN'] = push_sender_function
+        os.environ["PUSH_SENDER_FUNCTION_ARN"] = push_sender_function
     else:
-        print("Warning: Notification push will not be wired for this tour. "
-              "Run PUT /v1/tours/{tourId}/provision after deployment to fix.")
+        print(
+            "Warning: Notification push will not be wired for this tour. "
+            "Run PUT /v1/tours/{tourId}/provision after deployment to fix."
+        )
 
     # Resolve TourMaster table name from stack
     tour_table_name = get_tour_table_name_from_stack(stack_name)
@@ -174,10 +184,12 @@ def provision_tour(args):
 
     # Check if tour already exists
     try:
-        response = tour_table.get_item(Key={'tourId': tour_id})
-        if 'Item' in response:
-            existing = response['Item']
-            print(f"Error: Tour '{tour_id}' already exists (status: {existing.get('status')})")
+        response = tour_table.get_item(Key={"tourId": tour_id})
+        if "Item" in response:
+            existing = response["Item"]
+            print(
+                f"Error: Tour '{tour_id}' already exists (status: {existing.get('status')})"
+            )
             sys.exit(1)
     except ClientError as e:
         print(f"Error checking tour existence: {e}")
@@ -186,18 +198,18 @@ def provision_tour(args):
     # Create Tour record with PROVISIONING status
     now = utc_now_iso()
     tour_item = {
-        'tourId': tour_id,
-        'name': name,
-        'startDate': start_date,
-        'endDate': end_date,
-        'status': TourStatus.PROVISIONING.value,
-        'rideCount': ride_count,
-        'createdAt': now,
-        'updatedAt': now,
+        "tourId": tour_id,
+        "name": name,
+        "startDate": start_date,
+        "endDate": end_date,
+        "status": TourStatus.PROVISIONING.value,
+        "rideCount": ride_count,
+        "createdAt": now,
+        "updatedAt": now,
     }
 
     if description:
-        tour_item['description'] = description
+        tour_item["description"] = description
 
     try:
         tour_table.put_item(Item=tour_item)
@@ -219,9 +231,9 @@ def provision_tour(args):
         print(f"\nError provisioning tables: {e}")
         # Update tour record with error (put_item is safe here since we
         # control the full item in this single-user CLI operation)
-        tour_item['status'] = TourStatus.PLANNING.value
-        tour_item['updatedAt'] = utc_now_iso()
-        tour_item['provisioningError'] = str(e)
+        tour_item["status"] = TourStatus.PLANNING.value
+        tour_item["updatedAt"] = utc_now_iso()
+        tour_item["provisioningError"] = str(e)
         tour_table.put_item(Item=tour_item)
         print("Tour status updated to PLANNING with provisioning error")
         sys.exit(1)
@@ -229,9 +241,9 @@ def provision_tour(args):
     # Update tour status to PLANNING (put_item is safe here since we
     # control the full item in this single-user CLI operation)
     now = utc_now_iso()
-    tour_item['status'] = TourStatus.PLANNING.value
-    tour_item['provisionedAt'] = now
-    tour_item['updatedAt'] = now
+    tour_item["status"] = TourStatus.PLANNING.value
+    tour_item["provisionedAt"] = now
+    tour_item["updatedAt"] = now
 
     try:
         tour_table.put_item(Item=tour_item)
@@ -248,7 +260,7 @@ def provision_tour(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Provision a new tour with tour-specific DynamoDB tables',
+        description="Provision a new tour with tour-specific DynamoDB tables",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -276,54 +288,49 @@ Examples:
 
 This script is the deployment-time equivalent of POST /v1/tours API endpoint.
 Both methods create the same Tour record and tour-specific tables.
-        """
+        """,
     )
 
     parser.add_argument(
-        '--stack-name', required=True,
-        help='CloudFormation stack name (e.g., dev, test, prod)'
+        "--stack-name",
+        required=True,
+        help="CloudFormation stack name (e.g., dev, test, prod)",
     )
     parser.add_argument(
-        '--tour-id', required=True,
-        help='Tour identifier (3-50 chars, alphanumeric with _.-)'
+        "--tour-id",
+        required=True,
+        help="Tour identifier (3-50 chars, alphanumeric with _.-)",
+    )
+    parser.add_argument("--name", required=True, help="Tour display name")
+    parser.add_argument(
+        "--start-date", required=True, help="Tour start date (YYYY-MM-DD)"
+    )
+    parser.add_argument("--end-date", required=True, help="Tour end date (YYYY-MM-DD)")
+    parser.add_argument(
+        "--ride-count",
+        required=True,
+        type=int,
+        help="Total number of rides planned for the tour (positive integer)",
+    )
+    parser.add_argument("--description", default="", help="Tour description (optional)")
+    parser.add_argument(
+        "--environment",
+        default="dev",
+        choices=["dev", "test", "prod"],
+        help="Environment name for tagging (default: dev)",
     )
     parser.add_argument(
-        '--name', required=True,
-        help='Tour display name'
+        "--region", default=None, help="AWS region (default: from AWS config)"
     )
     parser.add_argument(
-        '--start-date', required=True,
-        help='Tour start date (YYYY-MM-DD)'
-    )
-    parser.add_argument(
-        '--end-date', required=True,
-        help='Tour end date (YYYY-MM-DD)'
-    )
-    parser.add_argument(
-        '--ride-count', required=True, type=int,
-        help='Total number of rides planned for the tour (positive integer)'
-    )
-    parser.add_argument(
-        '--description', default='',
-        help='Tour description (optional)'
-    )
-    parser.add_argument(
-        '--environment', default='dev',
-        choices=['dev', 'test', 'prod'],
-        help='Environment name for tagging (default: dev)'
-    )
-    parser.add_argument(
-        '--region', default=None,
-        help='AWS region (default: from AWS config)'
-    )
-    parser.add_argument(
-        '--subscription-id', default='',
-        help='Subscription ID for cost tracking (optional)'
+        "--subscription-id",
+        default="",
+        help="Subscription ID for cost tracking (optional)",
     )
 
     args = parser.parse_args()
     provision_tour(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

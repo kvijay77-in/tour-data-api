@@ -66,18 +66,18 @@ import boto3
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Attr, Key
 
-
-SCENARIO_TYPE_TOUR_DATA = 'tour_data_generation'
-SCENARIO_TYPE_PERSONAL_CODE = 'personal_code_update'
-SCENARIO_TYPE_EVENT_DATA = 'event_data_generation'
-SCENARIO_MODE_CREATE = 'create'
-SCENARIO_MODE_UPDATE = 'update'
+SCENARIO_TYPE_TOUR_DATA = "tour_data_generation"
+SCENARIO_TYPE_PERSONAL_CODE = "personal_code_update"
+SCENARIO_TYPE_EVENT_DATA = "event_data_generation"
+SCENARIO_MODE_CREATE = "create"
+SCENARIO_MODE_UPDATE = "update"
 
 logger = logging.getLogger(__name__)
 
 # ============================================================================
 # SCENARIO AND DYNAMODB HELPERS
 # ============================================================================
+
 
 def configure_logging(debug_enabled=False):
     """Configure console-only logging for the script.
@@ -88,8 +88,8 @@ def configure_logging(debug_enabled=False):
             default WARNING level so debug output is not flooded by the SDK.
     """
     logging.basicConfig(
-        format='%(asctime)s %(levelname)-7s %(message)s',
-        datefmt='%H:%M:%S',
+        format="%(asctime)s %(levelname)-7s %(message)s",
+        datefmt="%H:%M:%S",
     )
     logger.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
 
@@ -113,26 +113,30 @@ def require_list(container, key, context):
 def validate_allowed_value(value, allowed_values, label):
     """Validate that a value is one of the supported options."""
     if value not in allowed_values:
-        allowed = ', '.join(sorted(allowed_values))
+        allowed = ", ".join(sorted(allowed_values))
         raise ValueError(f"{label} must be one of: {allowed}")
 
 
 def get_scenario_metadata(config):
     """Return the normalized scenario metadata block."""
-    scenario = config.get('scenario')
+    scenario = config.get("scenario")
     if not isinstance(scenario, dict):
-        raise ValueError('scenario must be a mapping')
+        raise ValueError("scenario must be a mapping")
     return scenario
 
 
 def get_scenario_type(config):
     """Return the explicit scenario type."""
     scenario = get_scenario_metadata(config)
-    scenario_type = scenario.get('type')
+    scenario_type = scenario.get("type")
     validate_allowed_value(
         scenario_type,
-        {SCENARIO_TYPE_PERSONAL_CODE, SCENARIO_TYPE_TOUR_DATA, SCENARIO_TYPE_EVENT_DATA},
-        'scenario.type',
+        {
+            SCENARIO_TYPE_PERSONAL_CODE,
+            SCENARIO_TYPE_TOUR_DATA,
+            SCENARIO_TYPE_EVENT_DATA,
+        },
+        "scenario.type",
     )
     return scenario_type
 
@@ -140,11 +144,11 @@ def get_scenario_type(config):
 def get_scenario_mode(config):
     """Return the explicit scenario mode."""
     scenario = get_scenario_metadata(config)
-    mode = scenario.get('mode')
+    mode = scenario.get("mode")
     validate_allowed_value(
         mode,
         {SCENARIO_MODE_CREATE, SCENARIO_MODE_UPDATE},
-        'scenario.mode',
+        "scenario.mode",
     )
     return mode
 
@@ -161,24 +165,26 @@ def get_table(dynamodb, stack_name, table_name, tour_id=None):
     return dynamodb.Table(build_table_name(stack_name, table_name, tour_id=tour_id))
 
 
-def scan_table_items(table, filter_expression=None, projection_expression=None, limit=None):
+def scan_table_items(
+    table, filter_expression=None, projection_expression=None, limit=None
+):
     """Scan all matching items from a DynamoDB table with optional filtering."""
     scan_kwargs = {}
     if filter_expression is not None:
-        scan_kwargs['FilterExpression'] = filter_expression
+        scan_kwargs["FilterExpression"] = filter_expression
     if projection_expression:
-        scan_kwargs['ProjectionExpression'] = projection_expression
+        scan_kwargs["ProjectionExpression"] = projection_expression
 
     items = []
     response = table.scan(**scan_kwargs)
-    items.extend(response.get('Items', []))
+    items.extend(response.get("Items", []))
 
-    while 'LastEvaluatedKey' in response:
+    while "LastEvaluatedKey" in response:
         response = table.scan(
             **scan_kwargs,
-            ExclusiveStartKey=response['LastEvaluatedKey'],
+            ExclusiveStartKey=response["LastEvaluatedKey"],
         )
-        items.extend(response.get('Items', []))
+        items.extend(response.get("Items", []))
 
     if limit is not None:
         return items[:limit]
@@ -211,7 +217,7 @@ def fetch_table_item(dynamodb, stack_name, table_name, key, tour_id=None):
     """Fetch a single item from a shared or tour-specific table."""
     table = get_table(dynamodb, stack_name, table_name, tour_id=tour_id)
     response = table.get_item(Key=key)
-    return response.get('Item')
+    return response.get("Item")
 
 
 def resolve_selection_filter(filter_config):
@@ -219,26 +225,26 @@ def resolve_selection_filter(filter_config):
     if not filter_config:
         return None
 
-    filter_type = filter_config.get('type')
+    filter_type = filter_config.get("type")
     validate_allowed_value(
         filter_type,
-        {'attribute_not_exists', 'attribute_exists'},
-        'selection.filter.type',
+        {"attribute_not_exists", "attribute_exists"},
+        "selection.filter.type",
     )
 
-    if filter_type == 'attribute_not_exists':
-        attribute_name = filter_config.get('attribute')
+    if filter_type == "attribute_not_exists":
+        attribute_name = filter_config.get("attribute")
         if not attribute_name:
             raise ValueError(
-                'selection.filter.attribute is required for attribute_not_exists'
+                "selection.filter.attribute is required for attribute_not_exists"
             )
         return Attr(attribute_name).not_exists()
 
-    if filter_type == 'attribute_exists':
-        attribute_name = filter_config.get('attribute')
+    if filter_type == "attribute_exists":
+        attribute_name = filter_config.get("attribute")
         if not attribute_name:
             raise ValueError(
-                'selection.filter.attribute is required for attribute_exists'
+                "selection.filter.attribute is required for attribute_exists"
             )
         return Attr(attribute_name).exists()
 
@@ -252,22 +258,20 @@ def resolve_selection_limit(limit_config, config):
 
     if isinstance(limit_config, int):
         if limit_config < 1:
-            raise ValueError('selection.limit must be at least 1')
+            raise ValueError("selection.limit must be at least 1")
         return limit_config
 
     if not isinstance(limit_config, dict):
-        raise ValueError('selection.limit must be an integer or mapping')
+        raise ValueError("selection.limit must be an integer or mapping")
 
-    limit_type = limit_config.get('type')
-    validate_allowed_value(limit_type, {'reference_count'}, 'selection.limit.type')
+    limit_type = limit_config.get("type")
+    validate_allowed_value(limit_type, {"reference_count"}, "selection.limit.type")
 
-    source = limit_config.get('source')
-    payload = config.get('payload', {})
+    source = limit_config.get("source")
+    payload = config.get("payload", {})
     source_values = payload.get(source)
     if not isinstance(source_values, list):
-        raise ValueError(
-            'selection.limit.source must reference a list under payload'
-        )
+        raise ValueError("selection.limit.source must reference a list under payload")
     return len(source_values)
 
 
@@ -275,26 +279,27 @@ def create_dynamodb_session(region=None):
     """Create a boto3 Session and DynamoDB resource."""
     session_kwargs = {}
     if region:
-        session_kwargs['region_name'] = region
+        session_kwargs["region_name"] = region
     session = boto3.Session(**session_kwargs)
-    return session, session.resource('dynamodb')
+    return session, session.resource("dynamodb")
 
 
 def print_run_header(scenario_name, stack_name, seed, dry_run, extra_lines=None):
     """Log a consistent execution header for any scenario."""
-    logger.info("%s", '=' * 60)
+    logger.info("%s", "=" * 60)
     logger.info("  Scenario : %s", scenario_name)
     logger.info("  Stack    : %s", stack_name)
     logger.info("  Seed     : %s", seed)
-    logger.info("  Mode     : %s", 'DRY RUN' if dry_run else 'DynamoDB')
+    logger.info("  Mode     : %s", "DRY RUN" if dry_run else "DynamoDB")
     for line in extra_lines or []:
         logger.info("  %s", line)
-    logger.info("%s", '=' * 60)
+    logger.info("%s", "=" * 60)
 
 
 # ============================================================================
 # DynamoDB READ — EXISTING DATA
 # ============================================================================
+
 
 def fetch_rider_profiles(dynamodb, stack_name):
     """
@@ -302,7 +307,7 @@ def fetch_rider_profiles(dynamodb, stack_name):
 
     Returns list of profile dicts.
     """
-    return fetch_table_items(dynamodb, stack_name, 'RiderProfile')
+    return fetch_table_items(dynamodb, stack_name, "RiderProfile")
 
 
 def fetch_tour(dynamodb, stack_name, tour_id):
@@ -314,8 +319,8 @@ def fetch_tour(dynamodb, stack_name, tour_id):
     return fetch_table_item(
         dynamodb,
         stack_name,
-        'TourMaster',
-        {'tourId': tour_id},
+        "TourMaster",
+        {"tourId": tour_id},
     )
 
 
@@ -327,14 +332,17 @@ def fetch_tour_riders(dynamodb, stack_name, tour_id, status_in=None, limit=None)
     riders already registered by a prior tour-data scenario run rather than
     creating new riders themselves.
     """
-    filter_expression = Attr('status').is_in(list(status_in)) if status_in else None
+    filter_expression = Attr("status").is_in(list(status_in)) if status_in else None
     items = fetch_table_items(
-        dynamodb, stack_name, 'TourRider', tour_id=tour_id,
+        dynamodb,
+        stack_name,
+        "TourRider",
+        tour_id=tour_id,
         filter_expression=filter_expression,
     )
     rider_ids = sorted(
-        (item['riderId'] for item in items),
-        key=lambda rider_id: int(re.sub(r'\D', '', rider_id) or 0),
+        (item["riderId"] for item in items),
+        key=lambda rider_id: int(re.sub(r"\D", "", rider_id) or 0),
     )
     if limit is not None:
         rider_ids = rider_ids[:limit]
@@ -344,10 +352,10 @@ def fetch_tour_riders(dynamodb, stack_name, tour_id, status_in=None, limit=None)
 def validate_scenario_contract(config):
     """Validate the common scenario header shared by all scenario types."""
     scenario = get_scenario_metadata(config)
-    if not scenario.get('name'):
-        raise ValueError('scenario.name is required')
-    if not scenario.get('description'):
-        raise ValueError('scenario.description is required')
+    if not scenario.get("name"):
+        raise ValueError("scenario.name is required")
+    if not scenario.get("description"):
+        raise ValueError("scenario.description is required")
 
     scenario_type = get_scenario_type(config)
     mode = get_scenario_mode(config)
@@ -367,32 +375,28 @@ def validate_personal_code_scenario(config):
     validate_scenario_contract(config)
 
     errors = []
-    target = require_mapping(config, 'target', 'config')
-    payload = require_mapping(config, 'payload', 'config')
-    selection = require_mapping(config, 'selection', 'config')
-    filter_config = require_mapping(selection, 'filter', 'selection')
+    target = require_mapping(config, "target", "config")
+    payload = require_mapping(config, "payload", "config")
+    selection = require_mapping(config, "selection", "config")
+    filter_config = require_mapping(selection, "filter", "selection")
 
     if get_scenario_type(config) != SCENARIO_TYPE_PERSONAL_CODE:
-        errors.append(
-            f"scenario.type must be '{SCENARIO_TYPE_PERSONAL_CODE}'"
-        )
-    if target.get('table_name') != 'RiderProfile':
+        errors.append(f"scenario.type must be '{SCENARIO_TYPE_PERSONAL_CODE}'")
+    if target.get("table_name") != "RiderProfile":
         errors.append("target.table_name must be 'RiderProfile'")
-    if target.get('attribute_name') != 'personalCode':
+    if target.get("attribute_name") != "personalCode":
         errors.append("target.attribute_name must be 'personalCode'")
 
-    if filter_config.get('type') != 'attribute_not_exists':
-        errors.append(
-            "selection.filter.type must be 'attribute_not_exists'"
-        )
-    if filter_config.get('attribute') != 'personalCode':
+    if filter_config.get("type") != "attribute_not_exists":
+        errors.append("selection.filter.type must be 'attribute_not_exists'")
+    if filter_config.get("attribute") != "personalCode":
         errors.append("selection.filter.attribute must be 'personalCode'")
 
-    personal_codes = payload.get('personal_codes')
+    personal_codes = payload.get("personal_codes")
     if not isinstance(personal_codes, list) or not personal_codes:
-        errors.append('payload.personal_codes must be a non-empty list')
+        errors.append("payload.personal_codes must be a non-empty list")
 
-    limit_config = selection.get('limit')
+    limit_config = selection.get("limit")
     if limit_config is not None:
         try:
             resolve_selection_limit(limit_config, config)
@@ -405,19 +409,17 @@ def validate_personal_code_scenario(config):
         errors.append(str(exc))
 
     if errors:
-        raise ValueError('Invalid personal code scenario: ' + '; '.join(errors))
+        raise ValueError("Invalid personal code scenario: " + "; ".join(errors))
 
 
 def validate_tour_data_scenario(config):
     """Validate the common contract for the tour data generation scenario."""
     validate_scenario_contract(config)
     if get_scenario_type(config) != SCENARIO_TYPE_TOUR_DATA:
+        raise ValueError(f"scenario.type must be '{SCENARIO_TYPE_TOUR_DATA}'")
+    if "tour" not in config or "tour_riders" not in config or "rides" not in config:
         raise ValueError(
-            f"scenario.type must be '{SCENARIO_TYPE_TOUR_DATA}'"
-        )
-    if 'tour' not in config or 'tour_riders' not in config or 'rides' not in config:
-        raise ValueError(
-            'Tour data scenario requires tour, tour_riders, and rides sections'
+            "Tour data scenario requires tour, tour_riders, and rides sections"
         )
 
 
@@ -429,72 +431,79 @@ def validate_event_data_scenario(config):
     """
     validate_scenario_contract(config)
     if get_scenario_type(config) != SCENARIO_TYPE_EVENT_DATA:
-        raise ValueError(
-            f"scenario.type must be '{SCENARIO_TYPE_EVENT_DATA}'"
-        )
+        raise ValueError(f"scenario.type must be '{SCENARIO_TYPE_EVENT_DATA}'")
 
-    tour_cfg = require_mapping(config, 'tour', 'config')
-    if not tour_cfg.get('tour_id'):
-        raise ValueError('tour.tour_id is required')
+    tour_cfg = require_mapping(config, "tour", "config")
+    if not tour_cfg.get("tour_id"):
+        raise ValueError("tour.tour_id is required")
 
-    events_cfg = require_list(config, 'events', 'config')
+    events_cfg = require_list(config, "events", "config")
     event_ids = set()
     for event_index, event_cfg in enumerate(events_cfg, 1):
         context = f"events[{event_index}]"
         if not isinstance(event_cfg, dict):
             raise ValueError(f"{context} must be a mapping")
 
-        event_id = event_cfg.get('event_id')
+        event_id = event_cfg.get("event_id")
         if not event_id:
             raise ValueError(f"{context}.event_id is required")
         if event_id in event_ids:
             raise ValueError(f"Duplicate event_id '{event_id}' in events")
         event_ids.add(event_id)
 
-        for required_field in ('event_name', 'event_type', 'location', 'sequence_enforced',
-                                'default_allowed_type_codes'):
+        for required_field in (
+            "event_name",
+            "event_type",
+            "location",
+            "sequence_enforced",
+            "default_allowed_type_codes",
+        ):
             if required_field not in event_cfg:
                 raise ValueError(f"{context}.{required_field} is required")
 
-        activities_cfg = require_list(event_cfg, 'activities', context)
+        activities_cfg = require_list(event_cfg, "activities", context)
         for activity_index, activity_cfg in enumerate(activities_cfg, 1):
             if not isinstance(activity_cfg, dict):
-                raise ValueError(f"{context}.activities[{activity_index}] must be a mapping")
-            for required_field in ('activity_id', 'name', 'sequence_no'):
+                raise ValueError(
+                    f"{context}.activities[{activity_index}] must be a mapping"
+                )
+            for required_field in ("activity_id", "name", "sequence_no"):
                 if required_field not in activity_cfg:
                     raise ValueError(
                         f"{context}.activities[{activity_index}].{required_field} is required"
                     )
 
-        occurrences_cfg = require_list(event_cfg, 'occurrences', context)
+        occurrences_cfg = require_list(event_cfg, "occurrences", context)
         for occ_index, occurrence_cfg in enumerate(occurrences_cfg, 1):
             if not isinstance(occurrence_cfg, dict):
-                raise ValueError(f"{context}.occurrences[{occ_index}] must be a mapping")
-            for required_field in ('day_offset', 'seq'):
+                raise ValueError(
+                    f"{context}.occurrences[{occ_index}] must be a mapping"
+                )
+            for required_field in ("day_offset", "seq"):
                 if required_field not in occurrence_cfg:
                     raise ValueError(
                         f"{context}.occurrences[{occ_index}].{required_field} is required"
                     )
 
-    for hotel_index, hotel_cfg in enumerate(config.get('hotels') or [], 1):
-        if not hotel_cfg.get('hotel_id'):
+    for hotel_index, hotel_cfg in enumerate(config.get("hotels") or [], 1):
+        if not hotel_cfg.get("hotel_id"):
             raise ValueError(f"hotels[{hotel_index}].hotel_id is required")
 
-    room_allocation_cfg = config.get('room_allocation')
+    room_allocation_cfg = config.get("room_allocation")
     if room_allocation_cfg is not None:
-        require_list(room_allocation_cfg, 'nights', 'room_allocation')
+        require_list(room_allocation_cfg, "nights", "room_allocation")
 
 
 def _normalize_personal_codes(config):
     """Return the usable personal codes after removing ignored entries."""
     ignored = {
         str(code).strip().upper()
-        for code in config.get('payload', {}).get('ignored_personal_codes', [])
+        for code in config.get("payload", {}).get("ignored_personal_codes", [])
         if str(code).strip()
     }
 
     usable = []
-    for code in config.get('payload', {}).get('personal_codes', []):
+    for code in config.get("payload", {}).get("personal_codes", []):
         normalized = str(code).strip().upper()
         if not normalized or normalized in ignored:
             continue
@@ -509,8 +518,8 @@ def _normalize_personal_codes(config):
 
     if duplicates:
         raise ValueError(
-            'personal_codes contains duplicate values after normalization: '
-            + ', '.join(sorted(set(duplicates)))
+            "personal_codes contains duplicate values after normalization: "
+            + ", ".join(sorted(set(duplicates)))
         )
 
     return usable, sorted(ignored)
@@ -519,11 +528,11 @@ def _normalize_personal_codes(config):
 def fetch_eligible_rider_profiles(dynamodb, stack_name, config, select_path=None):
     """Fetch rider profiles as per the filter defined in the scenario selection section."""
 
-    target = 'RiderProfile'
+    target = "RiderProfile"
     if select_path is None:
-        selection = config['selection']
+        selection = config["selection"]
     else:
-        selection = config[select_path]['selection']
+        selection = config[select_path]["selection"]
 
     logger.info("Validating selection filter for selection...")
 
@@ -532,7 +541,7 @@ def fetch_eligible_rider_profiles(dynamodb, stack_name, config, select_path=None
         dynamodb,
         stack_name,
         target,
-        filter_expression=resolve_selection_filter(selection.get('filter')),
+        filter_expression=resolve_selection_filter(selection.get("filter")),
     )
 
     logger.info("  Found %s eligible profiles", len(eligible_profiles))
@@ -543,24 +552,30 @@ def assign_personal_codes(dynamodb, stack_name, config, rng, dry_run=False):
     """Randomly assign personal codes to eligible RiderProfile items."""
     validate_personal_code_scenario(config)
 
-    target = config['target']
-    selection = config['selection']
-    attribute_name = target['attribute_name']
+    target = config["target"]
+    selection = config["selection"]
+    attribute_name = target["attribute_name"]
     usable_codes, ignored_codes = _normalize_personal_codes(config)
-    expected_selection_size = resolve_selection_limit(selection.get('limit'), config)
+    expected_selection_size = resolve_selection_limit(selection.get("limit"), config)
 
     logger.info("Fetching rider profiles from RiderProfile...")
     eligible_profiles = fetch_table_items(
         dynamodb,
         stack_name,
-        target['table_name'],
-        filter_expression=resolve_selection_filter(selection.get('filter')),
+        target["table_name"],
+        filter_expression=resolve_selection_filter(selection.get("filter")),
     )
-    logger.info("  Found %s eligible profiles without %s", len(eligible_profiles), attribute_name)
+    logger.info(
+        "  Found %s eligible profiles without %s",
+        len(eligible_profiles),
+        attribute_name,
+    )
 
-    if expected_selection_size is not None and expected_selection_size != len(usable_codes):
+    if expected_selection_size is not None and expected_selection_size != len(
+        usable_codes
+    ):
         raise ValueError(
-            'selection.limit resolved to a different size than the usable payload set'
+            "selection.limit resolved to a different size than the usable payload set"
         )
 
     if len(usable_codes) > len(eligible_profiles):
@@ -572,8 +587,8 @@ def assign_personal_codes(dynamodb, stack_name, config, rng, dry_run=False):
     selected_profiles = rng.sample(eligible_profiles, len(usable_codes))
     assignments = [
         {
-            'profileId': profile['profileId'],
-            'name': profile.get('name'),
+            "profileId": profile["profileId"],
+            "name": profile.get("name"),
             attribute_name: code,
         }
         for profile, code in zip(selected_profiles, usable_codes)
@@ -586,20 +601,20 @@ def assign_personal_codes(dynamodb, stack_name, config, rng, dry_run=False):
     if dry_run:
         return assignments
 
-    table = get_table(dynamodb, stack_name, target['table_name'])
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    table = get_table(dynamodb, stack_name, target["table_name"])
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     loaded = 0
     failed = 0
     for assignment in assignments:
         try:
             table.update_item(
-                Key={'profileId': assignment['profileId']},
-                UpdateExpression='SET personalCode = :code, updatedAt = :now',
-                ConditionExpression=Attr('personalCode').not_exists(),
+                Key={"profileId": assignment["profileId"]},
+                UpdateExpression="SET personalCode = :code, updatedAt = :now",
+                ConditionExpression=Attr("personalCode").not_exists(),
                 ExpressionAttributeValues={
-                    ':code': assignment['personalCode'],
-                    ':now': now,
+                    ":code": assignment["personalCode"],
+                    ":now": now,
                 },
             )
             loaded += 1
@@ -607,15 +622,15 @@ def assign_personal_codes(dynamodb, stack_name, config, rng, dry_run=False):
             failed += 1
             logger.warning(
                 "  Failed to update %s (%s): %s",
-                assignment['profileId'],
-                assignment.get('name'),
-                e.response['Error']['Message'],
+                assignment["profileId"],
+                assignment.get("name"),
+                e.response["Error"]["Message"],
             )
 
     logger.info("  Updated %s rider profile(s), Failed: %s", loaded, failed)
 
     if failed:
-        raise RuntimeError('One or more RiderProfile updates failed')
+        raise RuntimeError("One or more RiderProfile updates failed")
 
     return assignments
 
@@ -624,29 +639,39 @@ def assign_personal_codes(dynamodb, stack_name, config, rng, dry_run=False):
 # DATA GENERATION — TOUR-SPECIFIC ONLY
 # ============================================================================
 
+
 def select_tour_riders(profiles, count, rng):
     """
     Select riders from existing profile pool and assign tour-specific
     rider IDs (R1, R2, ... R{count}).
     """
     if count > len(profiles):
-        logger.error("  Requested %s riders but only %s profiles available", count, len(profiles))
+        logger.error(
+            "  Requested %s riders but only %s profiles available", count, len(profiles)
+        )
         sys.exit(1)
 
     selected = rng.sample(profiles, count)
 
     tour_riders = []
     for i, profile in enumerate(selected, 1):
-        logger.debug("  Selected %s (%s) as R%s", profile['profileId'], profile.get('personalCode'), i)
-        tour_riders.append({
-            'rider_id': f'R{i}',
-            'profile_id': profile['profileId'],
-            'status': 'REGISTERED',
-            'qr_code_data': f'R{i}',
-            'registered_at': '2026-01-15T00:00:00Z',
-            'created_at': '2026-01-15T00:00:00Z',
-            'updated_at': '2026-01-15T00:00:00Z',
-        })
+        logger.debug(
+            "  Selected %s (%s) as R%s",
+            profile["profileId"],
+            profile.get("personalCode"),
+            i,
+        )
+        tour_riders.append(
+            {
+                "rider_id": f"R{i}",
+                "profile_id": profile["profileId"],
+                "status": "REGISTERED",
+                "qr_code_data": f"R{i}",
+                "registered_at": "2026-01-15T00:00:00Z",
+                "created_at": "2026-01-15T00:00:00Z",
+                "updated_at": "2026-01-15T00:00:00Z",
+            }
+        )
 
     return tour_riders
 
@@ -661,21 +686,19 @@ def _offset_time_hhmm(base_time, offset_minutes):
 def _offset_timestamp(base_date, base_time, offset_minutes):
     """Return ISO timestamp offset from a base date/time pair."""
     hour, minute = _parse_flag_off(base_time)
-    base_dt = datetime.fromisoformat(
-        f"{base_date}T{hour:02d}:{minute:02d}:00+00:00"
-    )
+    base_dt = datetime.fromisoformat(f"{base_date}T{hour:02d}:{minute:02d}:00+00:00")
     shifted = base_dt + timedelta(minutes=offset_minutes)
-    return shifted.strftime('%Y-%m-%dT%H:%M:%SZ')
+    return shifted.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _derive_close_time(flag_off_time, stages_cfg, fallback_minutes=720):
     """Derive ride close time from the latest planned pit-stop window."""
     latest_window_end = None
     for stage_def in stages_cfg:
-        if stage_def.get('type') != 'PIT_STOP':
+        if stage_def.get("type") != "PIT_STOP":
             continue
-        estimated_open = int(stage_def.get('estimated_open_time', 0))
-        duration = int(stage_def.get('pit_stop_duration', 0))
+        estimated_open = int(stage_def.get("estimated_open_time", 0))
+        duration = int(stage_def.get("pit_stop_duration", 0))
         latest_window_end = max(latest_window_end or 0, estimated_open + duration)
 
     return _offset_time_hhmm(flag_off_time, latest_window_end or fallback_minutes)
@@ -690,9 +713,9 @@ def _build_stages_for_ride(stage_templates, stage_count):
     if stage_count < 2:
         raise ValueError("stage_count must be at least 2 (START and FINISH)")
 
-    starts = [s for s in stage_templates if s.get('type') == 'START']
-    finishes = [s for s in stage_templates if s.get('type') == 'FINISH']
-    pit_stops = [s for s in stage_templates if s.get('type') == 'PIT_STOP']
+    starts = [s for s in stage_templates if s.get("type") == "START"]
+    finishes = [s for s in stage_templates if s.get("type") == "FINISH"]
+    pit_stops = [s for s in stage_templates if s.get("type") == "PIT_STOP"]
 
     if not starts:
         raise ValueError("Stage templates must include a START stage")
@@ -721,8 +744,8 @@ def _apply_pit_stop_distances(stage_defs, pit_stop_distances):
     if pit_stop_distances is None:
         return stage_defs
 
-    pit_stops = [s for s in stage_defs if s.get('type') == 'PIT_STOP']
-    pit_stop_names = [s.get('name') for s in pit_stops]
+    pit_stops = [s for s in stage_defs if s.get("type") == "PIT_STOP"]
+    pit_stop_names = [s.get("name") for s in pit_stops]
     pit_stop_count = len(pit_stops)
 
     if isinstance(pit_stop_distances, list):
@@ -746,16 +769,14 @@ def _apply_pit_stop_distances(stage_defs, pit_stop_distances):
                 f"pit-stop order 1..{pit_stop_count}."
             )
     else:
-        raise ValueError(
-            "pit_stop_distances_from_start must be a list or dict"
-        )
+        raise ValueError("pit_stop_distances_from_start must be a list or dict")
 
     updated = []
     pit_stop_idx = 0
     for stage_def in stage_defs:
         stage_copy = dict(stage_def)
 
-        if stage_copy.get('type') == 'PIT_STOP':
+        if stage_copy.get("type") == "PIT_STOP":
             pit_stop_idx += 1
             distance = None
 
@@ -763,7 +784,7 @@ def _apply_pit_stop_distances(stage_defs, pit_stop_distances):
                 if pit_stop_idx <= len(pit_stop_distances):
                     distance = pit_stop_distances[pit_stop_idx - 1]
             else:
-                stage_name = stage_copy.get('name')
+                stage_name = stage_copy.get("name")
                 if stage_name in pit_stop_distances:
                     distance = pit_stop_distances[stage_name]
                 elif pit_stop_idx in pit_stop_distances:
@@ -772,7 +793,7 @@ def _apply_pit_stop_distances(stage_defs, pit_stop_distances):
                     distance = pit_stop_distances[str(pit_stop_idx)]
 
             if distance is not None:
-                stage_copy['distance_from_start'] = distance
+                stage_copy["distance_from_start"] = distance
 
         updated.append(stage_copy)
 
@@ -782,36 +803,40 @@ def _apply_pit_stop_distances(stage_defs, pit_stop_distances):
 def _build_stage(stage_def, idx, base_date, flag_off_time, ride_status):
     """Build a simulated stage record with pit-stop planning/runtime fields."""
     stage = {
-        'stage_id': f'S{idx:03d}',
-        'stage_number': idx,
-        'type': stage_def['type'],
-        'name': stage_def['name'],
+        "stage_id": f"S{idx:03d}",
+        "stage_number": idx,
+        "type": stage_def["type"],
+        "name": stage_def["name"],
     }
 
-    if stage_def.get('location') is not None:
-        stage['location'] = stage_def['location']
-    if stage_def.get('distance_from_start') is not None:
-        stage['distance_from_start'] = Decimal(str(stage_def['distance_from_start']))
-    if 'self_check_in_allowed' in stage_def:
-        stage['self_check_in_allowed'] = stage_def['self_check_in_allowed']
-    if 'self_not_riding_allowed' in stage_def:
-        stage['self_not_riding_allowed'] = stage_def['self_not_riding_allowed']
+    if stage_def.get("location") is not None:
+        stage["location"] = stage_def["location"]
+    if stage_def.get("distance_from_start") is not None:
+        stage["distance_from_start"] = Decimal(str(stage_def["distance_from_start"]))
+    if "self_check_in_allowed" in stage_def:
+        stage["self_check_in_allowed"] = stage_def["self_check_in_allowed"]
+    if "self_not_riding_allowed" in stage_def:
+        stage["self_not_riding_allowed"] = stage_def["self_not_riding_allowed"]
 
-    if stage_def['type'] != 'PIT_STOP':
+    if stage_def["type"] != "PIT_STOP":
         return stage
 
-    estimated_open_time = int(stage_def.get('estimated_open_time', idx * 90))
-    pit_stop_duration = int(stage_def.get('pit_stop_duration', 45))
-    stage['estimated_open_time'] = estimated_open_time
-    stage['pit_stop_duration'] = pit_stop_duration
+    estimated_open_time = int(stage_def.get("estimated_open_time", idx * 90))
+    pit_stop_duration = int(stage_def.get("pit_stop_duration", 45))
+    stage["estimated_open_time"] = estimated_open_time
+    stage["pit_stop_duration"] = pit_stop_duration
 
-    if ride_status == 'STARTED':
-        stage['pit_stop_status'] = 'OPEN'
-        stage['opened_at'] = _offset_timestamp(base_date, flag_off_time, estimated_open_time)
-    elif ride_status in ('COMPLETED', 'CLOSED'):
-        stage['pit_stop_status'] = 'CLOSED'
-        stage['opened_at'] = _offset_timestamp(base_date, flag_off_time, estimated_open_time)
-        stage['closed_at'] = _offset_timestamp(
+    if ride_status == "STARTED":
+        stage["pit_stop_status"] = "OPEN"
+        stage["opened_at"] = _offset_timestamp(
+            base_date, flag_off_time, estimated_open_time
+        )
+    elif ride_status in ("COMPLETED", "CLOSED"):
+        stage["pit_stop_status"] = "CLOSED"
+        stage["opened_at"] = _offset_timestamp(
+            base_date, flag_off_time, estimated_open_time
+        )
+        stage["closed_at"] = _offset_timestamp(
             base_date,
             flag_off_time,
             estimated_open_time + pit_stop_duration,
@@ -827,20 +852,20 @@ def _normalize_day_ride_configs(day_cfg):
       - Legacy: day-level ride fields + rides_count
       - Refactored: explicit day.rides list with per-ride definitions
     """
-    rides_cfg = day_cfg.get('rides')
+    rides_cfg = day_cfg.get("rides")
     if rides_cfg is not None:
         if not isinstance(rides_cfg, list) or not rides_cfg:
             raise ValueError(
                 f"Day {day_cfg.get('day', '?')}: 'rides' must be a non-empty list"
             )
-        if 'rides_count' in day_cfg and int(day_cfg['rides_count']) != len(rides_cfg):
+        if "rides_count" in day_cfg and int(day_cfg["rides_count"]) != len(rides_cfg):
             raise ValueError(
                 f"Day {day_cfg.get('day', '?')}: rides_count ({day_cfg['rides_count']}) "
                 f"does not match rides list size ({len(rides_cfg)})"
             )
         return rides_cfg
 
-    rides_count = int(day_cfg.get('rides_count', 1))
+    rides_count = int(day_cfg.get("rides_count", 1))
     if rides_count < 1:
         raise ValueError(
             f"Day {day_cfg.get('day', '?')}: rides_count must be at least 1"
@@ -855,59 +880,63 @@ def build_rides(config):
     Returns list of dicts with 'ride' (DynamoDB item) and 'day_config'
     (original YAML config for check-in generation).
     """
-    rides_cfg = config['rides']
-    default_stages_cfg = rides_cfg['default_stages']
-    default_stage_count = int(rides_cfg.get('default_stage_count', 4))
+    rides_cfg = config["rides"]
+    default_stages_cfg = rides_cfg["default_stages"]
+    default_stage_count = int(rides_cfg.get("default_stage_count", 4))
     rides = []
     ride_counter = 1
-    
-    for day_cfg in config['rides']['schedule']:
+
+    for day_cfg in config["rides"]["schedule"]:
         ride_defs = _normalize_day_ride_configs(day_cfg)
         rides_count = len(ride_defs)
 
         for ride_num, ride_cfg in enumerate(ride_defs, 1):
             ride_id = f"RIDE{ride_counter:03d}"
-            status = ride_cfg.get('status', day_cfg.get('status', 'PLANNED'))
-            flag_off = ride_cfg.get('flag_off_time', day_cfg.get('flag_off_time', '06:00'))
+            status = ride_cfg.get("status", day_cfg.get("status", "PLANNED"))
+            flag_off = ride_cfg.get(
+                "flag_off_time", day_cfg.get("flag_off_time", "06:00")
+            )
 
             # Build stages from day-level override or default, then apply
             # per-ride stage_count (includes START and FINISH).
             stage_templates = ride_cfg.get(
-                'stages',
-                day_cfg.get('stages', default_stages_cfg),
+                "stages",
+                day_cfg.get("stages", default_stages_cfg),
             )
             stage_count = int(
                 ride_cfg.get(
-                    'stage_count',
-                    day_cfg.get('stage_count', default_stage_count),
+                    "stage_count",
+                    day_cfg.get("stage_count", default_stage_count),
                 )
             )
             stages_cfg = _build_stages_for_ride(stage_templates, stage_count)
             stages_cfg = _apply_pit_stop_distances(
                 stages_cfg,
                 ride_cfg.get(
-                    'pit_stop_distances_from_start',
-                    day_cfg.get('pit_stop_distances_from_start'),
+                    "pit_stop_distances_from_start",
+                    day_cfg.get("pit_stop_distances_from_start"),
                 ),
             )
             stages = []
             for idx, stage_def in enumerate(stages_cfg):
                 stages.append(
-                    _build_stage(stage_def, idx, day_cfg['date'], flag_off, status)
+                    _build_stage(stage_def, idx, day_cfg["date"], flag_off, status)
                 )
 
-            ride_name = ride_cfg.get('name', day_cfg.get('name', f"Day {day_cfg['day']}"))
-            if rides_count > 1 and 'name' not in ride_cfg:
+            ride_name = ride_cfg.get(
+                "name", day_cfg.get("name", f"Day {day_cfg['day']}")
+            )
+            if rides_count > 1 and "name" not in ride_cfg:
                 ride_name = f"{ride_name} Ride {ride_num}"
 
-            open_time = ride_cfg.get('open_time', day_cfg.get('open_time', flag_off))
+            open_time = ride_cfg.get("open_time", day_cfg.get("open_time", flag_off))
             close_time = ride_cfg.get(
-                'close_time',
-                day_cfg.get('close_time', _derive_close_time(flag_off, stages_cfg)),
+                "close_time",
+                day_cfg.get("close_time", _derive_close_time(flag_off, stages_cfg)),
             )
 
             # Normalize and attach floats if defined at ride or day level.
-            floats_cfg = ride_cfg.get('floats', day_cfg.get('floats'))
+            floats_cfg = ride_cfg.get("floats", day_cfg.get("floats"))
             if floats_cfg is not None:
                 normalized_floats = []
                 total_stages = len(stages_cfg)
@@ -918,25 +947,25 @@ def build_rides(config):
                         )
 
                     # Accept multiple possible key namings from scenario files
-                    if 'floatNo' in f:
-                        float_no = f['floatNo']
-                    elif 'float_no' in f:
-                        float_no = f['float_no']
-                    elif 'float' in f:
-                        float_no = f['float']
+                    if "floatNo" in f:
+                        float_no = f["floatNo"]
+                    elif "float_no" in f:
+                        float_no = f["float_no"]
+                    elif "float" in f:
+                        float_no = f["float"]
                     else:
                         raise ValueError(
                             f"Day {day_cfg.get('day','?')}: floats[{f_idx}] missing float number key"
                         )
 
-                    if 'floatToStage' in f:
-                        float_to_stage = f['floatToStage']
-                    elif 'float_to_stage' in f:
-                        float_to_stage = f['float_to_stage']
-                    elif 'float_to' in f:
-                        float_to_stage = f['float_to']
-                    elif 'floatTo' in f:
-                        float_to_stage = f['floatTo']
+                    if "floatToStage" in f:
+                        float_to_stage = f["floatToStage"]
+                    elif "float_to_stage" in f:
+                        float_to_stage = f["float_to_stage"]
+                    elif "float_to" in f:
+                        float_to_stage = f["float_to"]
+                    elif "floatTo" in f:
+                        float_to_stage = f["floatTo"]
                     else:
                         raise ValueError(
                             f"Day {day_cfg.get('day','?')}: floats[{f_idx}] missing float-to-stage key"
@@ -951,60 +980,72 @@ def build_rides(config):
                         ) from exc
 
                     # Validate target stage is within allowed range (1..total_stages-1)
-                    if total_stages < 2 or float_to_stage < 1 or float_to_stage >= total_stages:
+                    if (
+                        total_stages < 2
+                        or float_to_stage < 1
+                        or float_to_stage >= total_stages
+                    ):
                         raise ValueError(
                             f"Day {day_cfg.get('day','?')}: floats[{f_idx}] float_to_stage {float_to_stage} out of range for {total_stages} stages"
                         )
 
-                    normalized_floats.append({
-                        'float_no': float_no,
-                        'float_to_stage': float_to_stage,
-                    })
+                    normalized_floats.append(
+                        {
+                            "float_no": float_no,
+                            "float_to_stage": float_to_stage,
+                        }
+                    )
             else:
                 normalized_floats = None
 
             ride = {
-                'ride_id': ride_id,
-                'date': day_cfg['date'],
-                'ride_no': ride_num,
-                'name': ride_name,
-                'start_location': ride_cfg.get(
-                    'start_location', day_cfg.get('start_location', 'Start')
+                "ride_id": ride_id,
+                "date": day_cfg["date"],
+                "ride_no": ride_num,
+                "name": ride_name,
+                "start_location": ride_cfg.get(
+                    "start_location", day_cfg.get("start_location", "Start")
                 ),
-                'finish_location': ride_cfg.get(
-                    'finish_location', day_cfg.get('finish_location', 'Finish')
+                "finish_location": ride_cfg.get(
+                    "finish_location", day_cfg.get("finish_location", "Finish")
                 ),
-                'total_distance': Decimal(
-                    str(ride_cfg.get('distance', day_cfg.get('distance', 100)))
+                "total_distance": Decimal(
+                    str(ride_cfg.get("distance", day_cfg.get("distance", 100)))
                 ),
-                'flag_off_time': flag_off,
-                'open_time': open_time,
-                'close_time': close_time,
-                'status': status,
-                'stages': stages,
+                "flag_off_time": flag_off,
+                "open_time": open_time,
+                "close_time": close_time,
+                "status": status,
+                "stages": stages,
                 # Attach floats only when defined in config
-                **({'floats': normalized_floats} if normalized_floats is not None else {}),
-                'created_at': '2026-02-01T00:00:00Z',
-                'updated_at': '2026-02-01T00:00:00Z',
+                **(
+                    {"floats": normalized_floats}
+                    if normalized_floats is not None
+                    else {}
+                ),
+                "created_at": "2026-02-01T00:00:00Z",
+                "updated_at": "2026-02-01T00:00:00Z",
             }
-            for setting in ('self_check_in_allowed', 'self_quit_riding_allowed'):
-                value = ride_cfg.get(setting, day_cfg.get(setting, rides_cfg.get(setting)))
+            for setting in ("self_check_in_allowed", "self_quit_riding_allowed"):
+                value = ride_cfg.get(
+                    setting, day_cfg.get(setting, rides_cfg.get(setting))
+                )
                 if value is not None:
                     ride[setting] = value
 
-            if status in ('COMPLETED', 'CLOSED'):
-                ride['started_at'] = f"{day_cfg['date']}T{flag_off}:00Z"
-                ride['completed_at'] = f"{day_cfg['date']}T18:00:00Z"
-            elif status == 'STARTED':
-                ride['started_at'] = f"{day_cfg['date']}T{flag_off}:00Z"
+            if status in ("COMPLETED", "CLOSED"):
+                ride["started_at"] = f"{day_cfg['date']}T{flag_off}:00Z"
+                ride["completed_at"] = f"{day_cfg['date']}T18:00:00Z"
+            elif status == "STARTED":
+                ride["started_at"] = f"{day_cfg['date']}T{flag_off}:00Z"
 
-            checkin_cfg = ride_cfg.get('checkins', day_cfg.get('checkins'))
+            checkin_cfg = ride_cfg.get("checkins", day_cfg.get("checkins"))
             rides.append(
                 {
-                    'ride': ride,
-                    'day_config': day_cfg,
-                    'ride_config': ride_cfg,
-                    'checkin_cfg': checkin_cfg,
+                    "ride": ride,
+                    "day_config": day_cfg,
+                    "ride_config": ride_cfg,
+                    "checkin_cfg": checkin_cfg,
                 }
             )
 
@@ -1027,28 +1068,32 @@ def apply_rider_exits(rides_data, tour_riders, rng):
     exited = []
 
     for rd in rides_data:
-        ride = rd.get('ride', {})
-        day_cfg = rd.get('day_config', {})
-        ride_cfg = rd.get('ride_config', {}) or {}
+        ride = rd.get("ride", {})
+        day_cfg = rd.get("day_config", {})
+        ride_cfg = rd.get("ride_config", {}) or {}
 
         # rider_exit may be specified at ride or day level
-        raw_exit = ride_cfg.get('rider_exit', day_cfg.get('rider_exit'))
+        raw_exit = ride_cfg.get("rider_exit", day_cfg.get("rider_exit"))
         if raw_exit is None:
             continue
 
         try:
             exit_count = int(raw_exit)
         except ValueError:
-            logger.warning("  Invalid rider_exit value '%s' for %s", raw_exit, ride.get('ride_id'))
+            logger.warning(
+                "  Invalid rider_exit value '%s' for %s", raw_exit, ride.get("ride_id")
+            )
             continue
 
         if exit_count <= 0:
             continue
 
         # Select from currently registered riders only
-        registered = [r for r in tour_riders if r.get('status') == 'REGISTERED']
+        registered = [r for r in tour_riders if r.get("status") == "REGISTERED"]
         if not registered:
-            logger.warning("  No REGISTERED riders available to exit for %s", ride.get('ride_id'))
+            logger.warning(
+                "  No REGISTERED riders available to exit for %s", ride.get("ride_id")
+            )
             continue
 
         if exit_count > len(registered):
@@ -1063,18 +1108,21 @@ def apply_rider_exits(rides_data, tour_riders, rng):
         to_exit = registered[:exit_count]
 
         # Use ride start timestamp (YYYY-MM-DDTHH:MM:00Z)
-        start_ts = ride.get('started_at') or f"{ride.get('date')}T{ride.get('flag_off_time')}:00Z"
+        start_ts = (
+            ride.get("started_at")
+            or f"{ride.get('date')}T{ride.get('flag_off_time')}:00Z"
+        )
 
         for r in to_exit:
-            r['status'] = 'EXITED'
-            r['exited_at'] = start_ts
-            exited.append(r['rider_id'])
+            r["status"] = "EXITED"
+            r["exited_at"] = start_ts
+            exited.append(r["rider_id"])
 
         logger.info(
             "  Marked %s rider(s) as EXITED at %s for %s",
             len(to_exit),
             start_ts,
-            ride.get('ride_id'),
+            ride.get("ride_id"),
         )
 
     return exited
@@ -1082,7 +1130,7 @@ def apply_rider_exits(rides_data, tour_riders, rng):
 
 def _parse_flag_off(flag_off_time):
     """Parse HH:MM flag-off time into (hour, minute)."""
-    parts = flag_off_time.split(':')
+    parts = flag_off_time.split(":")
     return int(parts[0]), int(parts[1])
 
 
@@ -1118,7 +1166,9 @@ def _make_quit_timestamp(base_date, stage_index, rng, flag_h=6, flag_m=0):
     check-in window for the stage.
     """
     quit_offsets = {0: (15, 45), 1: (130, 160), 2: (250, 280), 3: (430, 460)}
-    offset = quit_offsets.get(stage_index, (60 * stage_index + 30, 60 * stage_index + 60))
+    offset = quit_offsets.get(
+        stage_index, (60 * stage_index + 30, 60 * stage_index + 60)
+    )
 
     total_min = flag_h * 60 + flag_m + rng.randint(offset[0], offset[1])
     hour = max(0, total_min) // 60
@@ -1132,30 +1182,30 @@ def _checkin_record(ride_id, rider_id, stage, timestamp, **overrides):
     """Build a single check-in record dict."""
     if stage:
         stage_token = f"{stage['stage_number']:03d}"
-        stage_number = stage['stage_number']
-        stage_id = stage['stage_id']
+        stage_number = stage["stage_number"]
+        stage_id = stage["stage_id"]
     else:
-        stage_token = '000'
+        stage_token = "000"
         stage_number = None
         stage_id = None
 
     record = {
-        'ride_id': ride_id,
-        'check_in_id': f"{rider_id}#{stage_token}#{timestamp}",
-        'rider_id': rider_id,
-        'timestamp': timestamp,
-        'checked_in_by': 'system',
-        'method': 'QR_SCAN',
-        'is_not_riding': False,
-        'is_quit_riding': False,
-        'is_manual_entry': False,
-        'status': 'CHECKED_IN',
-        'created_at': timestamp,
+        "ride_id": ride_id,
+        "check_in_id": f"{rider_id}#{stage_token}#{timestamp}",
+        "rider_id": rider_id,
+        "timestamp": timestamp,
+        "checked_in_by": "system",
+        "method": "QR_SCAN",
+        "is_not_riding": False,
+        "is_quit_riding": False,
+        "is_manual_entry": False,
+        "status": "CHECKED_IN",
+        "created_at": timestamp,
     }
     if stage_number is not None:
-        record['stage_number'] = stage_number
+        record["stage_number"] = stage_number
     if stage_id is not None:
-        record['stage_id'] = stage_id
+        record["stage_id"] = stage_id
 
     record.update(overrides)
     return record
@@ -1183,13 +1233,16 @@ def generate_checkins(
     # Helper to check if a rider is active for a given ride.
     def _rider_active_for_ride(rider, ride):
         # Non-exited riders are active
-        if rider.get('status') != 'EXITED':
+        if rider.get("status") != "EXITED":
             return True
-        exited_ts = rider.get('exited_at')
+        exited_ts = rider.get("exited_at")
         if not exited_ts:
             return False
         # Ride start timestamp (use started_at if present, otherwise derive)
-        ride_start = ride.get('started_at') or f"{ride.get('date')}T{ride.get('flag_off_time')}:00Z"
+        ride_start = (
+            ride.get("started_at")
+            or f"{ride.get('date')}T{ride.get('flag_off_time')}:00Z"
+        )
         # Exclude rider if they exited at or before ride start
         return exited_ts > ride_start
 
@@ -1199,9 +1252,9 @@ def generate_checkins(
     logger.debug("*** Check in created: %s", len(all_checkins))
 
     for ride_data in rides_data:
-        ride = ride_data['ride']
-        checkin_cfg = ride_data.get('checkin_cfg')
-        is_today_ride = ride.get('date') == today_iso_date
+        ride = ride_data["ride"]
+        checkin_cfg = ride_data.get("checkin_cfg")
+        is_today_ride = ride.get("date") == today_iso_date
 
         if today_checkins_only and not is_today_ride:
             skipped_non_today_rides += 1
@@ -1214,45 +1267,59 @@ def generate_checkins(
         if not checkin_cfg:
             continue
 
-        logger.debug("----------------------------------------------------------------------")
-        
+        logger.debug(
+            "----------------------------------------------------------------------"
+        )
 
-        ride_id = ride['ride_id']
-        stages = ride['stages']
-        base_date = ride['date']
-        flag_h, flag_m = _parse_flag_off(ride.get('flag_off_time', '06:00'))
+        ride_id = ride["ride_id"]
+        stages = ride["stages"]
+        base_date = ride["date"]
+        flag_h, flag_m = _parse_flag_off(ride.get("flag_off_time", "06:00"))
 
         # Map stage names to indices
-        stage_name_to_idx = {s['name']: idx for idx, s in enumerate(stages)}
+        stage_name_to_idx = {s["name"]: idx for idx, s in enumerate(stages)}
 
         # Build per-ride available rider list excluding those who exited
-        active_rider_ids = [r['rider_id'] for r in tour_riders if _rider_active_for_ride(r, ride)]
+        active_rider_ids = [
+            r["rider_id"] for r in tour_riders if _rider_active_for_ride(r, ride)
+        ]
         available = list(active_rider_ids)
         rng.shuffle(available)
 
-        logger.debug(" Available riders before check-in assignment for %s: %s", ride_id, len(available))
+        logger.debug(
+            " Available riders before check-in assignment for %s: %s",
+            ride_id,
+            len(available),
+        )
         # --- Not Riding ---
-        nr_count = checkin_cfg.get('not_riding', 0)
+        nr_count = checkin_cfg.get("not_riding", 0)
         nr_riders = available[:nr_count]
         available = available[nr_count:]
 
         for rid in nr_riders:
             ts = _make_timestamp(base_date, 0, rng, flag_h, flag_m)
-            all_checkins.append(_checkin_record(
-                ride_id, rid, None, ts,
-                method='MANUAL',
-                is_not_riding=True,
-                is_manual_entry=True,
-                status='NOT_RIDING',
-            ))
+            all_checkins.append(
+                _checkin_record(
+                    ride_id,
+                    rid,
+                    None,
+                    ts,
+                    method="MANUAL",
+                    is_not_riding=True,
+                    is_manual_entry=True,
+                    status="NOT_RIDING",
+                )
+            )
 
-        logger.debug(" Available riders after NOT_RIDING assignment: %s", len(available))
+        logger.debug(
+            " Available riders after NOT_RIDING assignment: %s", len(available)
+        )
         logger.debug("*** Check in created: %s", len(all_checkins))
 
         # --- Quit Riding ---
-        for quit_cfg in checkin_cfg.get('quit', []):
-            stage_name = quit_cfg['after_stage']
-            quit_count = quit_cfg['count']
+        for quit_cfg in checkin_cfg.get("quit", []):
+            stage_name = quit_cfg["after_stage"]
+            quit_count = quit_cfg["count"]
             quit_stage_idx = stage_name_to_idx[stage_name]
 
             quit_riders = available[:quit_count]
@@ -1262,28 +1329,40 @@ def generate_checkins(
                 # Normal check-ins at all stages up to and including quit stage
                 for s_idx in range(quit_stage_idx + 1):
                     ts = _make_timestamp(base_date, s_idx, rng, flag_h, flag_m)
-                    all_checkins.append(_checkin_record(
-                        ride_id, rid, stages[s_idx], ts,
-                    ))
+                    all_checkins.append(
+                        _checkin_record(
+                            ride_id,
+                            rid,
+                            stages[s_idx],
+                            ts,
+                        )
+                    )
 
                 # Quit check-in at the quit stage (later timestamp)
                 quit_ts = _make_quit_timestamp(
                     base_date, quit_stage_idx, rng, flag_h, flag_m
                 )
-                all_checkins.append(_checkin_record(
-                    ride_id, rid, None, quit_ts,
-                    method='MANUAL',
-                    is_quit_riding=True,
-                    is_manual_entry=True,
-                    status='QUIT_RIDING',
-                ))
-        
-        logger.debug(" Available riders after QUIT_RIDING assignment: %s", len(available))
+                all_checkins.append(
+                    _checkin_record(
+                        ride_id,
+                        rid,
+                        None,
+                        quit_ts,
+                        method="MANUAL",
+                        is_quit_riding=True,
+                        is_manual_entry=True,
+                        status="QUIT_RIDING",
+                    )
+                )
+
+        logger.debug(
+            " Available riders after QUIT_RIDING assignment: %s", len(available)
+        )
         logger.debug("*** Check in created: %s", len(all_checkins))
 
         # --- Finished Riding ---
-        finished_cfg = checkin_cfg.get('finished', 0)
-        if finished_cfg == 'all_remaining':
+        finished_cfg = checkin_cfg.get("finished", 0)
+        if finished_cfg == "all_remaining":
             finished_count = len(available)
         else:
             finished_count = int(finished_cfg)
@@ -1294,9 +1373,14 @@ def generate_checkins(
         for rid in finished_riders:
             for s_idx, stage in enumerate(stages):
                 ts = _make_timestamp(base_date, s_idx, rng, flag_h, flag_m)
-                all_checkins.append(_checkin_record(
-                    ride_id, rid, stage, ts,
-                ))
+                all_checkins.append(
+                    _checkin_record(
+                        ride_id,
+                        rid,
+                        stage,
+                        ts,
+                    )
+                )
 
         logger.debug(" Available riders after FINISHED assignment: %s", len(available))
         logger.debug("*** Check in created: %s", len(all_checkins))
@@ -1304,7 +1388,7 @@ def generate_checkins(
         temp_checkin_count_last = len(all_checkins)
 
         # --- In Progress (only for STARTED rides) ---
-        in_progress_cfg = checkin_cfg.get('in_progress')
+        in_progress_cfg = checkin_cfg.get("in_progress")
         if in_progress_cfg:
             for stage_name, count in in_progress_cfg.items():
                 target_idx = stage_name_to_idx[stage_name]
@@ -1315,7 +1399,9 @@ def generate_checkins(
                     ride_id,
                     stage_name,
                 )
-                logger.debug("    Available riders before assignment: %s", len(available))
+                logger.debug(
+                    "    Available riders before assignment: %s", len(available)
+                )
 
                 ip_riders = available[:count]
                 available = available[count:]
@@ -1329,12 +1415,15 @@ def generate_checkins(
                 for rid in ip_riders:
                     # Checked in at all stages up to and including target
                     for s_idx in range(target_idx + 1):
-                        ts = _make_timestamp(
-                            base_date, s_idx, rng, flag_h, flag_m
+                        ts = _make_timestamp(base_date, s_idx, rng, flag_h, flag_m)
+                        all_checkins.append(
+                            _checkin_record(
+                                ride_id,
+                                rid,
+                                stages[s_idx],
+                                ts,
+                            )
                         )
-                        all_checkins.append(_checkin_record(
-                            ride_id, rid, stages[s_idx], ts,
-                        ))
                 temp_checkin_count = len(all_checkins)
                 logger.debug(
                     "*** Check in created: %s (added %s)",
@@ -1343,16 +1432,24 @@ def generate_checkins(
                 )
                 temp_checkin_count_last = temp_checkin_count
 
-        logger.debug(" Available riders after IN_PROGRESS assignment for %s: %s", ride_id, len(available))
-        
+        logger.debug(
+            " Available riders after IN_PROGRESS assignment for %s: %s",
+            ride_id,
+            len(available),
+        )
+
         # Log 10 random check-in entries (debug only).
         # Guarded because rng.sample() would otherwise consume random state
         # (and change generated data) even when debug logging is disabled.
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("====================================================================================")
+            logger.debug(
+                "===================================================================================="
+            )
             for sample_checkin in rng.sample(all_checkins, min(10, len(all_checkins))):
                 logger.debug("  Sample Check-in: %s", sample_checkin)
-            logger.debug("====================================================================================")
+            logger.debug(
+                "===================================================================================="
+            )
 
         if available:
             logger.warning("  %s riders unassigned for %s", len(available), ride_id)
@@ -1378,118 +1475,118 @@ def generate_checkins(
 def _stage_to_dynamodb(stage):
     """Convert snake_case stage attributes to DynamoDB table attribute names."""
     item = {
-        'stageId': stage['stage_id'],
-        'stageNumber': stage['stage_number'],
-        'type': stage['type'],
-        'name': stage['name'],
+        "stageId": stage["stage_id"],
+        "stageNumber": stage["stage_number"],
+        "type": stage["type"],
+        "name": stage["name"],
     }
-    if stage.get('location') is not None:
-        item['location'] = stage['location']
-    if stage.get('distance_from_start') is not None:
-        item['distanceFromStart'] = stage['distance_from_start']
-    if 'self_check_in_allowed' in stage:
-        item['selfCheckInAllowed'] = stage['self_check_in_allowed']
-    if 'self_not_riding_allowed' in stage:
-        item['selfNotRidingAllowed'] = stage['self_not_riding_allowed']
-    if stage.get('estimated_open_time') is not None:
-        item['estimatedOpenTime'] = stage['estimated_open_time']
-    if stage.get('pit_stop_duration') is not None:
-        item['pitStopDuration'] = stage['pit_stop_duration']
-    if stage.get('pit_stop_status') is not None:
-        item['pitStopStatus'] = stage['pit_stop_status']
-    if stage.get('opened_at') is not None:
-        item['openedAt'] = stage['opened_at']
-    if stage.get('closed_at') is not None:
-        item['closedAt'] = stage['closed_at']
+    if stage.get("location") is not None:
+        item["location"] = stage["location"]
+    if stage.get("distance_from_start") is not None:
+        item["distanceFromStart"] = stage["distance_from_start"]
+    if "self_check_in_allowed" in stage:
+        item["selfCheckInAllowed"] = stage["self_check_in_allowed"]
+    if "self_not_riding_allowed" in stage:
+        item["selfNotRidingAllowed"] = stage["self_not_riding_allowed"]
+    if stage.get("estimated_open_time") is not None:
+        item["estimatedOpenTime"] = stage["estimated_open_time"]
+    if stage.get("pit_stop_duration") is not None:
+        item["pitStopDuration"] = stage["pit_stop_duration"]
+    if stage.get("pit_stop_status") is not None:
+        item["pitStopStatus"] = stage["pit_stop_status"]
+    if stage.get("opened_at") is not None:
+        item["openedAt"] = stage["opened_at"]
+    if stage.get("closed_at") is not None:
+        item["closedAt"] = stage["closed_at"]
     return item
 
 
 def _tour_rider_to_dynamodb(item):
     """Convert snake_case TourRider attributes to DynamoDB table attribute names."""
     tour_rider = {
-        'riderId': item['rider_id'],
-        'profileId': item['profile_id'],
-        'status': item['status'],
-        'qrCodeData': item['qr_code_data'],
-        'registeredAt': item['registered_at'],
-        'createdAt': item['created_at'],
-        'updatedAt': item['updated_at'],
+        "riderId": item["rider_id"],
+        "profileId": item["profile_id"],
+        "status": item["status"],
+        "qrCodeData": item["qr_code_data"],
+        "registeredAt": item["registered_at"],
+        "createdAt": item["created_at"],
+        "updatedAt": item["updated_at"],
     }
-    if item.get('exited_at') is not None:
-        tour_rider['exitedAt'] = item['exited_at']
+    if item.get("exited_at") is not None:
+        tour_rider["exitedAt"] = item["exited_at"]
     return tour_rider
 
 
 def _ride_to_dynamodb(item):
     """Convert snake_case Ride attributes to DynamoDB table attribute names."""
     ride = {
-        'rideId': item['ride_id'],
-        'date': item['date'],
-        'rideNo': item['ride_no'],
-        'name': item['name'],
-        'startLocation': item['start_location'],
-        'finishLocation': item['finish_location'],
-        'totalDistance': item['total_distance'],
-        'flagOffTime': item['flag_off_time'],
-        'openTime': item['open_time'],
-        'closeTime': item['close_time'],
-        'status': item['status'],
-        'stages': [_stage_to_dynamodb(s) for s in item['stages']],
+        "rideId": item["ride_id"],
+        "date": item["date"],
+        "rideNo": item["ride_no"],
+        "name": item["name"],
+        "startLocation": item["start_location"],
+        "finishLocation": item["finish_location"],
+        "totalDistance": item["total_distance"],
+        "flagOffTime": item["flag_off_time"],
+        "openTime": item["open_time"],
+        "closeTime": item["close_time"],
+        "status": item["status"],
+        "stages": [_stage_to_dynamodb(s) for s in item["stages"]],
     }
     # Convert floats, if present, from generator snake_case to API field names
-    if item.get('floats') is not None:
-        ride['floats'] = [
+    if item.get("floats") is not None:
+        ride["floats"] = [
             {
-                'floatNo': f.get('float_no'),
-                'floatToStage': f.get('float_to_stage'),
+                "floatNo": f.get("float_no"),
+                "floatToStage": f.get("float_to_stage"),
             }
-            for f in item['floats']
+            for f in item["floats"]
         ]
-    ride['createdAt'] = item['created_at']
-    ride['updatedAt'] = item['updated_at']
-    if 'self_check_in_allowed' in item:
-        ride['selfCheckInAllowed'] = item['self_check_in_allowed']
-    if 'self_quit_riding_allowed' in item:
-        ride['selfQuitRidingAllowed'] = item['self_quit_riding_allowed']
-    
-    if item.get('started_at'):
-        ride['startedAt'] = item['started_at']
-    if item.get('completed_at'):
-        ride['completedAt'] = item['completed_at']
-    if item.get('closed_at'):
-        ride['closedAt'] = item['closed_at']
+    ride["createdAt"] = item["created_at"]
+    ride["updatedAt"] = item["updated_at"]
+    if "self_check_in_allowed" in item:
+        ride["selfCheckInAllowed"] = item["self_check_in_allowed"]
+    if "self_quit_riding_allowed" in item:
+        ride["selfQuitRidingAllowed"] = item["self_quit_riding_allowed"]
+
+    if item.get("started_at"):
+        ride["startedAt"] = item["started_at"]
+    if item.get("completed_at"):
+        ride["completedAt"] = item["completed_at"]
+    if item.get("closed_at"):
+        ride["closedAt"] = item["closed_at"]
     return ride
 
 
 def _checkin_to_dynamodb(item):
     """Convert snake_case CheckIn attributes to DynamoDB table attribute names."""
     checkin = {
-        'rideId': item['ride_id'],
-        'checkInId': item['check_in_id'],
-        'riderId': item['rider_id'],
-        'timestamp': item['timestamp'],
-        'checkedInBy': item['checked_in_by'],
-        'method': item['method'],
-        'isNotRiding': item['is_not_riding'],
-        'isQuitRiding': item['is_quit_riding'],
-        'isManualEntry': item['is_manual_entry'],
-        'status': item['status'],
-        'createdAt': item['created_at'],
+        "rideId": item["ride_id"],
+        "checkInId": item["check_in_id"],
+        "riderId": item["rider_id"],
+        "timestamp": item["timestamp"],
+        "checkedInBy": item["checked_in_by"],
+        "method": item["method"],
+        "isNotRiding": item["is_not_riding"],
+        "isQuitRiding": item["is_quit_riding"],
+        "isManualEntry": item["is_manual_entry"],
+        "status": item["status"],
+        "createdAt": item["created_at"],
     }
-    if item.get('stage_number') is not None:
-        checkin['stageNumber'] = item['stage_number']
-    if item.get('stage_id') is not None:
-        checkin['stageId'] = item['stage_id']
+    if item.get("stage_number") is not None:
+        checkin["stageNumber"] = item["stage_number"]
+    if item.get("stage_id") is not None:
+        checkin["stageId"] = item["stage_id"]
     return checkin
 
 
 def to_dynamodb_items(table_type, items):
     """Convert generated snake_case items to DynamoDB table attribute names."""
-    if table_type == 'TourRider':
+    if table_type == "TourRider":
         return [_tour_rider_to_dynamodb(i) for i in items]
-    if table_type == 'Ride':
+    if table_type == "Ride":
         return [_ride_to_dynamodb(i) for i in items]
-    if table_type == 'CheckIn':
+    if table_type == "CheckIn":
         return [_checkin_to_dynamodb(i) for i in items]
     raise ValueError(f"Unsupported table type: {table_type}")
 
@@ -1498,26 +1595,27 @@ def to_dynamodb_items(table_type, items):
 # DynamoDB OPERATIONS — WRITE
 # ============================================================================
 
+
 def clean_table(table):
     """Delete all items from a DynamoDB table."""
     table.load()
-    key_attrs = [k['AttributeName'] for k in table.key_schema]
+    key_attrs = [k["AttributeName"] for k in table.key_schema]
 
     deleted = 0
-    response = table.scan(ProjectionExpression=', '.join(key_attrs))
+    response = table.scan(ProjectionExpression=", ".join(key_attrs))
 
     with table.batch_writer() as batch:
-        for item in response.get('Items', []):
+        for item in response.get("Items", []):
             key = {k: item[k] for k in key_attrs}
             batch.delete_item(Key=key)
             deleted += 1
 
-        while 'LastEvaluatedKey' in response:
+        while "LastEvaluatedKey" in response:
             response = table.scan(
-                ProjectionExpression=', '.join(key_attrs),
-                ExclusiveStartKey=response['LastEvaluatedKey'],
+                ProjectionExpression=", ".join(key_attrs),
+                ExclusiveStartKey=response["LastEvaluatedKey"],
             )
-            for item in response.get('Items', []):
+            for item in response.get("Items", []):
                 key = {k: item[k] for k in key_attrs}
                 batch.delete_item(Key=key)
                 deleted += 1
@@ -1527,7 +1625,7 @@ def clean_table(table):
 
 def clean_tour_data(dynamodb, stack_name, tour_id):
     """Clean all data from tour-specific tables (not shared tables)."""
-    table_types = ['TourRider', 'Ride', 'CheckIn']
+    table_types = ["TourRider", "Ride", "CheckIn"]
 
     for table_type in table_types:
         table_name = build_table_name(stack_name, table_type, tour_id=tour_id)
@@ -1536,7 +1634,7 @@ def clean_tour_data(dynamodb, stack_name, tour_id):
             deleted = clean_table(table)
             logger.info("  Cleaned %s: %s items deleted", table_name, deleted)
         except ClientError as e:
-            if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            if e.response["Error"]["Code"] == "ResourceNotFoundException":
                 logger.info("  Skipped %s: table not found", table_name)
             else:
                 raise
@@ -1555,25 +1653,27 @@ def load_to_dynamodb(dynamodb, table_name, items):
                 loaded += 1
             except ClientError as e:
                 failed += 1
-                logger.warning("    Failed: %s", e.response['Error']['Message'])
+                logger.warning("    Failed: %s", e.response["Error"]["Message"])
 
     return loaded, failed
 
 
-def update_tour_status(dynamodb, stack_name, tour_id, status, self_quit_riding_allowed=None):
+def update_tour_status(
+    dynamodb, stack_name, tour_id, status, self_quit_riding_allowed=None
+):
     """Update simulation-controlled tour fields in TourMaster."""
-    table = get_table(dynamodb, stack_name, 'TourMaster')
+    table = get_table(dynamodb, stack_name, "TourMaster")
 
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    update_expression = 'SET #status = :status, updatedAt = :now'
-    expression_names = {'#status': 'status'}
-    expression_values = {':status': status, ':now': now}
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    update_expression = "SET #status = :status, updatedAt = :now"
+    expression_names = {"#status": "status"}
+    expression_values = {":status": status, ":now": now}
     if self_quit_riding_allowed is not None:
-        update_expression += ', selfQuitRidingAllowed = :selfQuitRidingAllowed'
-        expression_values[':selfQuitRidingAllowed'] = self_quit_riding_allowed
+        update_expression += ", selfQuitRidingAllowed = :selfQuitRidingAllowed"
+        expression_values[":selfQuitRidingAllowed"] = self_quit_riding_allowed
 
     table.update_item(
-        Key={'tourId': tour_id},
+        Key={"tourId": tour_id},
         UpdateExpression=update_expression,
         ExpressionAttributeNames=expression_names,
         ExpressionAttributeValues=expression_values,
@@ -1584,15 +1684,17 @@ def update_tour_status(dynamodb, stack_name, tour_id, status, self_quit_riding_a
 # DRY RUN - JSON OUTPUT
 # ============================================================================
 
+
 def write_json(data, filepath):
     """Write data to a JSON file, converting Decimals to numbers."""
+
     def _default(obj):
         if isinstance(obj, Decimal):
             return float(obj) if obj != int(obj) else int(obj)
         raise TypeError(f"Not JSON serializable: {type(obj)}")
 
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(filepath, 'w', encoding='utf-8') as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, default=_default)
     logger.info("  Written: %s (%s items)", filepath, len(data))
 
@@ -1600,6 +1702,7 @@ def write_json(data, filepath):
 # ============================================================================
 # VALIDATION
 # ============================================================================
+
 
 def resolve_schedule_dates(config, anchor_today=None):
     """
@@ -1610,53 +1713,58 @@ def resolve_schedule_dates(config, anchor_today=None):
       - anchor_ride_number: ride/day number to map to anchor date
       - anchor_date: "today" (default) or explicit YYYY-MM-DD
     """
-    rides_cfg = config.get('rides', {})
-    strategy = rides_cfg.get('date_strategy')
-    schedule = rides_cfg.get('schedule', [])
+    rides_cfg = config.get("rides", {})
+    strategy = rides_cfg.get("date_strategy")
+    schedule = rides_cfg.get("schedule", [])
 
     if not strategy:
         return
 
-    mode = strategy.get('mode', 'ride_number_anchor')
-    if mode not in ('ride_number_anchor', 'historical'):
+    mode = strategy.get("mode", "ride_number_anchor")
+    if mode not in ("ride_number_anchor", "historical"):
         raise ValueError(f"Unsupported date strategy mode: {mode}")
 
-    if mode == 'ride_number_anchor':
-        anchor_ride = int(strategy.get('anchor_ride_number', 3))
-        anchor_date_cfg = strategy.get('anchor_date', 'today')
+    if mode == "ride_number_anchor":
+        anchor_ride = int(strategy.get("anchor_ride_number", 3))
+        anchor_date_cfg = strategy.get("anchor_date", "today")
 
         if anchor_today is None:
             anchor_today = date.today()
 
-        if isinstance(anchor_date_cfg, str) and anchor_date_cfg.lower() == 'today':
+        if isinstance(anchor_date_cfg, str) and anchor_date_cfg.lower() == "today":
             anchor_dt = anchor_today
         else:
             anchor_dt = date.fromisoformat(str(anchor_date_cfg))
 
         logger.info("Resolving dynamic schedule dates...")
-        logger.info("  Strategy: ride_number_anchor (ride %s -> %s)", anchor_ride, anchor_dt.isoformat())
+        logger.info(
+            "  Strategy: ride_number_anchor (ride %s -> %s)",
+            anchor_ride,
+            anchor_dt.isoformat(),
+        )
 
         for idx, day_cfg in enumerate(schedule, 1):
-            ride_day_number = int(day_cfg.get('day', idx))
+            ride_day_number = int(day_cfg.get("day", idx))
             resolved = anchor_dt + timedelta(days=ride_day_number - anchor_ride)
-            day_cfg['date'] = resolved.isoformat()
+            day_cfg["date"] = resolved.isoformat()
 
-
-    if mode == 'historical':
+    if mode == "historical":
         # Just use the explicit dates in the schedule; no dynamic resolution needed.
         logger.info("Using historical schedule dates...")
-        hist_start_date = strategy.get('start_date')
+        hist_start_date = strategy.get("start_date")
         if hist_start_date:
             hist_start_dt = date.fromisoformat(str(hist_start_date))
             logger.info("  Historical start date: %s", hist_start_dt.isoformat())
         else:
-            logger.warning("  Fatal: start_date not provided; using explicit schedule dates")
+            logger.warning(
+                "  Fatal: start_date not provided; using explicit schedule dates"
+            )
             exit(1)
 
         for idx, day_cfg in enumerate(schedule, 1):
-            ride_day_number = int(day_cfg.get('day', idx))
+            ride_day_number = int(day_cfg.get("day", idx))
             resolved = hist_start_dt + timedelta(days=ride_day_number - 1)
-            day_cfg['date'] = resolved.isoformat()
+            day_cfg["date"] = resolved.isoformat()
 
 
 def resolve_schedule_statuses(config, include_today_checkins=False):
@@ -1669,45 +1777,44 @@ def resolve_schedule_statuses(config, include_today_checkins=False):
                 otherwise PLANNED
             - day > anchor_ride_number: PLANNED
     """
-    rides_cfg = config.get('rides', {})
-    strategy = rides_cfg.get('date_strategy') or {}
-    schedule = rides_cfg.get('schedule', [])
+    rides_cfg = config.get("rides", {})
+    strategy = rides_cfg.get("date_strategy") or {}
+    schedule = rides_cfg.get("schedule", [])
 
-    strategy_mode = strategy.get('mode')
-    if strategy_mode == 'ride_number_anchor':
-        anchor_ride = int(strategy.get('anchor_ride_number', 3))
+    strategy_mode = strategy.get("mode")
+    if strategy_mode == "ride_number_anchor":
+        anchor_ride = int(strategy.get("anchor_ride_number", 3))
         logger.info(" Anchor Ride Number mode is used")
         logger.info("Resolving schedule statuses from anchor ride...")
-        
-        today_status = 'STARTED' if include_today_checkins else 'PLANNED'
+
+        today_status = "STARTED" if include_today_checkins else "PLANNED"
         logger.info("  Status strategy: ride %s is %s", anchor_ride, today_status)
-    elif strategy_mode == 'historical':
+    elif strategy_mode == "historical":
         logger.info(" Resolving schedule statuses from historical dates...")
 
-
     for idx, day_cfg in enumerate(schedule, 1):
-        ride_day_number = int(day_cfg.get('day', idx))
-        if strategy_mode == 'historical' or ride_day_number < anchor_ride:
-            day_cfg['status'] = 'CLOSED'
+        ride_day_number = int(day_cfg.get("day", idx))
+        if strategy_mode == "historical" or ride_day_number < anchor_ride:
+            day_cfg["status"] = "CLOSED"
         elif ride_day_number == anchor_ride:
-            day_cfg['status'] = 'STARTED' if include_today_checkins else 'PLANNED'
+            day_cfg["status"] = "STARTED" if include_today_checkins else "PLANNED"
         else:
-            day_cfg['status'] = 'PLANNED'
+            day_cfg["status"] = "PLANNED"
 
         for ride_cfg in _normalize_day_ride_configs(day_cfg):
-            ride_cfg['status'] = day_cfg['status']
+            ride_cfg["status"] = day_cfg["status"]
 
 
 def validate_schedule_dates(config):
     """Ensure all schedule entries have valid ISO dates before generation."""
-    for idx, day_cfg in enumerate(config.get('rides', {}).get('schedule', []), 1):
-        if 'date' not in day_cfg:
+    for idx, day_cfg in enumerate(config.get("rides", {}).get("schedule", []), 1):
+        if "date" not in day_cfg:
             raise ValueError(
                 f"Missing date for schedule entry {idx}. "
                 "Provide rides.date_strategy or explicit date values."
             )
         try:
-            date.fromisoformat(str(day_cfg['date']))
+            date.fromisoformat(str(day_cfg["date"]))
         except ValueError as exc:
             raise ValueError(
                 f"Invalid date '{day_cfg['date']}' in schedule entry {idx}. "
@@ -1717,55 +1824,55 @@ def validate_schedule_dates(config):
 
 def validate_status_configuration(config):
     """Reject explicit schedule statuses when dynamic strategy is configured."""
-    strategy = config.get('rides', {}).get('date_strategy')
+    strategy = config.get("rides", {}).get("date_strategy")
     if not strategy:
         return
 
     bad_entries = []
-    for idx, day_cfg in enumerate(config.get('rides', {}).get('schedule', []), 1):
-        if 'status' in day_cfg:
-            day = day_cfg.get('day', idx)
+    for idx, day_cfg in enumerate(config.get("rides", {}).get("schedule", []), 1):
+        if "status" in day_cfg:
+            day = day_cfg.get("day", idx)
             bad_entries.append(str(day))
         for ride_idx, ride_cfg in enumerate(_normalize_day_ride_configs(day_cfg), 1):
-            if 'status' in ride_cfg:
-                day = day_cfg.get('day', idx)
+            if "status" in ride_cfg:
+                day = day_cfg.get("day", idx)
                 bad_entries.append(f"{day}.ride{ride_idx}")
 
     if bad_entries:
         raise ValueError(
             "Schedule 'status' must not be set when rides.date_strategy is "
-            "configured. Remove status from day entries: "
-            + ', '.join(bad_entries)
+            "configured. Remove status from day entries: " + ", ".join(bad_entries)
         )
+
 
 def validate_scenario(config):
     """Validate the scenario configuration and log warnings for issues."""
-    rider_count = config['tour_riders']['count']
+    rider_count = config["tour_riders"]["count"]
     errors = []
 
-    for day_idx, day_cfg in enumerate(config['rides']['schedule'], 1):
-        day = day_cfg.get('day', day_idx)
+    for day_idx, day_cfg in enumerate(config["rides"]["schedule"], 1):
+        day = day_cfg.get("day", day_idx)
         ride_defs = _normalize_day_ride_configs(day_cfg)
 
         for ride_idx, ride_cfg in enumerate(ride_defs, 1):
-            checkin_cfg = ride_cfg.get('checkins', day_cfg.get('checkins'))
+            checkin_cfg = ride_cfg.get("checkins", day_cfg.get("checkins"))
             if not checkin_cfg:
                 continue
 
-            nr = checkin_cfg.get('not_riding', 0)
-            quit_total = sum(q['count'] for q in checkin_cfg.get('quit', []))
+            nr = checkin_cfg.get("not_riding", 0)
+            quit_total = sum(q["count"] for q in checkin_cfg.get("quit", []))
 
-            finished_cfg = checkin_cfg.get('finished', 0)
-            if finished_cfg == 'all_remaining':
+            finished_cfg = checkin_cfg.get("finished", 0)
+            if finished_cfg == "all_remaining":
                 finished = rider_count - nr - quit_total
             else:
                 finished = int(finished_cfg)
 
-            ip_total = sum(checkin_cfg.get('in_progress', {}).values())
+            ip_total = sum(checkin_cfg.get("in_progress", {}).values())
             assigned = nr + quit_total + finished + ip_total
             expected = rider_count
 
-            if finished_cfg != 'all_remaining' and assigned != expected:
+            if finished_cfg != "all_remaining" and assigned != expected:
                 errors.append(
                     f"Day {day} ride {ride_idx}: assigned {assigned} riders "
                     f"but tour has {expected} (NR:{nr} + Quit:{quit_total} + "
@@ -1784,34 +1891,35 @@ def validate_scenario(config):
 # SUMMARY
 # ============================================================================
 
+
 def print_summary(tour_riders, rides_data, checkins):
     """Log a formatted summary of generated data."""
-    logger.info("%s", '─' * 60)
+    logger.info("%s", "─" * 60)
     logger.info("GENERATION SUMMARY")
-    logger.info("%s", '─' * 60)
+    logger.info("%s", "─" * 60)
     logger.info("  Tour riders    : %s", len(tour_riders))
     logger.info("  Rides          : %s", len(rides_data))
     logger.info("  Check-ins      : %s", len(checkins))
 
     logger.info("  Per-ride breakdown:")
     for rd in rides_data:
-        ride = rd['ride']
-        rc = [c for c in checkins if c['ride_id'] == ride['ride_id']]
-        nr = len([c for c in rc if c.get('is_not_riding')])
-        qr = len([c for c in rc if c.get('is_quit_riding')])
+        ride = rd["ride"]
+        rc = [c for c in checkins if c["ride_id"] == ride["ride_id"]]
+        nr = len([c for c in rc if c.get("is_not_riding")])
+        qr = len([c for c in rc if c.get("is_quit_riding")])
         normal = len(rc) - nr - qr
         logger.info(
             "    %s %-20s %-10s | records: %4d  (NR:%s, Quit:%s, Normal:%s)",
-            ride['ride_id'],
-            ride['name'],
-            ride['status'],
+            ride["ride_id"],
+            ride["name"],
+            ride["status"],
             len(rc),
             nr,
             qr,
             normal,
         )
 
-    logger.info("%s", '─' * 60)
+    logger.info("%s", "─" * 60)
 
 
 def run_personal_code_scenario(args, config, stack_name, region, seed):
@@ -1820,7 +1928,7 @@ def run_personal_code_scenario(args, config, stack_name, region, seed):
     validate_personal_code_scenario(config)
 
     print_run_header(
-        scenario.get('name', 'Unnamed'),
+        scenario.get("name", "Unnamed"),
         stack_name,
         seed,
         args.dry_run,
@@ -1838,7 +1946,7 @@ def run_personal_code_scenario(args, config, stack_name, region, seed):
     )
 
     if args.dry_run:
-        output_file = os.path.join(args.output_dir, 'personal_code_updates.json')
+        output_file = os.path.join(args.output_dir, "personal_code_updates.json")
         logger.info("Writing JSON file to %s", output_file)
         write_json(assignments, output_file)
     else:
@@ -1860,12 +1968,12 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
     )
     validate_schedule_dates(config)
 
-    tour_config = config['tour']
-    options = config.get('options', {})
-    tour_id = tour_config['tour_id']
+    tour_config = config["tour"]
+    options = config.get("options", {})
+    tour_id = tour_config["tour_id"]
 
     print_run_header(
-        scenario.get('name', 'Unnamed'),
+        scenario.get("name", "Unnamed"),
         stack_name,
         seed,
         args.dry_run,
@@ -1883,20 +1991,28 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
     logger.info("Fetching tour from TourMaster...")
     tour = fetch_tour(dynamodb, stack_name, tour_id)
     if not tour:
-        logger.error("  Tour '%s' not found in %s", tour_id, build_table_name(stack_name, 'TourMaster'))
+        logger.error(
+            "  Tour '%s' not found in %s",
+            tour_id,
+            build_table_name(stack_name, "TourMaster"),
+        )
         sys.exit(1)
-    logger.info("  Found: %s (status: %s)", tour.get('name'), tour.get('status'))
+    logger.info("  Found: %s (status: %s)", tour.get("name"), tour.get("status"))
 
     logger.info("Fetching rider profiles from RiderProfile...")
     # profiles = fetch_rider_profiles(dynamodb, stack_name)
-    profiles = fetch_eligible_rider_profiles(dynamodb, stack_name, config, select_path='tour_riders')
+    profiles = fetch_eligible_rider_profiles(
+        dynamodb, stack_name, config, select_path="tour_riders"
+    )
 
     if not profiles:
-        logger.error("  No profiles found in %s", build_table_name(stack_name, 'RiderProfile'))
+        logger.error(
+            "  No profiles found in %s", build_table_name(stack_name, "RiderProfile")
+        )
         sys.exit(1)
     logger.info("  Found %s profiles", len(profiles))
 
-    rider_count = config['tour_riders']['count']
+    rider_count = config["tour_riders"]["count"]
     if rider_count > len(profiles):
         logger.error(
             "  Scenario requests %s riders but only %s profiles available",
@@ -1906,11 +2022,12 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
         sys.exit(1)
 
     effective_clean_before_load = (
-        options.get('clean_before_load') and not args.today_checkins_only
+        options.get("clean_before_load") and not args.today_checkins_only
     )
 
-    if (args.clean or args.clean_only or effective_clean_before_load) \
-            and not args.dry_run:
+    if (
+        args.clean or args.clean_only or effective_clean_before_load
+    ) and not args.dry_run:
         logger.info("Cleaning existing tour data...")
         clean_tour_data(dynamodb, stack_name, tour_id)
 
@@ -1926,7 +2043,7 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
 
     logger.info("Building rides...")
     rides_data = build_rides(config)
-    rides = [rd['ride'] for rd in rides_data]
+    rides = [rd["ride"] for rd in rides_data]
     logger.info("  Built %s rides", len(rides))
     # Apply any rider exit directives from the schedule (mark TourRider items)
     exited = apply_rider_exits(rides_data, tour_riders, rng)
@@ -1946,37 +2063,39 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
     if args.dry_run:
         logger.info("Writing JSON files to %s/", args.output_dir)
         if not args.today_checkins_only:
-            write_json(tour_riders, os.path.join(args.output_dir, 'tour_riders.json'))
-            write_json(rides, os.path.join(args.output_dir, 'rides.json'))
-        write_json(checkins, os.path.join(args.output_dir, 'checkins.json'))
+            write_json(tour_riders, os.path.join(args.output_dir, "tour_riders.json"))
+            write_json(rides, os.path.join(args.output_dir, "rides.json"))
+        write_json(checkins, os.path.join(args.output_dir, "checkins.json"))
     else:
         logger.info("Loading data to DynamoDB...")
 
-        ddb_checkins = to_dynamodb_items('CheckIn', checkins)
+        ddb_checkins = to_dynamodb_items("CheckIn", checkins)
 
         if not args.today_checkins_only:
-            ddb_tour_riders = to_dynamodb_items('TourRider', tour_riders)
-            ddb_rides = to_dynamodb_items('Ride', rides)
+            ddb_tour_riders = to_dynamodb_items("TourRider", tour_riders)
+            ddb_rides = to_dynamodb_items("Ride", rides)
 
-            table_name = build_table_name(stack_name, 'TourRider', tour_id=tour_id)
-            logger.info("  Loading %s tour riders to %s...", len(tour_riders), table_name)
+            table_name = build_table_name(stack_name, "TourRider", tour_id=tour_id)
+            logger.info(
+                "  Loading %s tour riders to %s...", len(tour_riders), table_name
+            )
             loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_tour_riders)
             logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
-            table_name = build_table_name(stack_name, 'Ride', tour_id=tour_id)
+            table_name = build_table_name(stack_name, "Ride", tour_id=tour_id)
             logger.info("  Loading %s rides to %s...", len(rides), table_name)
             loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_rides)
             logger.info("    Loaded: %s, Failed: %s", loaded, failed)
         else:
             logger.info("  Skipping TourRider and Ride writes (--today-checkins-only)")
 
-        table_name = build_table_name(stack_name, 'CheckIn', tour_id=tour_id)
+        table_name = build_table_name(stack_name, "CheckIn", tour_id=tour_id)
         logger.info("  Loading %s check-ins to %s...", len(checkins), table_name)
         loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_checkins)
         logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
-        if options.get('update_tour_status', True):
-            target_status = tour_config.get('target_status')
+        if options.get("update_tour_status", True):
+            target_status = tour_config.get("target_status")
             if target_status:
                 logger.info("  Updating tour status to %s...", target_status)
                 update_tour_status(
@@ -1984,7 +2103,7 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
                     stack_name,
                     tour_id,
                     target_status,
-                    tour_config.get('self_quit_riding_allowed'),
+                    tour_config.get("self_quit_riding_allowed"),
                 )
                 logger.info("    Done")
 
@@ -1998,48 +2117,50 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
 # hardcoded here, only generic defaults for optional config fields)
 # ============================================================================
 
-EVENT_OCCURRENCE_STATUS_PLANNED = 'PLANNED'
-EVENT_OCCURRENCE_STATUS_ACTIVE = 'ACTIVE'
-EVENT_OCCURRENCE_STATUS_COMPLETED = 'COMPLETED'
+EVENT_OCCURRENCE_STATUS_PLANNED = "PLANNED"
+EVENT_OCCURRENCE_STATUS_ACTIVE = "ACTIVE"
+EVENT_OCCURRENCE_STATUS_COMPLETED = "COMPLETED"
 
-EVENT_RECORD_OUTCOME_COMPLETED = 'COMPLETED'
-EVENT_RECORD_OUTCOME_OPTED_OUT = 'OPTED_OUT'
+EVENT_RECORD_OUTCOME_COMPLETED = "COMPLETED"
+EVENT_RECORD_OUTCOME_OPTED_OUT = "OPTED_OUT"
 
 ACTIVITY_CONFIG_DEFAULTS = {
-    'enabled': True,
-    'mandatory': False,
-    'allowed_type_codes': [],
-    'allow_opt_out': False,
-    'prerequisite_activity_ids': [],
-    'restrict_to_assigned_users': True,
-    'variant_options': [],
-    'notes': '',
+    "enabled": True,
+    "mandatory": False,
+    "allowed_type_codes": [],
+    "allow_opt_out": False,
+    "prerequisite_activity_ids": [],
+    "restrict_to_assigned_users": True,
+    "variant_options": [],
+    "notes": "",
 }
 
 
 def resolve_anchor_date(config):
     """Resolve the event scenario's 'today' anchor date, used as day_offset=0."""
-    anchor_cfg = (config.get('date_strategy') or {}).get('anchor_date', 'today')
-    if isinstance(anchor_cfg, str) and anchor_cfg.strip().lower() == 'today':
+    anchor_cfg = (config.get("date_strategy") or {}).get("anchor_date", "today")
+    if isinstance(anchor_cfg, str) and anchor_cfg.strip().lower() == "today":
         return date.today()
     return date.fromisoformat(str(anchor_cfg))
 
 
 def build_hotel_items(config):
     """Build Hotel-{tourId} items from the scenario's optional 'hotels' list."""
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     items = []
-    for hotel_cfg in config.get('hotels') or []:
-        items.append({
-            'hotelId': hotel_cfg['hotel_id'],
-            'name': hotel_cfg.get('name', hotel_cfg['hotel_id']),
-            'city': hotel_cfg.get('city'),
-            'address': hotel_cfg.get('address'),
-            'contact': hotel_cfg.get('contact'),
-            'notes': hotel_cfg.get('notes'),
-            'createdAt': now,
-            'updatedAt': now,
-        })
+    for hotel_cfg in config.get("hotels") or []:
+        items.append(
+            {
+                "hotelId": hotel_cfg["hotel_id"],
+                "name": hotel_cfg.get("name", hotel_cfg["hotel_id"]),
+                "city": hotel_cfg.get("city"),
+                "address": hotel_cfg.get("address"),
+                "contact": hotel_cfg.get("contact"),
+                "notes": hotel_cfg.get("notes"),
+                "createdAt": now,
+                "updatedAt": now,
+            }
+        )
     return [{k: v for k, v in item.items() if v is not None} for item in items]
 
 
@@ -2050,37 +2171,43 @@ def build_room_allocation_items(config, anchor_date, rider_ids):
     reciprocally-shared rooms of the configured capacity, one hotel per
     configured night.
     """
-    room_cfg = config.get('room_allocation')
+    room_cfg = config.get("room_allocation")
     if not room_cfg:
         return []
 
-    room_capacity = int(room_cfg.get('room_capacity', 2))
-    room_number_start = int(room_cfg.get('room_number_start', 201))
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    room_capacity = int(room_cfg.get("room_capacity", 2))
+    room_number_start = int(room_cfg.get("room_number_start", 201))
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     items = []
-    for night_cfg in room_cfg['nights']:
-        if 'day_offset' not in night_cfg or 'hotel_id' not in night_cfg:
-            raise ValueError("room_allocation.nights entries require day_offset and hotel_id")
+    for night_cfg in room_cfg["nights"]:
+        if "day_offset" not in night_cfg or "hotel_id" not in night_cfg:
+            raise ValueError(
+                "room_allocation.nights entries require day_offset and hotel_id"
+            )
 
-        stay_date = (anchor_date + timedelta(days=int(night_cfg['day_offset']))).isoformat()
-        hotel_id = night_cfg['hotel_id']
+        stay_date = (
+            anchor_date + timedelta(days=int(night_cfg["day_offset"]))
+        ).isoformat()
+        hotel_id = night_cfg["hotel_id"]
 
         room_no = room_number_start
         for group_start in range(0, len(rider_ids), room_capacity):
-            room_riders = rider_ids[group_start:group_start + room_capacity]
+            room_riders = rider_ids[group_start : group_start + room_capacity]
             for rider_id in room_riders:
-                items.append({
-                    'stayDate': stay_date,
-                    'riderId': rider_id,
-                    'hotelId': hotel_id,
-                    'roomNo': str(room_no),
-                    'roomCapacity': room_capacity,
-                    'sharingWith': [r for r in room_riders if r != rider_id],
-                    'source': 'MANUAL',
-                    'createdAt': now,
-                    'updatedAt': now,
-                })
+                items.append(
+                    {
+                        "stayDate": stay_date,
+                        "riderId": rider_id,
+                        "hotelId": hotel_id,
+                        "roomNo": str(room_no),
+                        "roomCapacity": room_capacity,
+                        "sharingWith": [r for r in room_riders if r != rider_id],
+                        "source": "MANUAL",
+                        "createdAt": now,
+                        "updatedAt": now,
+                    }
+                )
             room_no += 1
 
     return items
@@ -2090,20 +2217,20 @@ def build_activity_item(activity_cfg, context):
     """Convert one scenario-config activity entry into an Event.activities[] item."""
     merged = {**ACTIVITY_CONFIG_DEFAULTS, **activity_cfg}
     item = {
-        'activityId': merged['activity_id'],
-        'name': merged['name'],
-        'sequenceNo': int(merged['sequence_no']),
-        'enabled': bool(merged['enabled']),
-        'mandatory': bool(merged['mandatory']),
-        'allowedTypeCodes': list(merged['allowed_type_codes']),
-        'allowOptOut': bool(merged['allow_opt_out']),
-        'prerequisiteActivityIds': list(merged['prerequisite_activity_ids']),
-        'restrictToAssignedUsers': bool(merged['restrict_to_assigned_users']),
-        'variantOptions': list(merged['variant_options']),
-        'notes': merged['notes'],
+        "activityId": merged["activity_id"],
+        "name": merged["name"],
+        "sequenceNo": int(merged["sequence_no"]),
+        "enabled": bool(merged["enabled"]),
+        "mandatory": bool(merged["mandatory"]),
+        "allowedTypeCodes": list(merged["allowed_type_codes"]),
+        "allowOptOut": bool(merged["allow_opt_out"]),
+        "prerequisiteActivityIds": list(merged["prerequisite_activity_ids"]),
+        "restrictToAssignedUsers": bool(merged["restrict_to_assigned_users"]),
+        "variantOptions": list(merged["variant_options"]),
+        "notes": merged["notes"],
     }
-    if 'self_service_allowed' in activity_cfg:
-        item['selfServiceAllowed'] = activity_cfg['self_service_allowed']
+    if "self_service_allowed" in activity_cfg:
+        item["selfServiceAllowed"] = activity_cfg["self_service_allowed"]
     return item
 
 
@@ -2112,23 +2239,23 @@ def build_event_definition_item(event_cfg, event_index):
     context = f"events[{event_index}]"
     activities = [
         build_activity_item(activity_cfg, f"{context}.activities[{idx}]")
-        for idx, activity_cfg in enumerate(event_cfg['activities'], 1)
+        for idx, activity_cfg in enumerate(event_cfg["activities"], 1)
     ]
 
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
-        'eventId': event_cfg['event_id'],
-        'eventName': event_cfg['event_name'],
-        'eventType': event_cfg['event_type'],
-        'location': event_cfg['location'],
-        'sequenceEnforced': bool(event_cfg['sequence_enforced']),
-        'defaultAllowedTypeCodes': list(event_cfg['default_allowed_type_codes']),
-        'registrationEnabled': bool(event_cfg.get('registration_enabled', False)),
-        'selfServiceAllowed': bool(event_cfg.get('self_service_allowed', False)),
-        'activities': activities,
-        'createdAt': now,
-        'updatedAt': now,
-        'updatedBy': 'simulation-script',
+        "eventId": event_cfg["event_id"],
+        "eventName": event_cfg["event_name"],
+        "eventType": event_cfg["event_type"],
+        "location": event_cfg["location"],
+        "sequenceEnforced": bool(event_cfg["sequence_enforced"]),
+        "defaultAllowedTypeCodes": list(event_cfg["default_allowed_type_codes"]),
+        "registrationEnabled": bool(event_cfg.get("registration_enabled", False)),
+        "selfServiceAllowed": bool(event_cfg.get("self_service_allowed", False)),
+        "activities": activities,
+        "createdAt": now,
+        "updatedAt": now,
+        "updatedBy": "simulation-script",
     }
 
 
@@ -2148,12 +2275,12 @@ def build_occurrence_item(event_id, occurrence_cfg, anchor_date, seed_in_progres
     Returns (item, meta) where meta carries day_offset/seq/linked_event_id
     for the second-pass linked-occurrence resolution and record generation.
     """
-    day_offset = int(occurrence_cfg['day_offset'])
-    seq = int(occurrence_cfg['seq'])
+    day_offset = int(occurrence_cfg["day_offset"])
+    seq = int(occurrence_cfg["seq"])
     occurrence_date = (anchor_date + timedelta(days=day_offset)).isoformat()
     date_seq = f"{occurrence_date}#{seq}"
     occurrence_id = f"{event_id}#{date_seq}"
-    now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     status = EVENT_OCCURRENCE_STATUS_PLANNED
     started_at = None
@@ -2163,33 +2290,37 @@ def build_occurrence_item(event_id, occurrence_cfg, anchor_date, seed_in_progres
         status = EVENT_OCCURRENCE_STATUS_COMPLETED
         started_at = f"{occurrence_date}T06:00:00Z"
         completed_at = f"{occurrence_date}T20:00:00Z"
-    elif day_offset == 0 and seed_in_progress and occurrence_cfg.get('in_progress'):
-        status = occurrence_cfg['in_progress'].get('status', EVENT_OCCURRENCE_STATUS_ACTIVE)
+    elif day_offset == 0 and seed_in_progress and occurrence_cfg.get("in_progress"):
+        status = occurrence_cfg["in_progress"].get(
+            "status", EVENT_OCCURRENCE_STATUS_ACTIVE
+        )
         started_at = f"{occurrence_date}T06:00:00Z"
 
     item = {
-        'eventId': event_id,
-        'dateSeq': date_seq,
-        'occurrenceId': occurrence_id,
-        'date': occurrence_date,
-        'seq': seq,
-        'status': status,
-        'activityOverrides': [],
-        'restrictToAssignedUsers': bool(occurrence_cfg.get('restrict_to_assigned_users', True)),
-        'startedAt': started_at,
-        'completedAt': completed_at,
-        'createdAt': now,
-        'updatedAt': now,
-        'updatedBy': 'simulation-script',
+        "eventId": event_id,
+        "dateSeq": date_seq,
+        "occurrenceId": occurrence_id,
+        "date": occurrence_date,
+        "seq": seq,
+        "status": status,
+        "activityOverrides": [],
+        "restrictToAssignedUsers": bool(
+            occurrence_cfg.get("restrict_to_assigned_users", True)
+        ),
+        "startedAt": started_at,
+        "completedAt": completed_at,
+        "createdAt": now,
+        "updatedAt": now,
+        "updatedBy": "simulation-script",
     }
-    if 'self_service_allowed' in occurrence_cfg:
-        item['selfServiceAllowed'] = occurrence_cfg['self_service_allowed']
+    if "self_service_allowed" in occurrence_cfg:
+        item["selfServiceAllowed"] = occurrence_cfg["self_service_allowed"]
     item = {k: v for k, v in item.items() if v is not None}
 
     meta = {
-        'day_offset': day_offset,
-        'seq': seq,
-        'linked_event_id': occurrence_cfg.get('linked_event_id'),
+        "day_offset": day_offset,
+        "seq": seq,
+        "linked_event_id": occurrence_cfg.get("linked_event_id"),
     }
     return item, meta
 
@@ -2197,14 +2328,14 @@ def build_occurrence_item(event_id, occurrence_cfg, anchor_date, seed_in_progres
 def _sequenced_enabled_activities(event_item, up_to_activity_id=None):
     """Return the event's activities in sequence order, optionally truncated."""
     activities = sorted(
-        (a for a in event_item['activities'] if a.get('enabled', True)),
-        key=lambda a: a['sequenceNo'],
+        (a for a in event_item["activities"] if a.get("enabled", True)),
+        key=lambda a: a["sequenceNo"],
     )
     if up_to_activity_id is None:
         return activities
-    activity_by_id = {a['activityId']: a for a in event_item['activities']}
-    limit_seq = activity_by_id[up_to_activity_id]['sequenceNo']
-    return [a for a in activities if a['sequenceNo'] <= limit_seq]
+    activity_by_id = {a["activityId"]: a for a in event_item["activities"]}
+    limit_seq = activity_by_id[up_to_activity_id]["sequenceNo"]
+    return [a for a in activities if a["sequenceNo"] <= limit_seq]
 
 
 def _pick_variant(variant_options, variant_split, rng):
@@ -2231,7 +2362,13 @@ def _activity_scan_timestamp(occurrence_date, activity_seq, rng):
 
 
 def build_activity_records_for_occurrence(
-    event_item, occurrence_item, day_offset, rider_ids, occurrence_cfg, seed_in_progress, rng,
+    event_item,
+    occurrence_item,
+    day_offset,
+    rider_ids,
+    occurrence_cfg,
+    seed_in_progress,
+    rng,
 ):
     """
     Generate EventActivityLogs items for one occurrence, entirely from its
@@ -2243,120 +2380,178 @@ def build_activity_records_for_occurrence(
     QR-scan testing from its current state.
     """
     if day_offset < 0:
-        return _build_full_progress_records(event_item, occurrence_item, rider_ids, occurrence_cfg, rng)
+        return _build_full_progress_records(
+            event_item, occurrence_item, rider_ids, occurrence_cfg, rng
+        )
 
     if day_offset == 0 and seed_in_progress:
-        in_progress_cfg = occurrence_cfg.get('in_progress')
+        in_progress_cfg = occurrence_cfg.get("in_progress")
         if in_progress_cfg:
             return _build_in_progress_records(
-                event_item, occurrence_item, rider_ids, in_progress_cfg, rng,
+                event_item,
+                occurrence_item,
+                rider_ids,
+                in_progress_cfg,
+                rng,
             )
 
     return []
 
 
-def _build_full_progress_records(event_item, occurrence_item, rider_ids, occurrence_cfg, rng):
+def _build_full_progress_records(
+    event_item, occurrence_item, rider_ids, occurrence_cfg, rng
+):
     """Every rider completes the full activity sequence (historical occurrence)."""
     records = []
-    activity_outcomes_cfg = (occurrence_cfg.get('progress') or {}).get('activity_outcomes', {})
+    activity_outcomes_cfg = (occurrence_cfg.get("progress") or {}).get(
+        "activity_outcomes", {}
+    )
 
     for activity in _sequenced_enabled_activities(event_item):
-        outcome_cfg = activity_outcomes_cfg.get(activity['activityId'], {})
-        opted_out_ratio = outcome_cfg.get('opted_out_ratio', 0) if activity.get('allowOptOut') else 0
+        outcome_cfg = activity_outcomes_cfg.get(activity["activityId"], {})
+        opted_out_ratio = (
+            outcome_cfg.get("opted_out_ratio", 0) if activity.get("allowOptOut") else 0
+        )
         opted_out_count = round(opted_out_ratio * len(rider_ids))
-        opted_out_riders = set(rng.sample(rider_ids, opted_out_count)) if opted_out_count else set()
-        variant_split = outcome_cfg.get('variant_split')
+        opted_out_riders = (
+            set(rng.sample(rider_ids, opted_out_count)) if opted_out_count else set()
+        )
+        variant_split = outcome_cfg.get("variant_split")
 
         for rider_id in rider_ids:
             outcome = (
-                EVENT_RECORD_OUTCOME_OPTED_OUT if rider_id in opted_out_riders
+                EVENT_RECORD_OUTCOME_OPTED_OUT
+                if rider_id in opted_out_riders
                 else EVENT_RECORD_OUTCOME_COMPLETED
             )
             variant_selected = None
-            if outcome == EVENT_RECORD_OUTCOME_COMPLETED and activity.get('variantOptions'):
-                variant_selected = _pick_variant(activity['variantOptions'], variant_split, rng)
-            timestamp = _activity_scan_timestamp(occurrence_item['date'], activity['sequenceNo'], rng)
-            records.append(_build_activity_record(
-                event_item, occurrence_item, activity, rider_id, timestamp, outcome, variant_selected,
-            ))
+            if outcome == EVENT_RECORD_OUTCOME_COMPLETED and activity.get(
+                "variantOptions"
+            ):
+                variant_selected = _pick_variant(
+                    activity["variantOptions"], variant_split, rng
+                )
+            timestamp = _activity_scan_timestamp(
+                occurrence_item["date"], activity["sequenceNo"], rng
+            )
+            records.append(
+                _build_activity_record(
+                    event_item,
+                    occurrence_item,
+                    activity,
+                    rider_id,
+                    timestamp,
+                    outcome,
+                    variant_selected,
+                )
+            )
 
     return records
 
 
-def _build_in_progress_records(event_item, occurrence_item, rider_ids, in_progress_cfg, rng):
+def _build_in_progress_records(
+    event_item, occurrence_item, rider_ids, in_progress_cfg, rng
+):
     """
     Distribute riders across "furthest activity reached" buckets so a tester
     can pick up manual scanning immediately for every rider not yet assigned
     a bucket (mirrors the ride check-in scenario's 'in_progress' shape).
     """
     records = []
-    activity_distribution = in_progress_cfg.get('activity_distribution', {})
+    activity_distribution = in_progress_cfg.get("activity_distribution", {})
     available = list(rider_ids)
     rng.shuffle(available)
 
     for activity_id, count in activity_distribution.items():
         group_riders = available[:count]
         available = available[count:]
-        activities_to_complete = _sequenced_enabled_activities(event_item, up_to_activity_id=activity_id)
+        activities_to_complete = _sequenced_enabled_activities(
+            event_item, up_to_activity_id=activity_id
+        )
 
         for rider_id in group_riders:
             for activity in activities_to_complete:
-                timestamp = _activity_scan_timestamp(occurrence_item['date'], activity['sequenceNo'], rng)
-                variant_selected = _pick_variant(activity.get('variantOptions'), None, rng)
-                records.append(_build_activity_record(
-                    event_item, occurrence_item, activity, rider_id, timestamp,
-                    EVENT_RECORD_OUTCOME_COMPLETED, variant_selected,
-                ))
+                timestamp = _activity_scan_timestamp(
+                    occurrence_item["date"], activity["sequenceNo"], rng
+                )
+                variant_selected = _pick_variant(
+                    activity.get("variantOptions"), None, rng
+                )
+                records.append(
+                    _build_activity_record(
+                        event_item,
+                        occurrence_item,
+                        activity,
+                        rider_id,
+                        timestamp,
+                        EVENT_RECORD_OUTCOME_COMPLETED,
+                        variant_selected,
+                    )
+                )
 
     if available:
         logger.info(
             "Note: %s rider(s) left with no activity records for %s (available for manual "
             "scanning from the start)",
             len(available),
-            occurrence_item['occurrenceId'],
+            occurrence_item["occurrenceId"],
         )
 
     return records
 
 
-def _build_activity_record(event_item, occurrence_item, activity, rider_id, timestamp, outcome, variant_selected):
+def _build_activity_record(
+    event_item,
+    occurrence_item,
+    activity,
+    rider_id,
+    timestamp,
+    outcome,
+    variant_selected,
+):
     """Build a single EventActivityLogs item."""
     record = {
-        'occurrenceId': occurrence_item['occurrenceId'],
-        'recordId': f"{rider_id}#{activity['activityId']}#{timestamp}",
-        'eventId': event_item['eventId'],
-        'activityId': activity['activityId'],
-        'activityName': activity['name'],
-        'riderId': rider_id,
-        'outcome': outcome,
-        'variantSelected': variant_selected,
-        'scannedBy': 'simulation-script',
-        'method': 'QR_SCAN',
-        'timestamp': timestamp,
-        'syncedAt': timestamp,
-        'isFlagged': False,
-        'createdAt': timestamp,
+        "occurrenceId": occurrence_item["occurrenceId"],
+        "recordId": f"{rider_id}#{activity['activityId']}#{timestamp}",
+        "eventId": event_item["eventId"],
+        "activityId": activity["activityId"],
+        "activityName": activity["name"],
+        "riderId": rider_id,
+        "outcome": outcome,
+        "variantSelected": variant_selected,
+        "scannedBy": "simulation-script",
+        "method": "QR_SCAN",
+        "timestamp": timestamp,
+        "syncedAt": timestamp,
+        "isFlagged": False,
+        "createdAt": timestamp,
     }
-    allowed_type_codes = activity.get('allowedTypeCodes') or event_item.get('defaultAllowedTypeCodes') or []
+    allowed_type_codes = (
+        activity.get("allowedTypeCodes")
+        or event_item.get("defaultAllowedTypeCodes")
+        or []
+    )
     if allowed_type_codes:
-        record['typeCode'] = allowed_type_codes[0]
+        record["typeCode"] = allowed_type_codes[0]
     return {k: v for k, v in record.items() if v is not None}
 
 
-def _query_all_items(table, key_condition, projection_expression=None, expression_attribute_names=None):
+def _query_all_items(
+    table, key_condition, projection_expression=None, expression_attribute_names=None
+):
     """Query every page of items matching a key condition."""
-    kwargs = {'KeyConditionExpression': key_condition}
+    kwargs = {"KeyConditionExpression": key_condition}
     if projection_expression:
-        kwargs['ProjectionExpression'] = projection_expression
+        kwargs["ProjectionExpression"] = projection_expression
     if expression_attribute_names:
-        kwargs['ExpressionAttributeNames'] = expression_attribute_names
+        kwargs["ExpressionAttributeNames"] = expression_attribute_names
     items = []
     while True:
         response = table.query(**kwargs)
-        items.extend(response.get('Items', []))
-        if 'LastEvaluatedKey' not in response:
+        items.extend(response.get("Items", []))
+        if "LastEvaluatedKey" not in response:
             return items
-        kwargs['ExclusiveStartKey'] = response['LastEvaluatedKey']
+        kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
 
 
 def _delete_items(table, keys):
@@ -2369,33 +2564,43 @@ def _delete_items(table, keys):
 
 def clean_event_data(dynamodb, stack_name, tour_id, event_ids):
     """Delete existing data (definition, occurrences, activity logs, registrations) for the given events only."""
-    event_table = get_table(dynamodb, stack_name, 'Event', tour_id=tour_id)
-    occurrence_table = get_table(dynamodb, stack_name, 'EventOccurrence', tour_id=tour_id)
-    logs_table = get_table(dynamodb, stack_name, 'EventActivityLogs', tour_id=tour_id)
-    registration_table = get_table(dynamodb, stack_name, 'EventRegistration', tour_id=tour_id)
+    event_table = get_table(dynamodb, stack_name, "Event", tour_id=tour_id)
+    occurrence_table = get_table(
+        dynamodb, stack_name, "EventOccurrence", tour_id=tour_id
+    )
+    logs_table = get_table(dynamodb, stack_name, "EventActivityLogs", tour_id=tour_id)
+    registration_table = get_table(
+        dynamodb, stack_name, "EventRegistration", tour_id=tour_id
+    )
 
     for event_id in event_ids:
         occurrences = _query_all_items(
-            occurrence_table, Key('eventId').eq(event_id), projection_expression='eventId, dateSeq, occurrenceId',
+            occurrence_table,
+            Key("eventId").eq(event_id),
+            projection_expression="eventId, dateSeq, occurrenceId",
         )
         log_count = 0
         registration_count = 0
         for occurrence in occurrences:
-            occurrence_id = occurrence['occurrenceId']
+            occurrence_id = occurrence["occurrenceId"]
             logs = _query_all_items(
-                logs_table, Key('occurrenceId').eq(occurrence_id), projection_expression='occurrenceId, recordId',
+                logs_table,
+                Key("occurrenceId").eq(occurrence_id),
+                projection_expression="occurrenceId, recordId",
             )
             log_count += _delete_items(logs_table, logs)
             registrations = _query_all_items(
-                registration_table, Key('occurrenceId').eq(occurrence_id),
-                projection_expression='occurrenceId, riderId',
+                registration_table,
+                Key("occurrenceId").eq(occurrence_id),
+                projection_expression="occurrenceId, riderId",
             )
             registration_count += _delete_items(registration_table, registrations)
 
-        _delete_items(occurrence_table, [
-            {'eventId': o['eventId'], 'dateSeq': o['dateSeq']} for o in occurrences
-        ])
-        event_table.delete_item(Key={'eventId': event_id})
+        _delete_items(
+            occurrence_table,
+            [{"eventId": o["eventId"], "dateSeq": o["dateSeq"]} for o in occurrences],
+        )
+        event_table.delete_item(Key={"eventId": event_id})
         logger.info(
             "  Cleaned event %s: %s occurrence(s), %s activity record(s), %s registration(s)",
             event_id,
@@ -2410,12 +2615,15 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
     scenario = get_scenario_metadata(config)
     validate_event_data_scenario(config)
 
-    tour_id = config['tour']['tour_id']
+    tour_id = config["tour"]["tour_id"]
     anchor_date = resolve_anchor_date(config)
     seed_in_progress = args.include_in_progress or args.in_progress_only
 
     print_run_header(
-        scenario.get('name', 'Unnamed'), stack_name, seed, args.dry_run,
+        scenario.get("name", "Unnamed"),
+        stack_name,
+        seed,
+        args.dry_run,
         extra_lines=[
             f"Tour                   : {tour_id}",
             f"Anchor date ('today')  : {anchor_date.isoformat()}",
@@ -2430,16 +2638,22 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
     logger.info("Fetching tour from TourMaster...")
     tour = fetch_tour(dynamodb, stack_name, tour_id)
     if not tour:
-        logger.error("  Tour '%s' not found in %s", tour_id, build_table_name(stack_name, 'TourMaster'))
+        logger.error(
+            "  Tour '%s' not found in %s",
+            tour_id,
+            build_table_name(stack_name, "TourMaster"),
+        )
         sys.exit(1)
-    logger.info("  Found: %s (status: %s)", tour.get('name'), tour.get('status'))
+    logger.info("  Found: %s (status: %s)", tour.get("name"), tour.get("status"))
 
-    riders_cfg = config.get('riders', {})
+    riders_cfg = config.get("riders", {})
     logger.info("Fetching existing tour riders from TourRider...")
     rider_ids = fetch_tour_riders(
-        dynamodb, stack_name, tour_id,
-        status_in=riders_cfg.get('status_in', ['REGISTERED']),
-        limit=riders_cfg.get('limit'),
+        dynamodb,
+        stack_name,
+        tour_id,
+        status_in=riders_cfg.get("status_in", ["REGISTERED"]),
+        limit=riders_cfg.get("limit"),
     )
     if not rider_ids:
         logger.error(
@@ -2447,7 +2661,9 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
             "scenario (e.g. tot_2026.yaml) first."
         )
         sys.exit(1)
-    logger.info("  Using %s rider(s): %s..%s", len(rider_ids), rider_ids[0], rider_ids[-1])
+    logger.info(
+        "  Using %s rider(s): %s..%s", len(rider_ids), rider_ids[0], rider_ids[-1]
+    )
 
     hotel_items = build_hotel_items(config)
     room_allocation_items = build_room_allocation_items(config, anchor_date, rider_ids)
@@ -2456,46 +2672,61 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
     occurrence_meta = []  # list of (event_item, occurrence_item, meta, occurrence_cfg)
     occurrences_by_key = {}
 
-    for event_index, event_cfg in enumerate(config['events'], 1):
+    for event_index, event_cfg in enumerate(config["events"], 1):
         event_item = build_event_definition_item(event_cfg, event_index)
         event_items.append(event_item)
 
-        for occurrence_cfg in event_cfg['occurrences']:
+        for occurrence_cfg in event_cfg["occurrences"]:
             occurrence_item, meta = build_occurrence_item(
-                event_item['eventId'], occurrence_cfg, anchor_date, seed_in_progress,
+                event_item["eventId"],
+                occurrence_cfg,
+                anchor_date,
+                seed_in_progress,
             )
-            occurrences_by_key[(event_item['eventId'], meta['day_offset'], meta['seq'])] = occurrence_item
+            occurrences_by_key[
+                (event_item["eventId"], meta["day_offset"], meta["seq"])
+            ] = occurrence_item
             occurrence_meta.append((event_item, occurrence_item, meta, occurrence_cfg))
 
     # Second pass: resolve linkedOccurrenceRef pairs (e.g. Baggage Loading <-> Unloading)
     for _, occurrence_item, meta, _ in occurrence_meta:
-        linked_event_id = meta.get('linked_event_id')
+        linked_event_id = meta.get("linked_event_id")
         if not linked_event_id:
             continue
-        linked = occurrences_by_key.get((linked_event_id, meta['day_offset'], meta['seq']))
+        linked = occurrences_by_key.get(
+            (linked_event_id, meta["day_offset"], meta["seq"])
+        )
         if linked:
-            occurrence_item['linkedOccurrenceRef'] = linked['occurrenceId']
+            occurrence_item["linkedOccurrenceRef"] = linked["occurrenceId"]
         else:
             logger.warning(
                 "  No matching occurrence in '%s' for day_offset=%s, seq=%s to link with %s",
                 linked_event_id,
-                meta['day_offset'],
-                meta['seq'],
-                occurrence_item['occurrenceId'],
+                meta["day_offset"],
+                meta["seq"],
+                occurrence_item["occurrenceId"],
             )
 
     activity_records = []
     for event_item, occurrence_item, meta, occurrence_cfg in occurrence_meta:
-        if args.in_progress_only and meta['day_offset'] != 0:
+        if args.in_progress_only and meta["day_offset"] != 0:
             continue
-        activity_records.extend(build_activity_records_for_occurrence(
-            event_item, occurrence_item, meta['day_offset'], rider_ids, occurrence_cfg,
-            seed_in_progress, rng,
-        ))
+        activity_records.extend(
+            build_activity_records_for_occurrence(
+                event_item,
+                occurrence_item,
+                meta["day_offset"],
+                rider_ids,
+                occurrence_cfg,
+                seed_in_progress,
+                rng,
+            )
+        )
 
     occurrences_to_write = [
-        occurrence_item for _, occurrence_item, meta, _ in occurrence_meta
-        if not args.in_progress_only or meta['day_offset'] == 0
+        occurrence_item
+        for _, occurrence_item, meta, _ in occurrence_meta
+        if not args.in_progress_only or meta["day_offset"] == 0
     ]
 
     logger.info(
@@ -2508,45 +2739,66 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
     if args.dry_run:
         logger.info("Writing JSON files to %s/", args.output_dir)
         if not args.in_progress_only:
-            write_json(event_items, os.path.join(args.output_dir, 'events.json'))
-            write_json(hotel_items, os.path.join(args.output_dir, 'hotels.json'))
-            write_json(room_allocation_items, os.path.join(args.output_dir, 'room_allocations.json'))
-        write_json(occurrences_to_write, os.path.join(args.output_dir, 'event_occurrences.json'))
-        write_json(activity_records, os.path.join(args.output_dir, 'event_activity_records.json'))
+            write_json(event_items, os.path.join(args.output_dir, "events.json"))
+            write_json(hotel_items, os.path.join(args.output_dir, "hotels.json"))
+            write_json(
+                room_allocation_items,
+                os.path.join(args.output_dir, "room_allocations.json"),
+            )
+        write_json(
+            occurrences_to_write,
+            os.path.join(args.output_dir, "event_occurrences.json"),
+        )
+        write_json(
+            activity_records,
+            os.path.join(args.output_dir, "event_activity_records.json"),
+        )
         logger.info("Dry run complete. No data written to DynamoDB.")
         return
 
     if not args.in_progress_only:
         logger.info("Cleaning existing data for the scenario events...")
-        clean_event_data(dynamodb, stack_name, tour_id, [e['eventId'] for e in event_items])
+        clean_event_data(
+            dynamodb, stack_name, tour_id, [e["eventId"] for e in event_items]
+        )
 
     logger.info("Loading data to DynamoDB...")
 
     if not args.in_progress_only:
-        table_name = build_table_name(stack_name, 'Hotel', tour_id=tour_id)
+        table_name = build_table_name(stack_name, "Hotel", tour_id=tour_id)
         logger.info("  Loading %s hotel(s) to %s...", len(hotel_items), table_name)
         loaded, failed = load_to_dynamodb(dynamodb, table_name, hotel_items)
         logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
-        table_name = build_table_name(stack_name, 'RoomAllocation', tour_id=tour_id)
-        logger.info("  Loading %s room allocation(s) to %s...", len(room_allocation_items), table_name)
+        table_name = build_table_name(stack_name, "RoomAllocation", tour_id=tour_id)
+        logger.info(
+            "  Loading %s room allocation(s) to %s...",
+            len(room_allocation_items),
+            table_name,
+        )
         loaded, failed = load_to_dynamodb(dynamodb, table_name, room_allocation_items)
         logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
-        table_name = build_table_name(stack_name, 'Event', tour_id=tour_id)
-        logger.info("  Loading %s event definition(s) to %s...", len(event_items), table_name)
+        table_name = build_table_name(stack_name, "Event", tour_id=tour_id)
+        logger.info(
+            "  Loading %s event definition(s) to %s...", len(event_items), table_name
+        )
         loaded, failed = load_to_dynamodb(dynamodb, table_name, event_items)
         logger.info("    Loaded: %s, Failed: %s", loaded, failed)
     else:
         logger.info("  Skipping Event/Hotel/RoomAllocation writes (--in-progress-only)")
 
-    table_name = build_table_name(stack_name, 'EventOccurrence', tour_id=tour_id)
-    logger.info("  Loading %s occurrence(s) to %s...", len(occurrences_to_write), table_name)
+    table_name = build_table_name(stack_name, "EventOccurrence", tour_id=tour_id)
+    logger.info(
+        "  Loading %s occurrence(s) to %s...", len(occurrences_to_write), table_name
+    )
     loaded, failed = load_to_dynamodb(dynamodb, table_name, occurrences_to_write)
     logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
-    table_name = build_table_name(stack_name, 'EventActivityLogs', tour_id=tour_id)
-    logger.info("  Loading %s activity record(s) to %s...", len(activity_records), table_name)
+    table_name = build_table_name(stack_name, "EventActivityLogs", tour_id=tour_id)
+    logger.info(
+        "  Loading %s activity record(s) to %s...", len(activity_records), table_name
+    )
     loaded, failed = load_to_dynamodb(dynamodb, table_name, activity_records)
     logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
@@ -2557,10 +2809,11 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
 # MAIN
 # ============================================================================
 
+
 def main():
 
     parser = argparse.ArgumentParser(
-        description='Generate and load tour-specific test data for Tour Data API',
+        description="Generate and load tour-specific test data for Tour Data API",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -2594,45 +2847,54 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
     )
 
     parser.add_argument(
-        '--scenario', required=True,
-        help='Path to scenario YAML file',
+        "--scenario",
+        required=True,
+        help="Path to scenario YAML file",
     )
     parser.add_argument(
-        '--dry-run', action='store_true',
-        help='Output JSON files instead of writing to DynamoDB',
+        "--dry-run",
+        action="store_true",
+        help="Output JSON files instead of writing to DynamoDB",
     )
     parser.add_argument(
-        '--clean', action='store_true',
-        help='Clean existing tour-specific data before loading',
+        "--clean",
+        action="store_true",
+        help="Clean existing tour-specific data before loading",
     )
     parser.add_argument(
-        '--clean-only', action='store_true',
-        help='Only clean data, do not generate or load',
+        "--clean-only",
+        action="store_true",
+        help="Only clean data, do not generate or load",
     )
     parser.add_argument(
-        '--region', default=None,
-        help='AWS region (overrides scenario config)',
+        "--region",
+        default=None,
+        help="AWS region (overrides scenario config)",
     )
     parser.add_argument(
-        '--output-dir', default='scripts/simulate/output',
-        help='Output directory for --dry-run JSON files (default: scripts/simulate/output)',
+        "--output-dir",
+        default="scripts/simulate/output",
+        help="Output directory for --dry-run JSON files (default: scripts/simulate/output)",
     )
     parser.add_argument(
-        '--include-today-checkins', action='store_true',
+        "--include-today-checkins",
+        action="store_true",
         help=(
             "Generate check-ins for today's ride as well. "
             "Default is to skip today's ride check-ins."
         ),
     )
     parser.add_argument(
-        '--today-checkins-only', action='store_true',
+        "--today-checkins-only",
+        action="store_true",
         help=(
             "Generate/load check-ins for today's ride only "
             "(does not write TourRider or Ride data)."
         ),
     )
     parser.add_argument(
-        '--include-in-progress', action='store_true',
+        "--include-in-progress",
+        action="store_true",
         help=(
             "For event_data_generation scenarios: seed today's occurrence(s) "
             "with the partial activity records from the scenario's 'in_progress' "
@@ -2640,7 +2902,8 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
         ),
     )
     parser.add_argument(
-        '--in-progress-only', action='store_true',
+        "--in-progress-only",
+        action="store_true",
         help=(
             "For event_data_generation scenarios: only (re)populate today's "
             "occurrence(s) and their in-progress activity records; skips "
@@ -2650,27 +2913,28 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
     )
 
     parser.add_argument(
-        '--debug-enabled', action='store_true',
-        help='Enable DEBUG level logging for verification (default level is INFO).',
+        "--debug-enabled",
+        action="store_true",
+        help="Enable DEBUG level logging for verification (default level is INFO).",
     )
 
     args = parser.parse_args()
     configure_logging(args.debug_enabled)
 
     if args.today_checkins_only and args.clean_only:
-        parser.error('--today-checkins-only cannot be combined with --clean-only')
+        parser.error("--today-checkins-only cannot be combined with --clean-only")
 
     if args.today_checkins_only and args.clean:
-        parser.error('--today-checkins-only cannot be combined with --clean')
+        parser.error("--today-checkins-only cannot be combined with --clean")
 
     if args.today_checkins_only:
         args.include_today_checkins = True
 
     if args.in_progress_only and args.clean_only:
-        parser.error('--in-progress-only cannot be combined with --clean-only')
+        parser.error("--in-progress-only cannot be combined with --clean-only")
 
     if args.in_progress_only and args.clean:
-        parser.error('--in-progress-only cannot be combined with --clean')
+        parser.error("--in-progress-only cannot be combined with --clean")
 
     if args.in_progress_only:
         args.include_in_progress = True
@@ -2682,13 +2946,13 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
     logger.debug("  In progress only: %s", args.in_progress_only)
 
     # Load scenario
-    with open(args.scenario, encoding='utf-8') as f:
+    with open(args.scenario, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    aws_config = config.get('aws', {})
-    stack_name = aws_config.get('stack_name', 'dev')
-    region = args.region or aws_config.get('region')
-    seed = config.get('options', {}).get('seed', 42)
+    aws_config = config.get("aws", {})
+    stack_name = aws_config.get("stack_name", "dev")
+    region = args.region or aws_config.get("region")
+    seed = config.get("options", {}).get("seed", 42)
 
     scenario_type = get_scenario_type(config)
     if scenario_type == SCENARIO_TYPE_PERSONAL_CODE:
@@ -2706,5 +2970,5 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
     raise ValueError(f"Unsupported scenario.type: {scenario_type}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

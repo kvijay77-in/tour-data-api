@@ -20,7 +20,6 @@ from typing import Dict, Optional
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-
 POOL_CONFIG = {
     "mgmt": {
         "label": "tour-mgmt-app",
@@ -169,10 +168,12 @@ def main() -> int:
     except (BotoCoreError, ClientError, RuntimeError) as exc:
         return fail(f"  Error: Failed to fetch stack outputs.\n  Details: {exc}")
 
-    print("echo \"After stack outputs are retrieved......\"")
-    
+    print('echo "After stack outputs are retrieved......"')
+
     user_pool = args.user_pool
-    print(f"echo \"{'User pool selection: ' + repr(user_pool) if user_pool else 'No user pool selected.'}\"")
+    print(
+        f"echo \"{'User pool selection: ' + repr(user_pool) if user_pool else 'No user pool selected.'}\""
+    )
     if not user_pool:
         if sys.stdin.isatty():
             user_pool = choose_user_pool_interactive()
@@ -285,10 +286,7 @@ def main() -> int:
             token = id_token
 
     if not token:
-        return fail(
-            "FAILED\n"
-            "  Error: Could not extract IdToken from auth response."
-        )
+        return fail("FAILED\n  Error: Could not extract IdToken from auth response.")
 
     export_map["BEARER_TOKEN"] = token
     log("OK")
@@ -297,8 +295,12 @@ def main() -> int:
     log("=== Ready to test! ===")
     log("")
     log("  Example commands:")
-    log("    curl -w '\\n' -H \"Authorization: Bearer $BEARER_TOKEN\" $API_ENDPOINT/v1/tours")
-    log("    curl -w '\\n' -H \"Authorization: Bearer $BEARER_TOKEN\" $API_ENDPOINT/v1/tours/active")
+    log(
+        "    curl -w '\\n' -H \"Authorization: Bearer $BEARER_TOKEN\" $API_ENDPOINT/v1/tours"
+    )
+    log(
+        "    curl -w '\\n' -H \"Authorization: Bearer $BEARER_TOKEN\" $API_ENDPOINT/v1/tours/active"
+    )
     log("")
     log(
         "  Exported variables: STACK_NAME, USER_POOL_TYPE, API_ENDPOINT, USER_POOL_ID, "
