@@ -1,4 +1,7 @@
 [tool.pylint.main]
+# Lint directories passed on the command line (e.g. `pylint src scripts`) without needing __init__.py files.
+recursive = true
+
 # Lambda functions import shared modules from the common layer, which is mounted
 # at /opt/python at runtime. Add it to the path so pylint can resolve them.
 # Paths are relative to the repo root, where pylint is run.

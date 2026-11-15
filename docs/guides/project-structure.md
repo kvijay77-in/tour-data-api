@@ -37,6 +37,7 @@ tour-data-api/
 ├── tests/
 │   └── fixtures/
 ├── Makefile
+├── pyproject.toml          # pylint settings (lint rules live here only)
 ├── README.md
 ├── requirements-dev.txt
 ├── samconfig.toml

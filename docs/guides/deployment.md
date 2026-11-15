@@ -37,7 +37,18 @@ Deployments use **least-privilege, short-lived AWS credentials** only — no sta
 | **test** | Terminal only, ad hoc (`make deploy-test`) | Terminal deploy role |
 | **prod** | GitHub Actions run on branch `main` **only** | GitHub OIDC role (branch `main` only), in the separate prod AWS account |
 
-The GitHub workflow is **manual** (*Run workflow*): there is no automatic deployment on merge, and the environment is not chosen by hand — it follows the branch. Production cannot be deployed from a terminal.
+The GitHub workflow is **manual** (*Run workflow*): there is no automatic deployment on merge, and the environment is not chosen by hand — it follows the branch. Production cannot be deployed from a terminal: `make deploy-env ENV=prod` refuses to run unless `CI=true`, which GitHub Actions sets automatically (this is a safeguard against mistakes; the real enforcement is the OIDC role trust policy).
+
+The workflow and the Makefile share the same commands, so what runs in CI can be reproduced locally:
+
+| Workflow step | Make target |
+|---|---|
+| Install dependencies | `make install-dev` |
+| Linters | `make lint`, `make format-check` |
+| Unit tests | `make test-ci` |
+| Install SAM CLI (latest version) | `make install-sam` |
+| Validate / build | `make validate`, `make build` |
+| Build, deploy and seed | `make deploy-env ENV=<dev\|prod>` |
 
 ---
 
