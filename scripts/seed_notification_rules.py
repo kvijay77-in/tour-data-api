@@ -3,10 +3,8 @@
 
 import argparse
 import os
-
-import boto3
-
 from datetime import datetime, timezone
+import boto3
 
 
 def utc_now_iso() -> str:

@@ -21,7 +21,7 @@ def _load_module():
 
 
 def _load_yaml(path):
-    with open(path) as handle:
+    with open(path, encoding='utf-8') as handle:
         return yaml.safe_load(handle)
 
 
@@ -94,6 +94,9 @@ def test_event_simulation_emits_registration_and_self_service_fields():
 
 
 def test_ride_simulation_emits_tour_ride_and_stage_policy_fields():
+    # These private helpers hold the DynamoDB attribute mapping under test, so
+    # they are exercised directly (scoped to this test only).
+    # pylint: disable=protected-access
     stage = generate_data._build_stage(
         {
             'type': 'START',

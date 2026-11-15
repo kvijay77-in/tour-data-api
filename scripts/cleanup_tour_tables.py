@@ -236,7 +236,7 @@ Examples:
         wait_for_deletions(dynamodb_client, deleted)
 
     # Summary
-    print(f"\n=== Cleanup Complete ===")
+    print("\n=== Cleanup Complete ===")
     print(f"  Deleted: {len(deleted)}")
     if failed:
         print(f"  Failed:  {len(failed)}")

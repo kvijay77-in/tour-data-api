@@ -29,7 +29,7 @@ def load_data(file_path, table_name, region=None):
     """
     # Read JSON file
     try:
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             items = json.load(f)
     except FileNotFoundError:
         print(f"Error: File '{file_path}' not found.")

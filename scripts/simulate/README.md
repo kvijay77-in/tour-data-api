@@ -1,5 +1,5 @@
 # Test Data Simulation Utility
-_Last updated: 2026-09-29_
+_Last updated: 2026-11-15_
 
 Generate and load tour-specific test data into DynamoDB tables for development and testing of the Tour Data API. This utility is template-driven — define a scenario in YAML and the script generates tour riders, rides, check-in records, or events-engine test data (event definitions, occurrences, activity scans, hotels, and room allocations) accordingly.
 
@@ -73,6 +73,7 @@ python scripts/simulate/generate_data.py --scenario <path> [options]
 | `--today-checkins-only` | Generate/load check-ins only for today's ride; skips TourRider and Ride writes |
 | `--include-in-progress` | *(event_data_generation only)* Seed today's occurrence(s) with the partial activity records from the scenario's `in_progress` config, instead of leaving them freshly `PLANNED` with no scans |
 | `--in-progress-only` | *(event_data_generation only)* Only (re)populate today's occurrence(s) and their in-progress activity records; skips event/hotel/room-allocation and historical-occurrence writes. Implies `--include-in-progress` |
+| `--debug-enabled` | Enable `DEBUG` level logging for verification (default log level is `INFO`) |
 
 ### Examples
 
@@ -104,6 +105,21 @@ python scripts/simulate/generate_data.py \
 # Generate and load only today's ride check-ins
 python scripts/simulate/generate_data.py \
   --scenario scripts/simulate/scenarios/tot_2026.yaml --today-checkins-only
+```
+
+### Logging
+
+All script output goes through Python's standard `logging` module to the console (stderr); no logger configuration file is needed.
+
+- Default level is `INFO`: progress, summaries, and warnings/errors (e.g. `Failed to update ...`, `Scenario validation warnings`).
+- `--debug-enabled` switches the script's logger to `DEBUG`, adding verification detail such as rider assignment counts per check-in category, check-in totals, a sample of generated check-ins, and the parsed CLI flags. Third-party loggers (boto3/botocore) are left at their default level, so the SDK's own debug output is not emitted.
+- Each line is formatted as `HH:MM:SS LEVEL message`.
+- Log calls use lazy `%s` formatting (not f-strings) to satisfy pylint `W1203`; follow the same pattern when adding new messages.
+
+```bash
+# Verbose run for verification
+python scripts/simulate/generate_data.py \
+    --scenario scripts/simulate/scenarios/tot_2026.yaml --dry-run --debug-enabled
 ```
 
 ### Today's Ride Check-In Behavior

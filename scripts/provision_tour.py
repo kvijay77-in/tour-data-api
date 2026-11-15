@@ -34,6 +34,11 @@ import sys
 import boto3
 from botocore.exceptions import ClientError
 
+from validation import validate_tour_id, validate_iso_date, validate_ride_count, ValidationError
+from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
+from tour_provisioning import provision_tour_tables
+
+
 # Add common layer to path for shared utilities
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'layers', 'common'))
 
@@ -42,10 +47,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src', 'layers'
 # with the correct region for actual AWS operations.
 if not os.environ.get('AWS_DEFAULT_REGION') and not boto3.Session().region_name:
     os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
-
-from validation import validate_tour_id, validate_iso_date, validate_ride_count, ValidationError
-from models import TourStatus, TOUR_TABLE_TYPES, utc_now_iso
-from tour_provisioning import provision_tour_tables
 
 
 def get_tour_table_name_from_stack(stack_name):
@@ -213,7 +214,8 @@ def provision_tour(args):
         for table_name in created_tables:
             print(f"  ✓ {table_name}")
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        # This will use a broad exception catch to handle any errors during table provisioning.
         print(f"\nError provisioning tables: {e}")
         # Update tour record with error (put_item is safe here since we
         # control the full item in this single-user CLI operation)
@@ -237,9 +239,9 @@ def provision_tour(args):
         print(f"Warning: Tables created but failed to update tour status: {e}")
 
     print(f"\n✓ Tour '{tour_id}' provisioned successfully!")
-    print(f"  Status: PLANNING")
+    print("  Status: PLANNING")
     print(f"  Tables created: {len(created_tables)}")
-    print(f"\nThe tour is ready for use. Tour-specific tables:")
+    print("\nThe tour is ready for use. Tour-specific tables:")
     for table_type in TOUR_TABLE_TYPES:
         print(f"  - {stack_name}-{table_type}-{tour_id}")
 

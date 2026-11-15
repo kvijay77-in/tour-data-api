@@ -95,7 +95,7 @@ NON_INDIAN_LAST_NAMES = [
 def load_scenario(file_path):
     """Load and return YAML scenario template."""
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
         print(f"Error: Scenario file '{file_path}' not found.")
@@ -761,7 +761,7 @@ Examples:
     # Upload or dry run
     if args.dry_run:
         print("\n--- DRY RUN — no data uploaded ---")
-        print(f"\n  Summary:")
+        print("\n  Summary:")
         print(f"    Profiles     : {len(profiles)}")
         print(f"    Tour riders  : {len(tour_riders)}")
         print(f"    Rides        : {len(rides)}")
@@ -781,7 +781,7 @@ Examples:
             profiles, tour_riders, rides, checkins,
         )
 
-        print(f"\n=== Generation Complete ===")
+        print("\n=== Generation Complete ===")
         print(f"  Profiles   : {len(profiles)}")
         print(f"  Tour riders: {len(tour_riders)}")
         print(f"  Rides      : {len(rides)}")

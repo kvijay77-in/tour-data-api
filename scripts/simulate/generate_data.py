@@ -37,6 +37,13 @@ Usage:
     python scripts/simulate/generate_data.py \\
         --scenario scripts/simulate/scenarios/tot_2026.yaml --clean-only
 
+    # Verbose output (DEBUG level) for verification; default level is INFO
+    python scripts/simulate/generate_data.py \\
+        --scenario scripts/simulate/scenarios/tot_2026.yaml --debug-enabled
+
+Output is emitted through the standard ``logging`` module to the console
+(stderr) only. The level is INFO by default and DEBUG with ``--debug-enabled``.
+
 Prerequisites:
     - Python 3.11+, boto3, pyyaml
     - AWS credentials configured
@@ -46,6 +53,7 @@ Prerequisites:
 
 import argparse
 import json
+import logging
 import os
 import random
 import re
@@ -64,11 +72,27 @@ SCENARIO_TYPE_PERSONAL_CODE = 'personal_code_update'
 SCENARIO_TYPE_EVENT_DATA = 'event_data_generation'
 SCENARIO_MODE_CREATE = 'create'
 SCENARIO_MODE_UPDATE = 'update'
-DEBUG_ENABLED = False
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # SCENARIO AND DYNAMODB HELPERS
 # ============================================================================
+
+def configure_logging(debug_enabled=False):
+    """Configure console-only logging for the script.
+
+    Args:
+        debug_enabled: When True this script's logger level is DEBUG,
+            otherwise INFO. Third-party loggers (boto3/botocore) stay at the
+            default WARNING level so debug output is not flooded by the SDK.
+    """
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-7s %(message)s',
+        datefmt='%H:%M:%S',
+    )
+    logger.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+
 
 def require_mapping(container, key, context):
     """Return a required mapping from a parent container."""
@@ -173,7 +197,7 @@ def fetch_table_items(
 ):
     """Fetch items from a shared or tour-specific table."""
 
-    print(f"Filtering {table_name} items with filter: {filter_expression}")
+    logger.info("Filtering %s items with filter: %s", table_name, filter_expression)
     table = get_table(dynamodb, stack_name, table_name, tour_id=tour_id)
     return scan_table_items(
         table,
@@ -257,15 +281,15 @@ def create_dynamodb_session(region=None):
 
 
 def print_run_header(scenario_name, stack_name, seed, dry_run, extra_lines=None):
-    """Print a consistent execution header for any scenario."""
-    print(f"\n{'=' * 60}")
-    print(f"  Scenario : {scenario_name}")
-    print(f"  Stack    : {stack_name}")
-    print(f"  Seed     : {seed}")
-    print(f"  Mode     : {'DRY RUN' if dry_run else 'DynamoDB'}")
+    """Log a consistent execution header for any scenario."""
+    logger.info("%s", '=' * 60)
+    logger.info("  Scenario : %s", scenario_name)
+    logger.info("  Stack    : %s", stack_name)
+    logger.info("  Seed     : %s", seed)
+    logger.info("  Mode     : %s", 'DRY RUN' if dry_run else 'DynamoDB')
     for line in extra_lines or []:
-        print(f"  {line}")
-    print(f"{'=' * 60}\n")
+        logger.info("  %s", line)
+    logger.info("%s", '=' * 60)
 
 
 # ============================================================================
@@ -501,9 +525,9 @@ def fetch_eligible_rider_profiles(dynamodb, stack_name, config, select_path=None
     else:
         selection = config[select_path]['selection']
 
-    print(f"Validating selection filter for selection...")
+    logger.info("Validating selection filter for selection...")
 
-    print('Fetching rider profiles from RiderProfile...')
+    logger.info("Fetching rider profiles from RiderProfile...")
     eligible_profiles = fetch_table_items(
         dynamodb,
         stack_name,
@@ -511,7 +535,7 @@ def fetch_eligible_rider_profiles(dynamodb, stack_name, config, select_path=None
         filter_expression=resolve_selection_filter(selection.get('filter')),
     )
 
-    print(f'  Found {len(eligible_profiles)} ')
+    logger.info("  Found %s eligible profiles", len(eligible_profiles))
     return eligible_profiles
 
 
@@ -525,14 +549,14 @@ def assign_personal_codes(dynamodb, stack_name, config, rng, dry_run=False):
     usable_codes, ignored_codes = _normalize_personal_codes(config)
     expected_selection_size = resolve_selection_limit(selection.get('limit'), config)
 
-    print('Fetching rider profiles from RiderProfile...')
+    logger.info("Fetching rider profiles from RiderProfile...")
     eligible_profiles = fetch_table_items(
         dynamodb,
         stack_name,
         target['table_name'],
         filter_expression=resolve_selection_filter(selection.get('filter')),
     )
-    print(f'  Found {len(eligible_profiles)} eligible profiles without {attribute_name}')
+    logger.info("  Found %s eligible profiles without %s", len(eligible_profiles), attribute_name)
 
     if expected_selection_size is not None and expected_selection_size != len(usable_codes):
         raise ValueError(
@@ -555,9 +579,9 @@ def assign_personal_codes(dynamodb, stack_name, config, rng, dry_run=False):
         for profile, code in zip(selected_profiles, usable_codes)
     ]
 
-    print(f"  Loaded {len(usable_codes)} personal codes")
+    logger.info("  Loaded %s personal codes", len(usable_codes))
     if ignored_codes:
-        print(f"  Ignored {len(ignored_codes)} pre-loaded code(s)")
+        logger.info("  Ignored %s pre-loaded code(s)", len(ignored_codes))
 
     if dry_run:
         return assignments
@@ -581,12 +605,14 @@ def assign_personal_codes(dynamodb, stack_name, config, rng, dry_run=False):
             loaded += 1
         except ClientError as e:
             failed += 1
-            print(
-                f"  Failed to update {assignment['profileId']} "
-                f"({assignment.get('name')}): {e.response['Error']['Message']}"
+            logger.warning(
+                "  Failed to update %s (%s): %s",
+                assignment['profileId'],
+                assignment.get('name'),
+                e.response['Error']['Message'],
             )
 
-    print(f"  Updated {loaded} rider profile(s), Failed: {failed}")
+    logger.info("  Updated %s rider profile(s), Failed: %s", loaded, failed)
 
     if failed:
         raise RuntimeError('One or more RiderProfile updates failed')
@@ -604,18 +630,14 @@ def select_tour_riders(profiles, count, rng):
     rider IDs (R1, R2, ... R{count}).
     """
     if count > len(profiles):
-        print(
-            f"  Error: requested {count} riders but only "
-            f"{len(profiles)} profiles available"
-        )
+        logger.error("  Requested %s riders but only %s profiles available", count, len(profiles))
         sys.exit(1)
 
     selected = rng.sample(profiles, count)
 
     tour_riders = []
     for i, profile in enumerate(selected, 1):
-        if DEBUG_ENABLED:
-            print(f"  Selected {profile['profileId']} ({profile.get('personalCode')}) as R{i}")
+        logger.debug("  Selected %s (%s) as R%s", profile['profileId'], profile.get('personalCode'), i)
         tour_riders.append({
             'rider_id': f'R{i}',
             'profile_id': profile['profileId'],
@@ -923,10 +945,10 @@ def build_rides(config):
                     try:
                         float_no = int(float_no)
                         float_to_stage = int(float_to_stage)
-                    except Exception:
+                    except Exception as exc:
                         raise ValueError(
-                            f"Day {day_cfg.get('day','?')}: floats[{f_idx}] float values must be integers"
-                        )
+                            f"Day {day_cfg.get('day','?')}: floats[{f_idx}] float values must be integers ({exc})"
+                        ) from exc
 
                     # Validate target stage is within allowed range (1..total_stages-1)
                     if total_stages < 2 or float_to_stage < 1 or float_to_stage >= total_stages:
@@ -1016,8 +1038,8 @@ def apply_rider_exits(rides_data, tour_riders, rng):
 
         try:
             exit_count = int(raw_exit)
-        except Exception:
-            print(f"  Warning: invalid rider_exit value '{raw_exit}' for {ride.get('ride_id')}")
+        except ValueError:
+            logger.warning("  Invalid rider_exit value '%s' for %s", raw_exit, ride.get('ride_id'))
             continue
 
         if exit_count <= 0:
@@ -1026,12 +1048,14 @@ def apply_rider_exits(rides_data, tour_riders, rng):
         # Select from currently registered riders only
         registered = [r for r in tour_riders if r.get('status') == 'REGISTERED']
         if not registered:
-            print(f"  Warning: no REGISTERED riders available to exit for {ride.get('ride_id')}")
+            logger.warning("  No REGISTERED riders available to exit for %s", ride.get('ride_id'))
             continue
 
         if exit_count > len(registered):
-            print(
-                f"  Warning: rider_exit {exit_count} > available REGISTERED riders {len(registered)}; reducing"
+            logger.warning(
+                "  rider_exit %s > available REGISTERED riders %s; reducing",
+                exit_count,
+                len(registered),
             )
             exit_count = len(registered)
 
@@ -1046,7 +1070,12 @@ def apply_rider_exits(rides_data, tour_riders, rng):
             r['exited_at'] = start_ts
             exited.append(r['rider_id'])
 
-        print(f"  Marked {len(to_exit)} rider(s) as EXITED at {start_ts} for {ride.get('ride_id')}")
+        logger.info(
+            "  Marked %s rider(s) as EXITED at %s for %s",
+            len(to_exit),
+            start_ts,
+            ride.get('ride_id'),
+        )
 
     return exited
 
@@ -1167,8 +1196,7 @@ def generate_checkins(
     if today_iso_date is None:
         today_iso_date = date.today().isoformat()
 
-    if DEBUG_ENABLED:
-        print(f"*** Check in created: {len(all_checkins)}")
+    logger.debug("*** Check in created: %s", len(all_checkins))
 
     for ride_data in rides_data:
         ride = ride_data['ride']
@@ -1186,8 +1214,7 @@ def generate_checkins(
         if not checkin_cfg:
             continue
 
-        if DEBUG_ENABLED:
-            print(f"----------------------------------------------------------------------")
+        logger.debug("----------------------------------------------------------------------")
         
 
         ride_id = ride['ride_id']
@@ -1203,8 +1230,7 @@ def generate_checkins(
         available = list(active_rider_ids)
         rng.shuffle(available)
 
-        if DEBUG_ENABLED:
-            print(f" Available riders before check-in assignment for {ride_id}: {len(available)}")
+        logger.debug(" Available riders before check-in assignment for %s: %s", ride_id, len(available))
         # --- Not Riding ---
         nr_count = checkin_cfg.get('not_riding', 0)
         nr_riders = available[:nr_count]
@@ -1220,9 +1246,8 @@ def generate_checkins(
                 status='NOT_RIDING',
             ))
 
-        if DEBUG_ENABLED:
-            print(f" Available riders after NOT_RIDING assignment: {len(available)}")
-            print(f"*** Check in created: {len(all_checkins)}")
+        logger.debug(" Available riders after NOT_RIDING assignment: %s", len(available))
+        logger.debug("*** Check in created: %s", len(all_checkins))
 
         # --- Quit Riding ---
         for quit_cfg in checkin_cfg.get('quit', []):
@@ -1253,9 +1278,8 @@ def generate_checkins(
                     status='QUIT_RIDING',
                 ))
         
-        if DEBUG_ENABLED:
-            print(f" Available riders after QUIT_RIDING assignment: {len(available)}")
-            print(f"*** Check in created: {len(all_checkins)}")
+        logger.debug(" Available riders after QUIT_RIDING assignment: %s", len(available))
+        logger.debug("*** Check in created: %s", len(all_checkins))
 
         # --- Finished Riding ---
         finished_cfg = checkin_cfg.get('finished', 0)
@@ -1274,9 +1298,8 @@ def generate_checkins(
                     ride_id, rid, stage, ts,
                 ))
 
-        if DEBUG_ENABLED:
-            print(f" Available riders after FINISHED assignment: {len(available)}")
-            print(f"*** Check in created: {len(all_checkins)}")
+        logger.debug(" Available riders after FINISHED assignment: %s", len(available))
+        logger.debug("*** Check in created: %s", len(all_checkins))
 
         temp_checkin_count_last = len(all_checkins)
 
@@ -1286,15 +1309,22 @@ def generate_checkins(
             for stage_name, count in in_progress_cfg.items():
                 target_idx = stage_name_to_idx[stage_name]
 
-                if DEBUG_ENABLED:
-                    print(f"  Generating {count} in-progress riders for {ride_id} up to stage '{stage_name}'")
-                    print(f"    Available riders before assignment: {len(available)}")
+                logger.debug(
+                    "  Generating %s in-progress riders for %s up to stage '%s'",
+                    count,
+                    ride_id,
+                    stage_name,
+                )
+                logger.debug("    Available riders before assignment: %s", len(available))
 
                 ip_riders = available[:count]
                 available = available[count:]
 
-                if DEBUG_ENABLED:
-                    print(f"    Assigned {len(ip_riders)} in-progress riders, {len(available)} remaining unassigned")
+                logger.debug(
+                    "    Assigned %s in-progress riders, %s remaining unassigned",
+                    len(ip_riders),
+                    len(available),
+                )
 
                 for rid in ip_riders:
                     # Checked in at all stages up to and including target
@@ -1306,34 +1336,40 @@ def generate_checkins(
                             ride_id, rid, stages[s_idx], ts,
                         ))
                 temp_checkin_count = len(all_checkins)
-                if DEBUG_ENABLED:
-                    print(f"*** Check in created: {temp_checkin_count} (added {temp_checkin_count - temp_checkin_count_last})")
+                logger.debug(
+                    "*** Check in created: %s (added %s)",
+                    temp_checkin_count,
+                    temp_checkin_count - temp_checkin_count_last,
+                )
                 temp_checkin_count_last = temp_checkin_count
 
-        if DEBUG_ENABLED:
-            print(f" Available riders after IN_PROGRESS assignment for {ride_id}: {len(available)}")
+        logger.debug(" Available riders after IN_PROGRESS assignment for %s: %s", ride_id, len(available))
         
-        # Printing 10 random Check-in entries.
-        if DEBUG_ENABLED:
-            print(f"====================================================================================")
+        # Log 10 random check-in entries (debug only).
+        # Guarded because rng.sample() would otherwise consume random state
+        # (and change generated data) even when debug logging is disabled.
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("====================================================================================")
             for sample_checkin in rng.sample(all_checkins, min(10, len(all_checkins))):
-                print(f"  Sample Check-in: {sample_checkin}")
-            print(f"====================================================================================")
+                logger.debug("  Sample Check-in: %s", sample_checkin)
+            logger.debug("====================================================================================")
 
         if available:
-            print(f"  Warning: {len(available)} riders unassigned for {ride_id}")
+            logger.warning("  %s riders unassigned for %s", len(available), ride_id)
 
     if skipped_today_rides:
-        print(
-            f"Skipped check-in generation for {skipped_today_rides} "
-            f"today ride(s) on {today_iso_date} "
-            f"(use --include-today-checkins to include)."
+        logger.info(
+            "Skipped check-in generation for %s today ride(s) on %s (use "
+            "--include-today-checkins to include).",
+            skipped_today_rides,
+            today_iso_date,
         )
 
     if today_checkins_only and skipped_non_today_rides:
-        print(
-            f"Generated check-ins only for rides on {today_iso_date}; "
-            f"skipped {skipped_non_today_rides} non-today ride(s)."
+        logger.info(
+            "Generated check-ins only for rides on %s; skipped %s non-today ride(s).",
+            today_iso_date,
+            skipped_non_today_rides,
         )
 
     return all_checkins
@@ -1498,10 +1534,10 @@ def clean_tour_data(dynamodb, stack_name, tour_id):
         try:
             table = get_table(dynamodb, stack_name, table_type, tour_id=tour_id)
             deleted = clean_table(table)
-            print(f"  Cleaned {table_name}: {deleted} items deleted")
+            logger.info("  Cleaned %s: %s items deleted", table_name, deleted)
         except ClientError as e:
             if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                print(f"  Skipped {table_name}: table not found")
+                logger.info("  Skipped %s: table not found", table_name)
             else:
                 raise
 
@@ -1519,7 +1555,7 @@ def load_to_dynamodb(dynamodb, table_name, items):
                 loaded += 1
             except ClientError as e:
                 failed += 1
-                print(f"    Failed: {e.response['Error']['Message']}")
+                logger.warning("    Failed: %s", e.response['Error']['Message'])
 
     return loaded, failed
 
@@ -1556,9 +1592,9 @@ def write_json(data, filepath):
         raise TypeError(f"Not JSON serializable: {type(obj)}")
 
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(filepath, 'w') as f:
+    with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, default=_default)
-    print(f"  Written: {filepath} ({len(data)} items)")
+    logger.info("  Written: %s (%s items)", filepath, len(data))
 
 
 # ============================================================================
@@ -1597,11 +1633,8 @@ def resolve_schedule_dates(config, anchor_today=None):
         else:
             anchor_dt = date.fromisoformat(str(anchor_date_cfg))
 
-        print("Resolving dynamic schedule dates...")
-        print(
-            f"  Strategy: ride_number_anchor "
-            f"(ride {anchor_ride} -> {anchor_dt.isoformat()})"
-        )
+        logger.info("Resolving dynamic schedule dates...")
+        logger.info("  Strategy: ride_number_anchor (ride %s -> %s)", anchor_ride, anchor_dt.isoformat())
 
         for idx, day_cfg in enumerate(schedule, 1):
             ride_day_number = int(day_cfg.get('day', idx))
@@ -1611,13 +1644,13 @@ def resolve_schedule_dates(config, anchor_today=None):
 
     if mode == 'historical':
         # Just use the explicit dates in the schedule; no dynamic resolution needed.
-        print("Using historical schedule dates...")
+        logger.info("Using historical schedule dates...")
         hist_start_date = strategy.get('start_date')
         if hist_start_date:
             hist_start_dt = date.fromisoformat(str(hist_start_date))
-            print(f"  Historical start date: {hist_start_dt.isoformat()}")
+            logger.info("  Historical start date: %s", hist_start_dt.isoformat())
         else:
-            print("  Fatal: start_date not provided; using explicit schedule dates")
+            logger.warning("  Fatal: start_date not provided; using explicit schedule dates")
             exit(1)
 
         for idx, day_cfg in enumerate(schedule, 1):
@@ -1643,13 +1676,13 @@ def resolve_schedule_statuses(config, include_today_checkins=False):
     strategy_mode = strategy.get('mode')
     if strategy_mode == 'ride_number_anchor':
         anchor_ride = int(strategy.get('anchor_ride_number', 3))
-        print(f" Anchor Ride Number mode is used")
-        print("Resolving schedule statuses from anchor ride...")
+        logger.info(" Anchor Ride Number mode is used")
+        logger.info("Resolving schedule statuses from anchor ride...")
         
         today_status = 'STARTED' if include_today_checkins else 'PLANNED'
-        print(f"  Status strategy: ride {anchor_ride} is {today_status}")
+        logger.info("  Status strategy: ride %s is %s", anchor_ride, today_status)
     elif strategy_mode == 'historical':
-        print(f" Resolving schedule statuses from historical dates...")
+        logger.info(" Resolving schedule statuses from historical dates...")
 
 
     for idx, day_cfg in enumerate(schedule, 1):
@@ -1706,7 +1739,7 @@ def validate_status_configuration(config):
         )
 
 def validate_scenario(config):
-    """Validate the scenario configuration and print warnings for issues."""
+    """Validate the scenario configuration and log warnings for issues."""
     rider_count = config['tour_riders']['count']
     errors = []
 
@@ -1740,10 +1773,9 @@ def validate_scenario(config):
                 )
 
     if errors:
-        print("\nScenario validation warnings:")
+        logger.warning("Scenario validation warnings:")
         for err in errors:
-            print(f"  ⚠ {err}")
-        print()
+            logger.warning("  ⚠ %s", err)
 
     return len(errors) == 0
 
@@ -1753,29 +1785,33 @@ def validate_scenario(config):
 # ============================================================================
 
 def print_summary(tour_riders, rides_data, checkins):
-    """Print a formatted summary of generated data."""
-    print(f"\n{'─' * 60}")
-    print("GENERATION SUMMARY")
-    print(f"{'─' * 60}")
-    print(f"  Tour riders    : {len(tour_riders)}")
-    print(f"  Rides          : {len(rides_data)}")
-    print(f"  Check-ins      : {len(checkins)}")
+    """Log a formatted summary of generated data."""
+    logger.info("%s", '─' * 60)
+    logger.info("GENERATION SUMMARY")
+    logger.info("%s", '─' * 60)
+    logger.info("  Tour riders    : %s", len(tour_riders))
+    logger.info("  Rides          : %s", len(rides_data))
+    logger.info("  Check-ins      : %s", len(checkins))
 
-    print(f"\n  Per-ride breakdown:")
+    logger.info("  Per-ride breakdown:")
     for rd in rides_data:
         ride = rd['ride']
         rc = [c for c in checkins if c['ride_id'] == ride['ride_id']]
         nr = len([c for c in rc if c.get('is_not_riding')])
         qr = len([c for c in rc if c.get('is_quit_riding')])
         normal = len(rc) - nr - qr
-        print(
-            f"    {ride['ride_id']} {ride['name']:<20s} "
-            f"{ride['status']:<10s} "
-            f"| records: {len(rc):>4d}  "
-            f"(NR:{nr}, Quit:{qr}, Normal:{normal})"
+        logger.info(
+            "    %s %-20s %-10s | records: %4d  (NR:%s, Quit:%s, Normal:%s)",
+            ride['ride_id'],
+            ride['name'],
+            ride['status'],
+            len(rc),
+            nr,
+            qr,
+            normal,
         )
 
-    print(f"{'─' * 60}\n")
+    logger.info("%s", '─' * 60)
 
 
 def run_personal_code_scenario(args, config, stack_name, region, seed):
@@ -1803,12 +1839,12 @@ def run_personal_code_scenario(args, config, stack_name, region, seed):
 
     if args.dry_run:
         output_file = os.path.join(args.output_dir, 'personal_code_updates.json')
-        print(f"\nWriting JSON file to {output_file}")
+        logger.info("Writing JSON file to %s", output_file)
         write_json(assignments, output_file)
     else:
-        print("\nPersonal code loading complete.")
+        logger.info("Personal code loading complete.")
 
-    print(f"\nAssigned {len(assignments)} personal code(s).")
+    logger.info("Assigned %s personal code(s).", len(assignments))
 
 
 def run_tour_data_scenario(args, config, stack_name, region, seed):
@@ -1844,27 +1880,28 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
 
     _, dynamodb = create_dynamodb_session(region)
 
-    print('Fetching tour from TourMaster...')
+    logger.info("Fetching tour from TourMaster...")
     tour = fetch_tour(dynamodb, stack_name, tour_id)
     if not tour:
-        print(f"  Error: Tour '{tour_id}' not found in {build_table_name(stack_name, 'TourMaster')}")
+        logger.error("  Tour '%s' not found in %s", tour_id, build_table_name(stack_name, 'TourMaster'))
         sys.exit(1)
-    print(f"  Found: {tour.get('name')} (status: {tour.get('status')})")
+    logger.info("  Found: %s (status: %s)", tour.get('name'), tour.get('status'))
 
-    print('Fetching rider profiles from RiderProfile...')
+    logger.info("Fetching rider profiles from RiderProfile...")
     # profiles = fetch_rider_profiles(dynamodb, stack_name)
     profiles = fetch_eligible_rider_profiles(dynamodb, stack_name, config, select_path='tour_riders')
 
     if not profiles:
-        print(f"  Error: No profiles found in {build_table_name(stack_name, 'RiderProfile')}")
+        logger.error("  No profiles found in %s", build_table_name(stack_name, 'RiderProfile'))
         sys.exit(1)
-    print(f"  Found {len(profiles)} profiles")
+    logger.info("  Found %s profiles", len(profiles))
 
     rider_count = config['tour_riders']['count']
     if rider_count > len(profiles):
-        print(
-            f"  Error: scenario requests {rider_count} riders but only "
-            f"{len(profiles)} profiles available"
+        logger.error(
+            "  Scenario requests %s riders but only %s profiles available",
+            rider_count,
+            len(profiles),
         )
         sys.exit(1)
 
@@ -1874,29 +1911,29 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
 
     if (args.clean or args.clean_only or effective_clean_before_load) \
             and not args.dry_run:
-        print('\nCleaning existing tour data...')
+        logger.info("Cleaning existing tour data...")
         clean_tour_data(dynamodb, stack_name, tour_id)
 
         if args.clean_only:
-            print('\nClean complete.')
+            logger.info("Clean complete.")
             return
 
     rng = random.Random(seed)
 
-    print('\nSelecting tour riders from existing profiles...')
+    logger.info("Selecting tour riders from existing profiles...")
     tour_riders = select_tour_riders(profiles, rider_count, rng)
-    print(f"  Selected {len(tour_riders)} riders (R1-R{len(tour_riders)})")
+    logger.info("  Selected %s riders (R1-R%s)", len(tour_riders), len(tour_riders))
 
-    print('Building rides...')
+    logger.info("Building rides...")
     rides_data = build_rides(config)
     rides = [rd['ride'] for rd in rides_data]
-    print(f"  Built {len(rides)} rides")
+    logger.info("  Built %s rides", len(rides))
     # Apply any rider exit directives from the schedule (mark TourRider items)
     exited = apply_rider_exits(rides_data, tour_riders, rng)
     if exited:
-        print(f"  Exited riders: {len(exited)}")
+        logger.info("  Exited riders: %s", len(exited))
 
-    print('Generating check-ins...')
+    logger.info("Generating check-ins...")
     checkins = generate_checkins(
         rides_data,
         tour_riders,
@@ -1904,16 +1941,16 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
         include_today_checkins=args.include_today_checkins,
         today_checkins_only=args.today_checkins_only,
     )
-    print(f"  Generated {len(checkins)} check-in records")
+    logger.info("  Generated %s check-in records", len(checkins))
 
     if args.dry_run:
-        print(f"\nWriting JSON files to {args.output_dir}/")
+        logger.info("Writing JSON files to %s/", args.output_dir)
         if not args.today_checkins_only:
             write_json(tour_riders, os.path.join(args.output_dir, 'tour_riders.json'))
             write_json(rides, os.path.join(args.output_dir, 'rides.json'))
         write_json(checkins, os.path.join(args.output_dir, 'checkins.json'))
     else:
-        print('\nLoading data to DynamoDB...')
+        logger.info("Loading data to DynamoDB...")
 
         ddb_checkins = to_dynamodb_items('CheckIn', checkins)
 
@@ -1922,26 +1959,26 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
             ddb_rides = to_dynamodb_items('Ride', rides)
 
             table_name = build_table_name(stack_name, 'TourRider', tour_id=tour_id)
-            print(f"  Loading {len(tour_riders)} tour riders to {table_name}...")
+            logger.info("  Loading %s tour riders to %s...", len(tour_riders), table_name)
             loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_tour_riders)
-            print(f"    Loaded: {loaded}, Failed: {failed}")
+            logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
             table_name = build_table_name(stack_name, 'Ride', tour_id=tour_id)
-            print(f"  Loading {len(rides)} rides to {table_name}...")
+            logger.info("  Loading %s rides to %s...", len(rides), table_name)
             loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_rides)
-            print(f"    Loaded: {loaded}, Failed: {failed}")
+            logger.info("    Loaded: %s, Failed: %s", loaded, failed)
         else:
-            print('  Skipping TourRider and Ride writes (--today-checkins-only)')
+            logger.info("  Skipping TourRider and Ride writes (--today-checkins-only)")
 
         table_name = build_table_name(stack_name, 'CheckIn', tour_id=tour_id)
-        print(f"  Loading {len(checkins)} check-ins to {table_name}...")
+        logger.info("  Loading %s check-ins to %s...", len(checkins), table_name)
         loaded, failed = load_to_dynamodb(dynamodb, table_name, ddb_checkins)
-        print(f"    Loaded: {loaded}, Failed: {failed}")
+        logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
         if options.get('update_tour_status', True):
             target_status = tour_config.get('target_status')
             if target_status:
-                print(f"\n  Updating tour status to {target_status}...")
+                logger.info("  Updating tour status to %s...", target_status)
                 update_tour_status(
                     dynamodb,
                     stack_name,
@@ -1949,10 +1986,10 @@ def run_tour_data_scenario(args, config, stack_name, region, seed):
                     target_status,
                     tour_config.get('self_quit_riding_allowed'),
                 )
-                print('    Done')
+                logger.info("    Done")
 
     print_summary(tour_riders, rides_data, checkins)
-    print('Data generation complete!')
+    logger.info("Data generation complete!")
 
 
 # ============================================================================
@@ -2272,9 +2309,11 @@ def _build_in_progress_records(event_item, occurrence_item, rider_ids, in_progre
                 ))
 
     if available:
-        print(
-            f"  Note: {len(available)} rider(s) left with no activity records for "
-            f"{occurrence_item['occurrenceId']} (available for manual scanning from the start)"
+        logger.info(
+            "Note: %s rider(s) left with no activity records for %s (available for manual "
+            "scanning from the start)",
+            len(available),
+            occurrence_item['occurrenceId'],
         )
 
     return records
@@ -2357,9 +2396,12 @@ def clean_event_data(dynamodb, stack_name, tour_id, event_ids):
             {'eventId': o['eventId'], 'dateSeq': o['dateSeq']} for o in occurrences
         ])
         event_table.delete_item(Key={'eventId': event_id})
-        print(
-            f"  Cleaned event {event_id}: {len(occurrences)} occurrence(s), "
-            f"{log_count} activity record(s), {registration_count} registration(s)"
+        logger.info(
+            "  Cleaned event %s: %s occurrence(s), %s activity record(s), %s registration(s)",
+            event_id,
+            len(occurrences),
+            log_count,
+            registration_count,
         )
 
 
@@ -2385,27 +2427,27 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
     _, dynamodb = create_dynamodb_session(region)
     rng = random.Random(seed)
 
-    print('Fetching tour from TourMaster...')
+    logger.info("Fetching tour from TourMaster...")
     tour = fetch_tour(dynamodb, stack_name, tour_id)
     if not tour:
-        print(f"  Error: Tour '{tour_id}' not found in {build_table_name(stack_name, 'TourMaster')}")
+        logger.error("  Tour '%s' not found in %s", tour_id, build_table_name(stack_name, 'TourMaster'))
         sys.exit(1)
-    print(f"  Found: {tour.get('name')} (status: {tour.get('status')})")
+    logger.info("  Found: %s (status: %s)", tour.get('name'), tour.get('status'))
 
     riders_cfg = config.get('riders', {})
-    print('Fetching existing tour riders from TourRider...')
+    logger.info("Fetching existing tour riders from TourRider...")
     rider_ids = fetch_tour_riders(
         dynamodb, stack_name, tour_id,
         status_in=riders_cfg.get('status_in', ['REGISTERED']),
         limit=riders_cfg.get('limit'),
     )
     if not rider_ids:
-        print(
-            "  Error: no matching riders found in TourRider table for this tour. "
-            "Run a tour-data scenario (e.g. tot_2026.yaml) first."
+        logger.error(
+            "No matching riders found in TourRider table for this tour. Run a tour-data "
+            "scenario (e.g. tot_2026.yaml) first."
         )
         sys.exit(1)
-    print(f"  Using {len(rider_ids)} rider(s): {rider_ids[0]}..{rider_ids[-1]}")
+    logger.info("  Using %s rider(s): %s..%s", len(rider_ids), rider_ids[0], rider_ids[-1])
 
     hotel_items = build_hotel_items(config)
     room_allocation_items = build_room_allocation_items(config, anchor_date, rider_ids)
@@ -2434,10 +2476,12 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
         if linked:
             occurrence_item['linkedOccurrenceRef'] = linked['occurrenceId']
         else:
-            print(
-                f"  Warning: no matching occurrence in '{linked_event_id}' for "
-                f"day_offset={meta['day_offset']}, seq={meta['seq']} to link with "
-                f"{occurrence_item['occurrenceId']}"
+            logger.warning(
+                "  No matching occurrence in '%s' for day_offset=%s, seq=%s to link with %s",
+                linked_event_id,
+                meta['day_offset'],
+                meta['seq'],
+                occurrence_item['occurrenceId'],
             )
 
     activity_records = []
@@ -2454,55 +2498,59 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
         if not args.in_progress_only or meta['day_offset'] == 0
     ]
 
-    print(f"Built {len(event_items)} event definition(s), {len(occurrences_to_write)} occurrence(s), "
-          f"{len(activity_records)} activity record(s)")
+    logger.info(
+        "Built %s event definition(s), %s occurrence(s), %s activity record(s)",
+        len(event_items),
+        len(occurrences_to_write),
+        len(activity_records),
+    )
 
     if args.dry_run:
-        print(f"\nWriting JSON files to {args.output_dir}/")
+        logger.info("Writing JSON files to %s/", args.output_dir)
         if not args.in_progress_only:
             write_json(event_items, os.path.join(args.output_dir, 'events.json'))
             write_json(hotel_items, os.path.join(args.output_dir, 'hotels.json'))
             write_json(room_allocation_items, os.path.join(args.output_dir, 'room_allocations.json'))
         write_json(occurrences_to_write, os.path.join(args.output_dir, 'event_occurrences.json'))
         write_json(activity_records, os.path.join(args.output_dir, 'event_activity_records.json'))
-        print('\nDry run complete. No data written to DynamoDB.')
+        logger.info("Dry run complete. No data written to DynamoDB.")
         return
 
     if not args.in_progress_only:
-        print('\nCleaning existing data for the scenario events...')
+        logger.info("Cleaning existing data for the scenario events...")
         clean_event_data(dynamodb, stack_name, tour_id, [e['eventId'] for e in event_items])
 
-    print('\nLoading data to DynamoDB...')
+    logger.info("Loading data to DynamoDB...")
 
     if not args.in_progress_only:
         table_name = build_table_name(stack_name, 'Hotel', tour_id=tour_id)
-        print(f"  Loading {len(hotel_items)} hotel(s) to {table_name}...")
+        logger.info("  Loading %s hotel(s) to %s...", len(hotel_items), table_name)
         loaded, failed = load_to_dynamodb(dynamodb, table_name, hotel_items)
-        print(f"    Loaded: {loaded}, Failed: {failed}")
+        logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
         table_name = build_table_name(stack_name, 'RoomAllocation', tour_id=tour_id)
-        print(f"  Loading {len(room_allocation_items)} room allocation(s) to {table_name}...")
+        logger.info("  Loading %s room allocation(s) to %s...", len(room_allocation_items), table_name)
         loaded, failed = load_to_dynamodb(dynamodb, table_name, room_allocation_items)
-        print(f"    Loaded: {loaded}, Failed: {failed}")
+        logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
         table_name = build_table_name(stack_name, 'Event', tour_id=tour_id)
-        print(f"  Loading {len(event_items)} event definition(s) to {table_name}...")
+        logger.info("  Loading %s event definition(s) to %s...", len(event_items), table_name)
         loaded, failed = load_to_dynamodb(dynamodb, table_name, event_items)
-        print(f"    Loaded: {loaded}, Failed: {failed}")
+        logger.info("    Loaded: %s, Failed: %s", loaded, failed)
     else:
-        print('  Skipping Event/Hotel/RoomAllocation writes (--in-progress-only)')
+        logger.info("  Skipping Event/Hotel/RoomAllocation writes (--in-progress-only)")
 
     table_name = build_table_name(stack_name, 'EventOccurrence', tour_id=tour_id)
-    print(f"  Loading {len(occurrences_to_write)} occurrence(s) to {table_name}...")
+    logger.info("  Loading %s occurrence(s) to %s...", len(occurrences_to_write), table_name)
     loaded, failed = load_to_dynamodb(dynamodb, table_name, occurrences_to_write)
-    print(f"    Loaded: {loaded}, Failed: {failed}")
+    logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
     table_name = build_table_name(stack_name, 'EventActivityLogs', tour_id=tour_id)
-    print(f"  Loading {len(activity_records)} activity record(s) to {table_name}...")
+    logger.info("  Loading %s activity record(s) to %s...", len(activity_records), table_name)
     loaded, failed = load_to_dynamodb(dynamodb, table_name, activity_records)
-    print(f"    Loaded: {loaded}, Failed: {failed}")
+    logger.info("    Loaded: %s, Failed: %s", loaded, failed)
 
-    print('\nEvent data generation complete!')
+    logger.info("Event data generation complete!")
 
 
 # ============================================================================
@@ -2510,6 +2558,7 @@ def run_event_data_scenario(args, config, stack_name, region, seed):
 # ============================================================================
 
 def main():
+
     parser = argparse.ArgumentParser(
         description='Generate and load tour-specific test data for Tour Data API',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -2602,11 +2651,11 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
 
     parser.add_argument(
         '--debug-enabled', action='store_true',
-        help='Enable debug outputs for verification.',
+        help='Enable DEBUG level logging for verification (default level is INFO).',
     )
 
     args = parser.parse_args()
-    DEBUG_ENABLED = args.debug_enabled
+    configure_logging(args.debug_enabled)
 
     if args.today_checkins_only and args.clean_only:
         parser.error('--today-checkins-only cannot be combined with --clean-only')
@@ -2626,8 +2675,14 @@ Note: RiderProfile and TourMaster data must already exist in DynamoDB.
     if args.in_progress_only:
         args.include_in_progress = True
 
+    logger.debug("Debug mode enabled")
+    logger.debug("  Scenario file: %s", args.scenario)
+    logger.debug("  Today check-ins only: %s", args.today_checkins_only)
+    logger.debug("  Include in progress: %s", args.include_in_progress)
+    logger.debug("  In progress only: %s", args.in_progress_only)
+
     # Load scenario
-    with open(args.scenario) as f:
+    with open(args.scenario, encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
     aws_config = config.get('aws', {})
