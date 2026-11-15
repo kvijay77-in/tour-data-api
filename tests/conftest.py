@@ -5,10 +5,32 @@ This file contains pytest fixtures that are shared across all test files.
 Fixtures defined here are automatically available in all test modules.
 """
 
+# pylint: disable=redefined-outer-name
+# Pytest fixtures are injected by parameter name, so fixture arguments intentionally
+# shadow the fixture functions defined in this module.
+
 import os
+
 import pytest
 import boto3
 from moto import mock_aws
+
+
+def pytest_configure(config):  # pylint: disable=unused-argument
+    """
+    Force mocked AWS credentials before test collection imports any module under test.
+
+    Several src modules create boto3 clients at import time (e.g. dynamodb_utils), and
+    boto3 caches the resolved credentials on the default session. Without this, a
+    developer's real ~/.aws profile can leak into the test run depending on file import
+    order. Direct assignment (not setdefault) overrides any real values.
+    """
+    os.environ['AWS_ACCESS_KEY_ID'] = 'testing'
+    os.environ['AWS_SECRET_ACCESS_KEY'] = 'testing'
+    os.environ['AWS_SECURITY_TOKEN'] = 'testing'
+    os.environ['AWS_SESSION_TOKEN'] = 'testing'
+    os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
+    os.environ.pop('AWS_PROFILE', None)
 
 
 @pytest.fixture(scope='function')
