@@ -27,7 +27,7 @@ help: ## Show this help message
 install: install-sam install-dev ## Install AWS SAM CLI and development dependencies
 
 install-dev: ## Install development and common layer dependencies
-	$(PIP) install -r requirements-dev.txt -r src/layers/common/requirements.txt
+	$(PIP) install -r requirements-dev.txt -r scripts/requirements.txt -r src/layers/common/requirements.txt
 
 install-sam: ## Install (or upgrade to) the latest AWS SAM CLI
 	$(PIP) install --upgrade aws-sam-cli
