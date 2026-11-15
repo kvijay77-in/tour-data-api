@@ -38,7 +38,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 # Tour-specific table types (must match models.TOUR_TABLE_TYPES)
-TOUR_TABLE_TYPES = ('TourRider', 'Ride', 'CheckIn', 'User', 'Notification', 'Artifacts')
+TOUR_TABLE_TYPES = ("TourRider", "Ride", "CheckIn", "User", "Notification", "Artifacts")
 
 
 def find_tour_tables(dynamodb_client, stack_name):
@@ -56,14 +56,14 @@ def find_tour_tables(dynamodb_client, stack_name):
         List of matching table names sorted alphabetically
     """
     # Build regex: {stack_name}-{TableType}-{tourId}
-    types_pattern = '|'.join(re.escape(t) for t in TOUR_TABLE_TYPES)
-    pattern = re.compile(rf'^{re.escape(stack_name)}-({types_pattern})-.+$')
+    types_pattern = "|".join(re.escape(t) for t in TOUR_TABLE_TYPES)
+    pattern = re.compile(rf"^{re.escape(stack_name)}-({types_pattern})-.+$")
 
     matching_tables = []
-    paginator = dynamodb_client.get_paginator('list_tables')
+    paginator = dynamodb_client.get_paginator("list_tables")
 
     for page in paginator.paginate():
-        for table_name in page.get('TableNames', []):
+        for table_name in page.get("TableNames", []):
             if pattern.match(table_name):
                 matching_tables.append(table_name)
 
@@ -85,8 +85,8 @@ def delete_table(dynamodb_client, table_name):
         dynamodb_client.delete_table(TableName=table_name)
         return True
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == 'ResourceNotFoundException':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "ResourceNotFoundException":
             print(f"  Warning: Table '{table_name}' not found (already deleted?)")
             return True
         print(f"  Error deleting '{table_name}': {e.response['Error']['Message']}")
@@ -111,7 +111,7 @@ def wait_for_deletions(dynamodb_client, table_names, max_wait=120):
                 dynamodb_client.describe_table(TableName=table_name)
                 # Table still exists, keep waiting
             except ClientError as e:
-                if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                if e.response["Error"]["Code"] == "ResourceNotFoundException":
                     pending.discard(table_name)
         if pending:
             time.sleep(3)
@@ -138,11 +138,11 @@ def group_tables_by_tour(table_names, stack_name):
     prefix = f"{stack_name}-"
     for table_name in table_names:
         # Remove prefix, then split on first '-' to get table_type and tour_id
-        remainder = table_name[len(prefix):]
+        remainder = table_name[len(prefix) :]
         for table_type in TOUR_TABLE_TYPES:
             type_prefix = f"{table_type}-"
             if remainder.startswith(type_prefix):
-                tour_id = remainder[len(type_prefix):]
+                tour_id = remainder[len(type_prefix) :]
                 tours.setdefault(tour_id, []).append(table_name)
                 break
     return tours
@@ -150,7 +150,7 @@ def group_tables_by_tour(table_names, stack_name):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Clean up tour-specific DynamoDB tables not managed by CloudFormation',
+        description="Clean up tour-specific DynamoDB tables not managed by CloudFormation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -162,20 +162,21 @@ Examples:
 
   # Specify region
   python scripts/cleanup_tour_tables.py --stack-name dev --region ap-south-1 --confirm
-        """
+        """,
     )
 
     parser.add_argument(
-        '--stack-name', required=True,
-        help='CloudFormation stack name (e.g., dev, test, prod)'
+        "--stack-name",
+        required=True,
+        help="CloudFormation stack name (e.g., dev, test, prod)",
     )
     parser.add_argument(
-        '--region', default=None,
-        help='AWS region (default: from AWS config)'
+        "--region", default=None, help="AWS region (default: from AWS config)"
     )
     parser.add_argument(
-        '--confirm', action='store_true',
-        help='Actually delete tables. Without this flag, performs a dry run.'
+        "--confirm",
+        action="store_true",
+        help="Actually delete tables. Without this flag, performs a dry run.",
     )
 
     args = parser.parse_args()
@@ -183,9 +184,9 @@ Examples:
     # Create session
     session_kwargs = {}
     if args.region:
-        session_kwargs['region_name'] = args.region
+        session_kwargs["region_name"] = args.region
     session = boto3.Session(**session_kwargs)
-    dynamodb_client = session.client('dynamodb')
+    dynamodb_client = session.client("dynamodb")
     region = session.region_name
 
     print("")
@@ -203,7 +204,9 @@ Examples:
 
     # Display grouped by tour
     tours = group_tables_by_tour(tables, args.stack_name)
-    print(f"\n  Found {len(tables)} tour-specific table(s) across {len(tours)} tour(s):\n")
+    print(
+        f"\n  Found {len(tables)} tour-specific table(s) across {len(tours)} tour(s):\n"
+    )
     for tour_id in sorted(tours.keys()):
         print(f"  Tour: {tour_id}")
         for table_name in sorted(tours[tour_id]):
@@ -236,7 +239,7 @@ Examples:
         wait_for_deletions(dynamodb_client, deleted)
 
     # Summary
-    print(f"\n=== Cleanup Complete ===")
+    print("\n=== Cleanup Complete ===")
     print(f"  Deleted: {len(deleted)}")
     if failed:
         print(f"  Failed:  {len(failed)}")
@@ -248,5 +251,5 @@ Examples:
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

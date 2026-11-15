@@ -52,10 +52,10 @@ The Lambda runtime defaults to Python 3.14; the SAM template also allows Python 
 ### 3. Install Development Dependencies
 
 ```bash
-pip install -r requirements-dev.txt
+make install-dev
 ```
 
-This installs local development tools (pytest, moto, pylint, black, boto3). These are **not** deployed to AWS — they are for local development only.
+This installs `requirements-dev.txt` and the common layer requirements: local development tools (pytest, moto, pylint, black, boto3). These are **not** deployed to AWS — they are for local development only. Black and pylint are intentionally **not version-pinned**, so newer formatting or lint findings surface early. `make install-sam` installs or upgrades to the latest SAM CLI, and `make install` runs both.
 
 ### 4. Run Preflight Check
 
@@ -189,26 +189,26 @@ pytest -l      # Show local variables on failure
 
 ### Linting
 
+`make lint` runs pylint over `src` and `scripts` (the `PY_PATHS` variable in the Makefile). All pylint settings live in `pyproject.toml`; do not pass `--disable` flags on the command line. Run it from the repository root, because the `init-hook` paths in `pyproject.toml` are relative.
+
 ```bash
-pylint src/layers/common/*.py           # Common utilities
-pylint src/                             # All source code
-make lint                               # Using Make
+make lint                               # Lint src and scripts
 ```
 
 ### Code Formatting
 
 ```bash
-black src/                  # Format all code
-black --check src/          # Check without changing
-make format                 # Using Make
+make format                 # Format src and scripts with Black (rewrites files)
+make format-check           # Check only, no changes (used by CI)
 ```
 
 ### Before Committing
 
+Run these in your branch before raising a PR to `develop`. The CI pipeline runs the same targets.
+
 ```bash
-make lint
 make format
-make test
+make check                  # lint + format-check + test
 ```
 
 ### Coding Conventions
@@ -265,18 +265,24 @@ All validators are in `src/layers/common/validation.py` and raise `ValidationErr
 | Command | Description |
 |---------|-------------|
 | `make help` | Show all available targets |
-| `make install` | Install AWS SAM CLI and dependencies |
+| `make install` | Install the latest AWS SAM CLI and development dependencies |
+| `make install-dev` | Install `requirements-dev.txt` and common layer dependencies |
+| `make install-sam` | Install or upgrade to the latest AWS SAM CLI |
 | `make build` | Build the SAM application |
 | `make validate` | Validate SAM template |
 | `make deploy` | Alias of `make deploy-dev` |
 | `make deploy-dev` | Build, deploy to development and seed defaults (terminal deploy role) |
 | `make deploy-test` | Build, deploy to test and seed defaults (terminal deploy role) |
+| `make deploy-env ENV=dev\|test\|prod` | Generic build, deploy and seed used by the targets above and by CI. `ENV=prod` is refused unless `CI=true` (set by GitHub Actions) |
 | `make local-api` | Start API locally |
 | `make sync` | Sync code changes to AWS (fast iteration) |
 | `make test` | Run all unit tests |
 | `make test-coverage` | Run tests with coverage report |
-| `make lint` | Lint Python code |
-| `make format` | Format code with Black |
+| `make test-ci` | Run tests with XML coverage report (used by CI) |
+| `make lint` | Lint `src` and `scripts` with pylint (rules in `pyproject.toml`) |
+| `make format` | Format `src` and `scripts` with Black |
+| `make format-check` | Check Black formatting without changing files (used by CI) |
+| `make check` | Run lint, format-check and test |
 | `make logs FUNCTION=X` | View CloudWatch logs |
 | `make logs-function FUNCTION=X` | Tail logs for a specific function |
 | `make logs-tail FUNCTION=X` | Alias for logs-function |

@@ -15,7 +15,6 @@ permissions:
 env:
   AWS_REGION: ap-south-1
   PYTHON_VERSION: '3.14'
-  SAM_CLI_VERSION: 1.172.1
 
 jobs:
   resolve-env:
@@ -23,7 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.resolve.outputs.environment }}
-      sam_config_env: ${{ steps.resolve.outputs.sam_config_env }}
       role_secret: ${{ steps.resolve.outputs.role_secret }}
     steps:
       - name: Map branch to environment
@@ -40,14 +38,12 @@ jobs:
             develop)
               {
                 echo "environment=dev"
-                echo "sam_config_env=default"
                 echo "role_secret=AWS_DEPLOY_ROLE_ARN_DEV"
               } >> "$GITHUB_OUTPUT"
               ;;
             main)
               {
                 echo "environment=prod"
-                echo "sam_config_env=prod"
                 echo "role_secret=AWS_DEPLOY_ROLE_ARN_PROD"
               } >> "$GITHUB_OUTPUT"
               ;;
@@ -82,17 +78,15 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -r src/layers/common/requirements.txt
+          make install-dev
 
       - name: Run linters
         run: |
-          pylint src/layers/common/*.py --disable=C0114,C0115,C0116
-          black --check src/
+          make lint
+          make format-check
 
       - name: Run unit tests
-        run: |
-          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term
+        run: make test-ci
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v5
@@ -116,16 +110,13 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install SAM CLI
-        run: |
-          pip install aws-sam-cli==${{ env.SAM_CLI_VERSION }}
+        run: make install-sam
 
       - name: Validate SAM template
-        run: |
-          sam validate --lint
+        run: make validate
 
       - name: Build SAM application
-        run: |
-          sam build
+        run: make build
 
   deploy:
     name: Deploy to ${{ needs.resolve-env.outputs.environment }}
@@ -141,7 +132,6 @@ jobs:
       contents: read
     env:
       STACK_NAME: ${{ needs.resolve-env.outputs.environment }}
-      SAM_CONFIG_ENV: ${{ needs.resolve-env.outputs.sam_config_env }}
 
     steps:
       - name: Checkout code
@@ -159,25 +149,13 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Install SAM CLI
-        run: |
-          pip install aws-sam-cli==${{ env.SAM_CLI_VERSION }}
+        run: make install-sam
 
-      - name: Build and deploy
+      - name: Build, deploy and seed AppConfig/NotificationRule defaults
         id: deploy
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          sam build
-          sam deploy \
-            --config-env "$SAM_CONFIG_ENV" \
-            --s3-bucket "tour-data-api-sam-${STACK_NAME}-${ACCOUNT_ID}" \
-            --no-confirm-changeset \
-            --no-fail-on-empty-changeset
-
-      - name: Seed AppConfig and NotificationRule defaults
-        # Insert-only and safe to re-run. The deploy role may only GetItem/PutItem on these two tables.
-        run: |
-          python scripts/seed_app_config.py --table-name "${STACK_NAME}-AppConfig" --region "$AWS_REGION"
-          python scripts/seed_notification_rules.py --table-name "${STACK_NAME}-NotificationRule" --region "$AWS_REGION"
+        # deploy-env builds, runs `sam deploy` and seeds the two tables (insert-only, safe to re-run).
+        # Prod is allowed here because GitHub sets CI=true (the Makefile refuses prod elsewhere).
+        run: make deploy-env ENV="$STACK_NAME" SAM_DEPLOY_FLAGS="--no-confirm-changeset --no-fail-on-empty-changeset"
 
       - name: Show API endpoints
         run: |
