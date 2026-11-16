@@ -1,11 +1,11 @@
 # Infrastructure guide
-_Last updated: 2026-11-11_
+_Last updated: 2026-11-16_
 
 ## Ownership
 
 This repository owns and manages **all AWS infrastructure for the entire Cycling Tour Management Platform**, including resources used by both the management and rider apps. This includes both Cognito user pools, API Gateway HTTP APIs, Lambda functions and layers, DynamoDB tables, S3 buckets, EventBridge rules, SQS dead-letter queues, IAM roles, and CloudWatch monitoring. App repositories do not own platform AWS infrastructure.
 
-The primary infrastructure definition is `/template.yaml`. Deployment access is defined separately and created manually by an administrator ([AWS Deploy Access Setup](aws-deploy-access-setup.md)): `cloudformation/github-oidc.yaml` (GitHub OIDC identity provider, one per account) and `cloudformation/deploy-access.yaml` (one stack per environment: least-privilege deploy roles and policies, the SAM artifacts bucket, and the permissions boundary applied to every Lambda execution role through `Globals.Function.PermissionsBoundary` in `template.yaml`). Runtime tour-table creation and cleanup are managed by `src/layers/common/tour_provisioning.py` and the scripts in `scripts/`.
+The primary infrastructure definition is `/template.yaml`. Deployment access is defined separately and created manually by an administrator ([AWS Deploy Access Setup](aws-deploy-access-setup.md)): `cloudformation/github-oidc.yaml` (GitHub OIDC identity provider, one per account) and `cloudformation/deploy-access.yaml` (one stack per environment: least-privilege deploy roles and policies, the SAM artifacts bucket, and the permissions boundary applied to every Lambda execution role through `Globals.Function.PermissionsBoundary` in `template.yaml`), and `cloudformation/consumer-read-access.yaml` (one stack per app per environment: read-only roles the app repositories use to read the [client app configuration](../design/client-configuration.md) parameters). Runtime tour-table creation and cleanup are managed by `src/layers/common/tour_provisioning.py` and the scripts in `scripts/`.
 
 ## Tagging
 

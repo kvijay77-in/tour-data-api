@@ -1,5 +1,5 @@
 # AWS Deploy Access Setup
-_Last updated: 2026-11-11_
+_Last updated: 2026-11-16_
 
 [← Back to README](../README.md)
 
@@ -16,6 +16,7 @@ This guide is the **manual, one-time setup** of the AWS side of deployment: who 
 - [Step 5: Terminal profile](#step-5-terminal-profile)
 - [Step 6: First deployment](#step-6-first-deployment)
 - [Step 7: Retire the old access](#step-7-retire-the-old-access)
+- [Step 8: Client app config read access](#step-8-client-app-config-read-access)
 - [Verification](#verification)
 - [What the deploy roles can and cannot do](#what-the-deploy-roles-can-and-cannot-do)
 - [Keeping the policies in sync](#keeping-the-policies-in-sync)
@@ -51,8 +52,10 @@ Layout per account:
 
 | Account | Stacks |
 |---|---|
-| Non-prod | `tour-data-api-github-oidc` (only if no GitHub provider exists), `tour-data-api-deploy-access-dev`, `tour-data-api-deploy-access-test` |
-| Prod | `tour-data-api-github-oidc` (only if no GitHub provider exists), `tour-data-api-deploy-access-prod` |
+| Non-prod | `tour-data-api-github-oidc` (only if no GitHub provider exists), `tour-data-api-deploy-access-dev`, `tour-data-api-deploy-access-test`, `tour-data-api-mgmt-config-read-dev`, `tour-data-api-rider-config-read-dev` |
+| Prod | `tour-data-api-github-oidc` (only if no GitHub provider exists), `tour-data-api-deploy-access-prod`, `tour-data-api-mgmt-config-read-prod`, `tour-data-api-rider-config-read-prod` |
+
+The `*-config-read-*` stacks give the app repositories read-only access to the client configuration parameters ([Step 8](#step-8-client-app-config-read-access)).
 
 ## Prerequisites
 
@@ -243,6 +246,42 @@ Only after a successful deployment through the new path:
 
    If the IAM user exists only for CI, delete the user as well.
 
+## Step 8: Client app config read access
+
+The application stack publishes the apps' public connection values to SSM under `/tour-data-api/<env>/<app>/` ([Client app configuration](../design/client-configuration.md)). The app repositories `tour-mgmt-app` and `tour-rider-app` read them from GitHub Actions through read-only roles from [`cloudformation/consumer-read-access.yaml`](../../cloudformation/consumer-read-access.yaml), one stack per app per environment:
+
+| Account | Stack | Reads | Trusted branches |
+|---|---|---|---|
+| Non-prod | `tour-data-api-mgmt-config-read-dev` | `/tour-data-api/dev/mgmt/*` | `tour-mgmt-app` `develop`, `main` |
+| Non-prod | `tour-data-api-rider-config-read-dev` | `/tour-data-api/dev/rider/*` | `tour-rider-app` `develop`, `main` |
+| Prod | `tour-data-api-mgmt-config-read-prod` | `/tour-data-api/prod/mgmt/*` | `tour-mgmt-app` `main` |
+| Prod | `tour-data-api-rider-config-read-prod` | `/tour-data-api/prod/rider/*` | `tour-rider-app` `main` |
+
+The trusted branches follow from `Environment` and cannot be overridden. The dev roles also trust `main` because each app's Production build routes the store reviewer to the dev backend. A rule rejects a `ClientApp` and `GitHubRepo` pair that do not match.
+
+1. **Update the deploy-access stacks first.** The deploy roles need the `ClientConfigParameters` permission before the application stack can create the parameters. Re-run the Step 3 command for dev and test (non-prod account) and prod (prod account).
+2. **Deploy the application** as usual and confirm that the parameters exist:
+
+   ```bash
+   aws ssm get-parameters-by-path --path /tour-data-api/dev --recursive \
+     --query "Parameters[].[Name,Value]" --output table
+   ```
+
+3. **Create the read roles** with administrator credentials. Example for the management app in the non-prod account; change `ClientApp`/`GitHubRepo` (`rider`/`tour-rider-app`) and `Environment` (`prod`, in the prod account) for the others:
+
+   ```bash
+   aws cloudformation deploy \
+     --template-file cloudformation/consumer-read-access.yaml \
+     --stack-name tour-data-api-mgmt-config-read-dev \
+     --capabilities CAPABILITY_NAMED_IAM \
+     --parameter-overrides \
+         Environment=dev ClientApp=mgmt \
+         GitHubOrg=<org> GitHubRepo=tour-mgmt-app \
+     --tags Project=tour-data-api Environment=dev ManagedBy=CloudFormation
+   ```
+
+4. **Hand over the role ARNs** (`ConfigReadRoleArn` output) to the app teams. Each app repository stores the dev and prod ARNs as its own GitHub Actions secrets. The GitHub OIDC provider from Step 2 is shared, so the app repositories need no other AWS setup for this.
+
 ---
 
 ## Verification
@@ -282,7 +321,8 @@ All permissions are limited to the target stack's resource names (`<env>-*`), th
 | API Gateway | HTTP APIs, stages, authorizers, routes, tags in the region (API IDs are random, so they cannot be scoped by name) | |
 | Cognito | Create user pools tagged `Project=tour-data-api`/`Environment=<env>`; modify pools carrying those tags (pool, client, group, MFA, tags) | `Admin*`, `ListUsers` (user data), `DeleteUserPool`, `DeleteGroup`, `DeleteUserPoolClient` |
 | SQS / CloudWatch / EventBridge | `<env>-push-sender-dlq` queue; alarms `<env>-*`; rules `<env>-*` | |
-| SSM, KMS, CloudWatch Logs | – | Everything |
+| SSM | Create, update, tag and delete parameters under `/tour-data-api/<env>/` (client app configuration, public values) | Everything else, including the Expo token parameters under `/<env>/` |
+| KMS, CloudWatch Logs | – | Everything |
 
 The boundary (`tour-data-api-<env>-lambda-boundary`) is the ceiling for Lambda roles: logs for `/aws/lambda/<env>-*`, DynamoDB data and tour-table provisioning on `<env>-*` tables, S3 object access on the two application buckets, Cognito user administration, `ssm:GetParameter` on `/<env>/*`, `kms:Decrypt` via SSM, SQS send to the dead-letter queue, and Lambda event-source-mapping and invoke permissions for `<env>-*` functions. A role's effective permissions are its own policies intersected with this boundary.
 
@@ -299,6 +339,7 @@ The policies list resources and actions explicitly. Update the matching `deploy-
 | New **shared DynamoDB table** | Add it to `SharedTablesControlPlane` (`DeployPolicyCore`). If it has a stream, add the stream ARN to `NotificationStreamMetadata`. |
 | New **action or resource type** in a Lambda function policy (for example a new Cognito or S3 action) | Add it to `LambdaPermissionsBoundary`; otherwise the function is denied at runtime. |
 | New **AWS resource type** (for example an SNS topic or a Step Functions state machine) | Add its create/update/describe/tag permissions, scoped to `<env>-*`, to the deploy policies. Check the CloudFormation handler permissions: `aws cloudformation describe-type --type RESOURCE --type-name AWS::<Service>::<Type> --query Schema` and read `handlers.*.permissions`. |
+| New **client app configuration parameter** under `/tour-data-api/<env>/<app>/` | Nothing: the deploy roles and the read roles (`consumer-read-access.yaml`) already cover the path. Update the [contract](../design/client-configuration.md). A new `<app>` folder needs a new `ClientApp` value and read-role stacks. |
 | New **region** | Change the region in the stacks (ARNs use the stack region). Also update the workflow and `samconfig.toml`. |
 | Each managed policy is limited to 6,144 non-whitespace characters | If `DeployPolicyCore` or `DeployPolicyCompute` grows too large, split it and attach the new policy to both roles. |
 

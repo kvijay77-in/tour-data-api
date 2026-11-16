@@ -1,5 +1,5 @@
 # Documentation index
-_Last updated: 2026-10-01_
+_Last updated: 2026-11-16_
 
 This index links to the current backend requirements, designs, and operating guides.
 
@@ -31,6 +31,7 @@ Requirements are maintained only in `docs/requirements/`. Their implementation c
 | [Tour artifacts](design/artifacts.md) | Private S3 storage and metadata design |
 | [Rider profile schema](design/rider-profile-schema.md) | Configurable profile attributes and access control |
 | [Dashboard API](design/dashboard-api.md) | Dashboard endpoint responsibilities and refresh design |
+| [Client app configuration](design/client-configuration.md) | SSM parameters that hand API and Cognito values to the app build pipelines |
 
 Frontend screen designs are maintained in the management and rider app repositories. The platform glossary is maintained in the [platform repository](https://github.com/kvijay77-in/cycling-tour-platform/blob/main/docs/glossary.md).
 

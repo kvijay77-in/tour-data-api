@@ -4664,6 +4664,130 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
+  # ============================================================================
+  # CLIENT APP CONFIGURATION (SSM Parameter Store)
+  # Public connection values for the management and rider apps, published under
+  # /tour-data-api/<stack>/<app>/ for the app repositories' build pipelines. The app
+  # repositories read them through read-only roles from cloudformation/consumer-read-access.yaml.
+  # Contract (paths are stable; do not rename): docs/design/client-configuration.md
+  # Values are public client configuration (no secrets): Standard tier, plain String.
+  # ============================================================================
+
+  ClientConfigMgmtRegionParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/tour-data-api/${AWS::StackName}/mgmt/region'
+      Description: AWS region of the management API and Cognito pool
+      Type: String
+      Tier: Standard
+      Value: !Ref AWS::Region
+      Tags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourManagement
+        ManagedBy: SAM
+
+  ClientConfigMgmtApiEndpointParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/tour-data-api/${AWS::StackName}/mgmt/api-endpoint'
+      Description: Management HTTP API base URL (same as the ApiEndpoint output)
+      Type: String
+      Tier: Standard
+      Value: !Sub 'https://${TourDataApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Tags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourManagement
+        ManagedBy: SAM
+
+  ClientConfigMgmtUserPoolIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/tour-data-api/${AWS::StackName}/mgmt/cognito-user-pool-id'
+      Description: Management Cognito user pool ID (auto-created or the existing pool)
+      Type: String
+      Tier: Standard
+      Value: !If
+        - CreateCognito
+        - !Ref CognitoUserPool
+        - !Select [1, !Split ['/', !Select [5, !Split [':', !Ref CognitoUserPoolArn]]]]
+      Tags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourManagement
+        ManagedBy: SAM
+
+  ClientConfigMgmtAppClientIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/tour-data-api/${AWS::StackName}/mgmt/cognito-app-client-id'
+      Description: Management Cognito app client ID (auto-created or CognitoAppClientId)
+      Type: String
+      Tier: Standard
+      Value: !If [CreateCognito, !Ref CognitoUserPoolClient, !Ref CognitoAppClientId]
+      Tags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourManagement
+        ManagedBy: SAM
+
+  ClientConfigRiderRegionParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/tour-data-api/${AWS::StackName}/rider/region'
+      Description: AWS region of the rider API and Cognito pool
+      Type: String
+      Tier: Standard
+      Value: !Ref AWS::Region
+      Tags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourRiderApp
+        ManagedBy: SAM
+
+  ClientConfigRiderApiEndpointParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/tour-data-api/${AWS::StackName}/rider/api-endpoint'
+      Description: Rider HTTP API base URL (same as the RiderApiEndpoint output)
+      Type: String
+      Tier: Standard
+      Value: !Sub 'https://${RiderApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+      Tags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourRiderApp
+        ManagedBy: SAM
+
+  ClientConfigRiderUserPoolIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/tour-data-api/${AWS::StackName}/rider/cognito-user-pool-id'
+      Description: Rider Cognito user pool ID
+      Type: String
+      Tier: Standard
+      Value: !Ref CognitoRiderUserPool
+      Tags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourRiderApp
+        ManagedBy: SAM
+
+  ClientConfigRiderAppClientIdParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/tour-data-api/${AWS::StackName}/rider/cognito-app-client-id'
+      Description: Rider Cognito app client ID
+      Type: String
+      Tier: Standard
+      Value: !Ref CognitoRiderUserPoolClient
+      Tags:
+        Project: tour-data-api
+        Environment: !Ref Environment
+        Application: TourRiderApp
+        ManagedBy: SAM
+
 # ============================================================================
 # OUTPUTS
 # ============================================================================
