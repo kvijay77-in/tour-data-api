@@ -341,6 +341,7 @@ The policies list resources and actions explicitly. Update the matching `deploy-
 | New **AWS resource type** (for example an SNS topic or a Step Functions state machine) | Add its create/update/describe/tag permissions, scoped to `<env>-*`, to the deploy policies. Check the CloudFormation handler permissions: `aws cloudformation describe-type --type RESOURCE --type-name AWS::<Service>::<Type> --query Schema` and read `handlers.*.permissions`. |
 | New **client app configuration parameter** under `/tour-data-api/<env>/<app>/` | Nothing: the deploy roles and the read roles (`consumer-read-access.yaml`) already cover the path. Update the [contract](../design/client-configuration.md). A new `<app>` folder needs a new `ClientApp` value and read-role stacks. |
 | New **region** | Change the region in the stacks (ARNs use the stack region). Also update the workflow and `samconfig.toml`. |
+| Any change to a managed policy | Change only its `PolicyDocument`. `ManagedPolicyName`, `Description` and `Path` force a replacement, which fails for these named policies with "A policy called ... already exists". |
 | Each managed policy is limited to 6,144 non-whitespace characters | If `DeployPolicyCore` or `DeployPolicyCompute` grows too large, split it and attach the new policy to both roles. |
 
 ## Known limits and residual risk
@@ -384,7 +385,9 @@ Change `iam.amazonaws.com` to the service in question (`dynamodb`, `lambda`, `co
 
 **Stack stuck in `ROLLBACK_FAILED` or `UPDATE_ROLLBACK_FAILED`.** See [Known limits](#known-limits-and-residual-risk). With administrator credentials: `aws cloudformation continue-update-rollback --stack-name <env>` (update rollback) or delete the stack (create rollback), then redeploy.
 
-**Update a deploy-access stack.** Re-run the Step 3 command for that environment with the same parameters; unchanged resources are left alone.
+**Update a deploy-access stack.** Re-run the Step 3 command for that environment with the same parameters; unchanged resources are left alone. To preview first, add `--no-execute-changeset` and check the change set: the managed policies and roles must show `Modify` with `Replacement: False`.
+
+**"A policy called tour-data-api-<env>-deploy-... already exists" (`AlreadyExists`) on a stack update.** A change to a managed policy's `ManagedPolicyName`, `Description` or `Path` requires a replacement, and the new policy cannot be created under the same name. Revert that property, keep only the `PolicyDocument` change, and re-run. The failed update rolls back on its own; confirm the stack is `UPDATE_ROLLBACK_COMPLETE` first.
 
 **Remove an environment's access.** With administrator credentials: empty the SAM artifacts bucket (`aws s3 rm s3://tour-data-api-sam-<env>-<account-id> --recursive`), then delete the `tour-data-api-deploy-access-<env>` stack. The application stack is not touched.
 

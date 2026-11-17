@@ -275,12 +275,16 @@ Resources:
   # seeding exception below), S3 object access on the application buckets, DeleteTable,
   # DeleteBucket, DeleteStack. Resource actions are cross-checked against the CloudFormation
   # resource-schema handler permissions for each resource type used by template.yaml.
+  #
+  # DO NOT CHANGE ManagedPolicyName, Description or Path of any managed policy in this file:
+  # each of them forces a replacement, and a replacement of a NAMED policy fails with
+  # "A policy called ... already exists". Only PolicyDocument may change (updated in place).
   # ============================================================================
   DeployPolicyCore:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: !Sub 'tour-data-api-${TargetStackName}-deploy-core'
-      Description: !Sub 'Deploy access (CloudFormation, S3, DynamoDB, SQS, CloudWatch, EventBridge, SSM) for the ${TargetStackName} stack'
+      Description: !Sub 'Deploy access (CloudFormation, S3, DynamoDB, SQS, CloudWatch, EventBridge) for the ${TargetStackName} stack'
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
