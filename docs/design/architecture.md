@@ -1,5 +1,5 @@
 # Architecture
-_Last updated: 2026-10-01_
+_Last updated: 2026-11-16_
 
 ## Purpose and ownership
 
@@ -30,6 +30,8 @@ The API Gateway JWT authorizers validate tokens from the corresponding Cognito p
 
 Management web hosting is owned by `tour-mgmt-app`; the backend only provides CORS through the `ManagementWebAllowedOrigins` parameter.
 
+The stack publishes the apps' public connection values (API URL, Cognito pool and app client IDs, region) to SSM Parameter Store, and the app build pipelines read them through read-only roles. See [Client app configuration](client-configuration.md).
+
 S3 presigned URLs are used for private file uploads and downloads. S3 object-created events can trigger asynchronous processing, such as hotel allocation CSV validation. Notification inbox writes can invoke the push sender through DynamoDB Streams.
 
 ## Data organization
@@ -55,3 +57,4 @@ The backend uses shared tables for platform-wide records and provisions a separa
 - [Tour artifacts](artifacts.md)
 - [Rider profile schema](rider-profile-schema.md)
 - [Dashboard API](dashboard-api.md)
+- [Client app configuration](client-configuration.md)

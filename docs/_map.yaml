@@ -570,6 +570,17 @@ entries:
         heading: "AWS Resources Reference"
     note: "Fallback for Globals, Parameters, Conditions, Outputs and resources no other entry claims."
 
+  - id: client-configuration
+    kind: deploy
+    code:
+      - "template.yaml#ClientConfig*"
+      - "cloudformation/consumer-read-access.yaml"
+    docs:
+      - file: docs/design/client-configuration.md
+      - file: docs/guides/aws-deploy-access-setup.md
+        heading: "Step 8: Client app config read access"
+    note: "Parameter paths are a contract with tour-mgmt-app and tour-rider-app; renaming or removing one is breaking."
+
   - id: build-and-test
     kind: build
     code:

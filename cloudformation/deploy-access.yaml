@@ -270,11 +270,15 @@ Resources:
             Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetStackName}-*'
 
   # ============================================================================
-  # DEPLOY POLICY 1 of 2 - CloudFormation, S3, DynamoDB, SQS, CloudWatch, EventBridge
+  # DEPLOY POLICY 1 of 2 - CloudFormation, S3, DynamoDB, SQS, CloudWatch, EventBridge, SSM
   # Control plane only. Deliberately NOT granted: item-level DynamoDB access (except the
   # seeding exception below), S3 object access on the application buckets, DeleteTable,
   # DeleteBucket, DeleteStack. Resource actions are cross-checked against the CloudFormation
   # resource-schema handler permissions for each resource type used by template.yaml.
+  #
+  # DO NOT CHANGE ManagedPolicyName, Description or Path of any managed policy in this file:
+  # each of them forces a replacement, and a replacement of a NAMED policy fails with
+  # "A policy called ... already exists". Only PolicyDocument may change (updated in place).
   # ============================================================================
   DeployPolicyCore:
     Type: AWS::IAM::ManagedPolicy
@@ -432,6 +436,19 @@ Resources:
               - events:UntagResource
               - events:ListTagsForResource
             Resource: !Sub 'arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/${TargetStackName}-*'
+          # Client app configuration parameters (template.yaml ClientConfig*Param): public values only.
+          # Limited to the /tour-data-api/<stack>/ path; the Expo token SecureStrings under /<stack>/
+          # stay out of reach.
+          - Sid: ClientConfigParameters
+            Effect: Allow
+            Action:
+              - ssm:PutParameter
+              - ssm:GetParameters
+              - ssm:DeleteParameter
+              - ssm:AddTagsToResource
+              - ssm:RemoveTagsFromResource
+              - ssm:ListTagsForResource
+            Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/tour-data-api/${TargetStackName}/*'
 
   # ============================================================================
   # DEPLOY POLICY 2 of 2 - Lambda, IAM (escalation-safe), API Gateway, Cognito, explicit denies

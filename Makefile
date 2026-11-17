@@ -153,6 +153,7 @@ package: build ## Package application for deployment
 
 lint: ## Lint Python code (src and scripts; rules in pyproject.toml)
 	$(PYTHON) -m pylint $(PY_PATHS)
+	sam validate --lint --template-file template.yaml
 
 format: ## Format Python code with Black (src and scripts)
 	$(PYTHON) -m black $(PY_PATHS)

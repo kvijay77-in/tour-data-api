@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Read-only access for ONE client app repository (tour-mgmt-app or tour-rider-app) to the
+  client configuration parameters that the Tour Data API stack of ONE environment publishes
+  in SSM Parameter Store (/tour-data-api/<env>/<app>/*).
+
+  Deploy ONE stack per app per environment, manually, with administrator credentials, in the
+  environment's AWS account. Stack name: tour-data-api-<app>-config-read-<env>.
+  Full instructions: docs/guides/aws-deploy-access-setup.md (Step 8).
+  Parameter contract: docs/design/client-configuration.md
+
+  Creates:
+    - ConfigReadRole - assumed by GitHub Actions in the app repository (OIDC). Trusted branches
+      are fixed by environment:
+        prod -> main only
+        dev  -> develop and main (the app's Production build routes the store reviewer to dev)
+
+  The role can only read parameters under /tour-data-api/<env>/<app>/. These hold public
+  client configuration (API URL, Cognito pool and app client IDs, region); no secrets.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Tour Data API environment (stack name) whose parameters the role may read.
+
+  ClientApp:
+    Type: String
+    AllowedValues: [mgmt, rider]
+    Description: Parameter folder the role may read (mgmt for tour-mgmt-app, rider for tour-rider-app).
+
+  GitHubOrg:
+    Type: String
+    MinLength: 1
+    Description: GitHub organization or username that owns the app repository.
+
+  GitHubRepo:
+    Type: String
+    AllowedValues: [tour-mgmt-app, tour-rider-app]
+    Description: App repository allowed to assume the role.
+
+  OidcProviderArn:
+    Type: String
+    Default: ''
+    Description: >
+      ARN of the existing GitHub OIDC provider. Leave empty to use
+      arn:aws:iam::<account>:oidc-provider/token.actions.githubusercontent.com
+      (the provider created by cloudformation/github-oidc.yaml or already present in the account).
+
+Rules:
+  # Keeps the app <-> folder pairing consistent so a repository can never be given the other app's values by mistake.
+  MgmtFolderForMgmtRepo:
+    RuleCondition: !Equals [!Ref ClientApp, mgmt]
+    Assertions:
+      - Assert: !Equals [!Ref GitHubRepo, tour-mgmt-app]
+        AssertDescription: ClientApp=mgmt must be paired with GitHubRepo=tour-mgmt-app.
+  RiderFolderForRiderRepo:
+    RuleCondition: !Equals [!Ref ClientApp, rider]
+    Assertions:
+      - Assert: !Equals [!Ref GitHubRepo, tour-rider-app]
+        AssertDescription: ClientApp=rider must be paired with GitHubRepo=tour-rider-app.
+
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+  UseDefaultOidcProvider: !Equals [!Ref OidcProviderArn, '']
+
+Resources:
+  # ============================================================================
+  # GITHUB ACTIONS CONFIG READ ROLE
+  # Trust uses exact `sub` matches (no wildcards). App workflow jobs that assume this role must
+  # not use a GitHub `environment:` because that changes the `sub` claim.
+  # ============================================================================
+  ConfigReadRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'tour-data-api-${ClientApp}-config-read-${Environment}'
+      Description: !Sub 'GitHub Actions (${GitHubOrg}/${GitHubRepo}) reads /tour-data-api/${Environment}/${ClientApp}/ parameters'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - UseDefaultOidcProvider
+                - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+                - !Ref OidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': sts.amazonaws.com
+                'token.actions.githubusercontent.com:sub': !If
+                  - IsProd
+                  - - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/main'
+                  - - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/develop'
+                    - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/main'
+      Policies:
+        - PolicyName: ReadClientConfigParameters
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # GetParametersByPath is authorized on the path itself; the others on each parameter.
+              - Sid: ReadClientConfigParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/tour-data-api/${Environment}/${ClientApp}'
+                  - !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/tour-data-api/${Environment}/${ClientApp}/*'
+      Tags:
+        - Key: Project
+          Value: tour-data-api
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Purpose
+          Value: !Sub 'Client config read access - ${GitHubRepo}'
+
+Outputs:
+  ConfigReadRoleArn:
+    Description: >
+      Give to the app repository team. Stored there as a GitHub Actions secret
+      (for example AWS_CONFIG_READ_ROLE_ARN_DEV / AWS_CONFIG_READ_ROLE_ARN_PROD).
+    Value: !GetAtt ConfigReadRole.Arn
+
+  ParameterPath:
+    Description: Parameter path the role may read (use with get-parameters-by-path).
+    Value: !Sub '/tour-data-api/${Environment}/${ClientApp}'

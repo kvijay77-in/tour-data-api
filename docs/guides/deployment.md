@@ -1,5 +1,5 @@
 # Deployment Guide
-_Last updated: 2026-11-11_
+_Last updated: 2026-11-16_
 
 [← Back to README](../README.md)
 
@@ -295,6 +295,7 @@ Creates or updates all required resources in your AWS account, then seeds the `A
 | DynamoDB Tables (shared) | 10 | RiderProfile, RiderTours, RiderCognitoUser, TourMaster, AppConfig, NotificationRule, RiderNotification, MgmtNotification, RiderPushDevice, MgmtPushDevice |
 | S3 Buckets | 2 | Private rider photos and tour artifacts/uploads |
 | SQS Queue (DLQ) | 1 | Push sender event-source failure destination |
+| SSM Parameters | 8 | Public app connection values under `/tour-data-api/<env>/mgmt/` and `/rider/` ([Client app configuration](../design/client-configuration.md)) |
 | IAM Roles | Multiple | Security permissions per function |
 | CloudWatch Log Groups | Multiple | Monitoring and debugging logs |
 | JWT Authorizer | 1 | Validates user login tokens |
@@ -535,6 +536,15 @@ aws cloudformation describe-stacks \
   --stack-name prod \
   --query "Stacks[0].Outputs[?OutputKey=='ApiEndpoint'].OutputValue" \
   --output text
+```
+
+### For the app repositories
+
+The management and rider app pipelines do not need these values copied by hand. Each deployment publishes the API URLs, Cognito pool and app client IDs, and region to SSM, and the app repositories read them through read-only roles. See [Client app configuration](../design/client-configuration.md) and [AWS Deploy Access Setup, Step 8](aws-deploy-access-setup.md#step-8-client-app-config-read-access). To list them:
+
+```bash
+aws ssm get-parameters-by-path --path /tour-data-api/dev --recursive \
+  --query "Parameters[].[Name,Value]" --output table
 ```
 
 ### Verify
