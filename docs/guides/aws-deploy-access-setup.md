@@ -1,5 +1,5 @@
 # AWS Deploy Access Setup
-_Last updated: 2026-11-16_
+_Last updated: 2026-11-24_
 
 [← Back to README](../README.md)
 
@@ -234,6 +234,46 @@ Only after a successful deployment through the new path:
      --stack-name tour-data-api-github-oidc \
      --tags Project=tour-data-api ManagedBy=CloudFormation
    ```
+
+   **Then look for roles that were not created by this repository's templates** (for example created by hand in the console or CLI). Redeploying a stack never removes them. Old trust policies typically use a wildcard `sub` (`repo:<org>/tour-data-api:*`), which lets any branch or workflow in the repository assume the role. List every role that trusts the GitHub provider with a wildcard subject:
+
+   ```bash
+   aws iam list-roles --output json | jq -r '.Roles[]
+     | select(.AssumeRolePolicyDocument|tostring|test("githubusercontent.*\\*"))
+     | .RoleName'
+   ```
+
+   For each role returned, check whether a CloudFormation stack owns it. Stacks are regional, so check every region the application was ever deployed to:
+
+   ```bash
+   aws cloudformation describe-stack-resources --region <region> \
+     --physical-resource-id <role-name> --query 'StackResources[].StackName'
+   ```
+
+   - **A stack owns it:** deploy that stack with the current template, or delete the stack.
+   - **No stack owns it** (the error is `Stack for <role-name> does not exist` in every region): inspect it, then delete it once nothing uses it.
+
+     ```bash
+     # RoleLastUsed = {} means it has never been assumed
+     aws iam get-role --role-name <role-name> \
+       --query 'Role.[CreateDate,RoleLastUsed,Tags,AssumeRolePolicyDocument]'
+     aws iam list-attached-role-policies --role-name <role-name>
+     aws iam list-role-policies --role-name <role-name>
+     ```
+
+     If the role is in use, find out what uses it first (the GitHub secret `AWS_DEPLOY_ROLE_ARN` is a likely reference). If it must stay for now, tighten its trust policy with `aws iam update-assume-role-policy` to `StringEquals` on `repo:<org>/tour-data-api:ref:refs/heads/<branch>` and replan its removal. Otherwise delete it:
+
+     ```bash
+     for arn in $(aws iam list-attached-role-policies --role-name <role-name> \
+         --query 'AttachedPolicies[].PolicyArn' --output text); do
+       aws iam detach-role-policy --role-name <role-name> --policy-arn "$arn"
+     done
+     # delete each inline policy listed by list-role-policies:
+     # aws iam delete-role-policy --role-name <role-name> --policy-name <name>
+     aws iam delete-role --role-name <role-name>
+     ```
+
+   Run the `list-roles` query again. It must return nothing: after this step, no role trusting the GitHub provider may use a wildcard subject. The roles from `deploy-access.yaml` and `consumer-read-access.yaml` use exact `StringEquals` matches and never appear in the result.
 
 2. **Retire the old static IAM access keys** that were stored as GitHub secrets. Find them, deactivate, observe for a few days, then delete:
 
