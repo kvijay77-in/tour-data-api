@@ -2,6 +2,7 @@
 """Seed AppConfig table with platform defaults."""
 
 import argparse
+import sys
 from datetime import datetime, timezone
 
 import boto3
@@ -2577,6 +2578,16 @@ def build_seed_items(updated_by):
     return items
 
 
+def _parse_config_ids(parser, raw):
+    """Split a comma-separated --config-id value into an ordered, de-duplicated list."""
+    parts = raw.split(",")
+    if any(not part for part in parts):
+        parser.error("--config-id must be comma-separated with no empty entries")
+    if any(part != part.strip() for part in parts):
+        parser.error("--config-id must be comma-separated with no spaces")
+    return list(dict.fromkeys(parts))
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Seed AppConfig table defaults")
     parser.add_argument(
@@ -2587,29 +2598,136 @@ def parse_args():
         "--updated-by", default="seed-script", help="Value for updatedBy attribute"
     )
     parser.add_argument(
+        "--config-type",
+        help="Seed only items of this configType (case-sensitive, e.g. LOV)",
+    )
+    parser.add_argument(
+        "--config-id",
+        help=(
+            "Seed only these configIds, comma-separated with no spaces "
+            "(e.g. COUNTRY,STATE). Requires --config-type"
+        ),
+    )
+    parser.add_argument(
         "--force-profile-config",
         action="store_true",
-        help="Overwrite only RIDER_PROFILE_SECTION, RIDER_PROFILE_ATTRIBUTE, and LOV entries",
+        help=(
+            "Overwrite existing items. Allowed only for RIDER_PROFILE_SECTION, "
+            "RIDER_PROFILE_ATTRIBUTE, and LOV; all other types stay insert-only"
+        ),
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be inserted, kept, or overwritten without writing",
+    )
+    args = parser.parse_args()
+
+    if args.config_id is not None and not args.config_type:
+        parser.error("--config-id requires --config-type")
+    args.config_ids = (
+        _parse_config_ids(parser, args.config_id)
+        if args.config_id is not None
+        else None
+    )
+    return args
+
+
+def select_items(items, config_type=None, config_ids=None):
+    """Filter seed items by configType and optionally configIds (exact match).
+
+    Raises ValueError if the type or any requested ID matches no seed item.
+    """
+    if not config_type:
+        return items
+
+    typed = [item for item in items if item["configType"] == config_type]
+    if not typed:
+        valid = ", ".join(sorted({item["configType"] for item in items}))
+        raise ValueError(f"Unknown --config-type '{config_type}'. Valid types: {valid}")
+    if config_ids is None:
+        return typed
+
+    available = {item["configId"] for item in typed}
+    missing = [config_id for config_id in config_ids if config_id not in available]
+    if missing:
+        raise ValueError(
+            f"No {config_type} item found for --config-id: {', '.join(missing)}. "
+            f"Valid IDs: {', '.join(sorted(available))}"
+        )
+    wanted = set(config_ids)
+    return [item for item in typed if item["configId"] in wanted]
+
+
+def _is_force_overwrite(item, force_profile_config):
+    return (
+        force_profile_config
+        and item["configType"] in FORCE_OVERWRITE_PROFILE_CONFIG_TYPES
+    )
+
+
+def _dry_run(table, items, force_profile_config):
+    """Read-only pass: report what a real run would do for each item."""
+    would_insert = would_overwrite = would_keep = 0
+    for item in items:
+        label = f"{item['configType']} / {item['configId']}"
+        try:
+            exists = "Item" in table.get_item(
+                Key={
+                    "configType": item["configType"],
+                    "configId": item["configId"],
+                },
+                ConsistentRead=True,
+            )
+        except ClientError as exc:
+            print(f"[DRY RUN] Failed to read {label}: {exc}")
+            raise
+        if not exists:
+            would_insert += 1
+            print(f"[DRY RUN] Would insert {label}")
+        elif _is_force_overwrite(item, force_profile_config):
+            would_overwrite += 1
+            print(f"[DRY RUN] Would overwrite {label}")
+        else:
+            would_keep += 1
+            print(f"[DRY RUN] Would keep existing {label}")
+
+    print(
+        f"[DRY RUN] {len(items)} AppConfig items checked: {would_insert} would be "
+        f"inserted, {would_overwrite} overwritten, {would_keep} kept existing. "
+        "No changes written."
+    )
 
 
 def main():
     args = parse_args()
+
+    items = build_seed_items(args.updated_by)
+    try:
+        items = select_items(items, args.config_type, args.config_ids)
+    except ValueError as exc:
+        sys.exit(f"error: {exc}")
+
+    if args.force_profile_config and args.config_type:
+        if args.config_type not in FORCE_OVERWRITE_PROFILE_CONFIG_TYPES:
+            allowed = ", ".join(sorted(FORCE_OVERWRITE_PROFILE_CONFIG_TYPES))
+            sys.exit(
+                f"error: --force-profile-config cannot be used with --config-type "
+                f"'{args.config_type}'. Allowed types: {allowed}"
+            )
+
     dynamodb = boto3.resource("dynamodb", region_name=args.region)
     table = dynamodb.Table(args.table_name)
 
-    items = build_seed_items(args.updated_by)
+    if args.dry_run:
+        _dry_run(table, items, args.force_profile_config)
+        return
 
     inserted = 0
     kept = 0
     for item in items:
         try:
-            should_force_profile_config = (
-                args.force_profile_config
-                and item["configType"] in FORCE_OVERWRITE_PROFILE_CONFIG_TYPES
-            )
-            if should_force_profile_config:
+            if _is_force_overwrite(item, args.force_profile_config):
                 table.put_item(Item=item)
                 inserted += 1
                 print(f"Upserted {item['configType']} / {item['configId']}")

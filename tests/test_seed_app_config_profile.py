@@ -181,3 +181,163 @@ def test_main_force_profile_config_overwrites_only_profile_types(monkeypatch):
         gender_item = table.get_item(Key={'configType': 'LOV', 'configId': 'GENDER'})['Item']
         assert 'customField' not in gender_item
         assert gender_item['version'] == 1
+
+
+# ---- --config-type / --config-id / --dry-run ----
+
+BASE_ARGV = ['seed_app_config.py', '--table-name', 'test-AppConfig', '--region', 'ap-south-1']
+
+
+def _create_table():
+    import boto3
+
+    return boto3.resource('dynamodb', region_name='ap-south-1').create_table(
+        TableName='test-AppConfig',
+        KeySchema=[
+            {'AttributeName': 'configType', 'KeyType': 'HASH'},
+            {'AttributeName': 'configId', 'KeyType': 'RANGE'},
+        ],
+        AttributeDefinitions=[
+            {'AttributeName': 'configType', 'AttributeType': 'S'},
+            {'AttributeName': 'configId', 'AttributeType': 'S'},
+        ],
+        BillingMode='PAY_PER_REQUEST',
+    )
+
+
+def _keys(table):
+    return {(i['configType'], i['configId']) for i in table.scan()['Items']}
+
+
+def test_config_id_without_config_type_is_error(monkeypatch):
+    import pytest
+
+    monkeypatch.setattr(sys, 'argv', BASE_ARGV + ['--config-id', 'GENDER'])
+    with pytest.raises(SystemExit) as exc:
+        seed_app_config.parse_args()
+    assert exc.value.code != 0
+
+
+def test_config_id_list_rejects_empty_entries_and_spaces(monkeypatch):
+    import pytest
+
+    for bad in ('a,,b', 'a,b,', 'a, b'):
+        monkeypatch.setattr(
+            sys, 'argv', BASE_ARGV + ['--config-type', 'LOV', '--config-id', bad]
+        )
+        with pytest.raises(SystemExit):
+            seed_app_config.parse_args()
+
+
+def test_config_id_list_is_deduplicated(monkeypatch):
+    monkeypatch.setattr(
+        sys, 'argv', BASE_ARGV + ['--config-type', 'LOV', '--config-id', 'A,B,A']
+    )
+    assert seed_app_config.parse_args().config_ids == ['A', 'B']
+
+
+def test_select_items_unknown_type_or_id_raises():
+    import pytest
+
+    items = seed_app_config.build_seed_items('t')
+    with pytest.raises(ValueError, match='Unknown --config-type'):
+        seed_app_config.select_items(items, 'lov')  # case-sensitive
+    with pytest.raises(ValueError, match='NOPE'):
+        seed_app_config.select_items(items, 'LOV', ['GENDER', 'NOPE'])
+
+
+def test_main_config_type_and_ids_seed_only_selection(monkeypatch):
+    from moto import mock_aws
+
+    with mock_aws():
+        table = _create_table()
+
+        monkeypatch.setattr(sys, 'argv', BASE_ARGV + ['--config-type', 'LOV', '--config-id', 'GENDER,BLOOD_GROUP'])
+        seed_app_config.main()
+        assert _keys(table) == {('LOV', 'GENDER'), ('LOV', 'BLOOD_GROUP')}
+
+        monkeypatch.setattr(sys, 'argv', BASE_ARGV + ['--config-type', 'HOTEL_UPLOAD'])
+        seed_app_config.main()
+        assert ('HOTEL_UPLOAD', 'PROCESSING') in _keys(table)
+
+
+def test_main_unmatched_id_stops_before_any_write(monkeypatch):
+    import pytest
+    from moto import mock_aws
+
+    with mock_aws():
+        table = _create_table()
+        monkeypatch.setattr(sys, 'argv', BASE_ARGV + ['--config-type', 'LOV', '--config-id', 'GENDER,NOPE'])
+        with pytest.raises(SystemExit) as exc:
+            seed_app_config.main()
+        assert exc.value.code != 0
+        assert _keys(table) == set()
+
+
+def test_main_filtered_run_is_insert_only_without_force(monkeypatch):
+    from moto import mock_aws
+
+    with mock_aws():
+        table = _create_table()
+        table.put_item(Item={'configType': 'LOV', 'configId': 'GENDER', 'customField': 'keep', 'version': 99})
+
+        monkeypatch.setattr(sys, 'argv', BASE_ARGV + ['--config-type', 'LOV', '--config-id', 'GENDER'])
+        seed_app_config.main()
+        assert table.get_item(Key={'configType': 'LOV', 'configId': 'GENDER'})['Item']['customField'] == 'keep'
+
+
+def test_main_force_with_filter_overwrites_only_selected(monkeypatch):
+    from moto import mock_aws
+
+    with mock_aws():
+        table = _create_table()
+        for cid in ('GENDER', 'BLOOD_GROUP'):
+            table.put_item(Item={'configType': 'LOV', 'configId': cid, 'customField': 'old', 'version': 99})
+
+        monkeypatch.setattr(
+            sys, 'argv',
+            BASE_ARGV + ['--config-type', 'LOV', '--config-id', 'GENDER', '--force-profile-config'],
+        )
+        seed_app_config.main()
+        assert 'customField' not in table.get_item(Key={'configType': 'LOV', 'configId': 'GENDER'})['Item']
+        assert table.get_item(Key={'configType': 'LOV', 'configId': 'BLOOD_GROUP'})['Item']['customField'] == 'old'
+
+
+def test_main_force_with_non_overwritable_type_is_error(monkeypatch):
+    import pytest
+    from moto import mock_aws
+
+    with mock_aws():
+        table = _create_table()
+        monkeypatch.setattr(
+            sys, 'argv', BASE_ARGV + ['--config-type', 'ARTIFACTS', '--force-profile-config']
+        )
+        with pytest.raises(SystemExit) as exc:
+            seed_app_config.main()
+        assert exc.value.code != 0
+        assert _keys(table) == set()
+
+
+def test_main_dry_run_writes_nothing_and_reports(monkeypatch, capsys):
+    from moto import mock_aws
+
+    with mock_aws():
+        table = _create_table()
+        table.put_item(Item={'configType': 'LOV', 'configId': 'GENDER', 'customField': 'old', 'version': 99})
+        table.put_item(Item={'configType': 'LOV', 'configId': 'COUNTRY', 'customField': 'old', 'version': 99})
+
+        # Without force: existing item is reported as kept, missing as inserted
+        monkeypatch.setattr(sys, 'argv', BASE_ARGV + ['--config-type', 'LOV', '--config-id', 'GENDER,BLOOD_GROUP', '--dry-run'])
+        seed_app_config.main()
+        out = capsys.readouterr().out
+        assert '[DRY RUN] Would keep existing LOV / GENDER' in out
+        assert '[DRY RUN] Would insert LOV / BLOOD_GROUP' in out
+
+        # With force: existing item is reported as overwritten
+        monkeypatch.setattr(sys, 'argv', BASE_ARGV + ['--config-type', 'LOV', '--config-id', 'GENDER', '--force-profile-config', '--dry-run'])
+        seed_app_config.main()
+        assert '[DRY RUN] Would overwrite LOV / GENDER' in capsys.readouterr().out
+
+        # Nothing was written or changed
+        assert _keys(table) == {('LOV', 'GENDER'), ('LOV', 'COUNTRY')}
+        assert table.get_item(Key={'configType': 'LOV', 'configId': 'GENDER'})['Item']['customField'] == 'old'

@@ -747,3 +747,15 @@ GitHub Actions authenticates with OIDC only; static AWS access keys are not used
 
 ## Deployment note: rider profile config seed
 Run the AppConfig seed step (`scripts/seed_app_config.py`) so `RIDER_PROFILE_SECTION`, `RIDER_PROFILE_ATTRIBUTE`, and `LOV` defaults are present before using rider profile APIs.
+
+### Seed script options (`scripts/seed_app_config.py`)
+By default every seed item is insert-only: existing rows are never overwritten.
+
+| Option | Behavior |
+|---|---|
+| `--config-type TYPE` | Seed only items of this `configType` (case-sensitive). Unknown type is an error. |
+| `--config-id ID[,ID...]` | Seed only these `configId` values (comma-separated, no spaces). Requires `--config-type`; any ID with no match is an error and nothing runs. |
+| `--force-profile-config` | Overwrite existing rows. Allowed only for `RIDER_PROFILE_SECTION`, `RIDER_PROFILE_ATTRIBUTE` and `LOV`; combining it with any other `--config-type` is an error. |
+| `--dry-run` | Read-only check (`GetItem`); prints `Would insert`, `Would keep existing` or `Would overwrite` per item and writes nothing. |
+
+Example: `python scripts/seed_app_config.py --table-name dev-AppConfig --config-type LOV --config-id COUNTRY,STATE --force-profile-config --dry-run`
