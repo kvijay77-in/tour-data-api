@@ -35,3 +35,7 @@ See [Development](docs/guides/development.md) for local setup and [Deployment](d
 - [Cycling Tour Management Platform](https://kvijay77-in.github.io/cycling-tour-platform/) · [repository](https://github.com/kvijay77-in/cycling-tour-platform)
 - [Management app](https://github.com/kvijay77-in/tour-mgmt-app)
 - [Rider app](https://github.com/kvijay77-in/tour-rider-app)
+
+
+## License
+Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE). Free for learning and non-commercial use. For commercial use, contact [kvijay77.in@gmail.com].
